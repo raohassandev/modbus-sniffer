@@ -13,7 +13,12 @@ function parseArgs(argv) {
     raw: true,
     listPorts: false,
     quiet: false,
-    autoRebind: true
+    autoRebind: true,
+    webEnabled: true,
+    webHost: '127.0.0.1',
+    webPort: 8080,
+    historyLimit: 5000,
+    demo: false
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -36,6 +41,11 @@ function parseArgs(argv) {
       case '--quiet': out.quiet = true; break;
       case '--list-ports': out.listPorts = true; break;
       case '--no-rebind': out.autoRebind = false; break;
+      case '--no-web': out.webEnabled = false; break;
+      case '--web-host': out.webHost = next(); break;
+      case '--web-port': out.webPort = Number(next()); break;
+      case '--history': out.historyLimit = Number(next()); break;
+      case '--demo': out.demo = true; break;
       case '--help': out.help = true; break;
       default: throw new Error(`Unknown argument: ${a}`);
     }
@@ -46,34 +56,45 @@ function parseArgs(argv) {
   if (!['none', 'even', 'odd', 'mark', 'space'].includes(out.parity)) throw new Error('parity must be none/even/odd/mark/space');
   if (!Number.isFinite(out.baudRate) || out.baudRate <= 0) throw new Error('baud must be positive');
   if (!Number.isFinite(out.reconnectMs) || out.reconnectMs < 250) throw new Error('reconnect must be at least 250 ms');
+  if (!Number.isInteger(out.webPort) || out.webPort < 1 || out.webPort > 65535) throw new Error('web-port must be 1..65535');
+  if (!Number.isInteger(out.historyLimit) || out.historyLimit < 100 || out.historyLimit > 100000) throw new Error('history must be 100..100000');
   return out;
 }
 
 function helpText() {
   return `
-Passive Modbus RTU Sniffer (console)
+Modbus RTU Passive Sniffer v2
 
 Usage:
   node src/index.js [options]
 
-Options:
+Serial options:
   --list-ports              List serial ports and exit
-  --port COM5               Port to open; if omitted, interactive selection is used
+  --port COM5               Serial port. With web UI enabled, it can also be selected in Settings
   --baud 9600               Baud rate (default 9600)
   --parity none             none/even/odd/mark/space (default none)
   --data-bits 8             Data bits (default 8)
   --stop-bits 1             Stop bits (default 1)
-  --reconnect 2000          Retry interval after disconnect/busy error (default 2000 ms)
-  --no-rebind               Do not follow the same USB adapter if Windows changes its COM number
+  --reconnect 2000          Retry interval after disconnect/busy error
+  --no-rebind               Do not follow an adapter if Windows changes its COM number
+
+Capture options:
   --map config/map.json     Optional register/meter map
   --csv capture.csv         Optional transaction CSV log
+  --history 5000            In-memory packet history (100..100000)
   --no-raw                  Hide raw HEX from console
-  --quiet                   Reduce informational messages
-  --help                    Show this help
+  --quiet                   Reduce console informational messages
+
+Web UI options:
+  --web-host 127.0.0.1      Web bind address (default local machine only)
+  --web-port 8080           Web UI port
+  --no-web                  Disable browser interface
+  --demo                    Run simulated Modbus traffic; no hardware required
 
 Examples:
   npm start -- --port COM5 --baud 9600 --parity none
   npm start -- --port COM7 --baud 19200 --parity even --map config/register-map.example.json
+  npm run demo
 `;
 }
 
