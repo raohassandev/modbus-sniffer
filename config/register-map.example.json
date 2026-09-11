@@ -1,0 +1,37 @@
+{
+  "addressNote": "Addresses are raw Modbus PDU addresses seen on the wire, not 4xxxx display notation unless the device actually sends that number.",
+  "meters": [
+    {
+      "slaveId": 1,
+      "function": 3,
+      "name": "Example Total Active Power",
+      "address": 32335,
+      "type": "int32",
+      "byteOrder": "ABCD",
+      "scale": 0.001,
+      "unit": "kW",
+      "decimals": 3
+    },
+    {
+      "slaveId": 1,
+      "function": 3,
+      "name": "Example Voltage",
+      "address": 32337,
+      "type": "uint16",
+      "scale": 0.1,
+      "unit": "V",
+      "decimals": 1
+    },
+    {
+      "slaveId": 1,
+      "function": 3,
+      "name": "Example 64-bit Energy",
+      "address": 32340,
+      "type": "uint64",
+      "byteOrder": "ABCDEFGH",
+      "scale": 0.01,
+      "unit": "kWh",
+      "decimals": 2
+    }
+  ]
+}

@@ -8,14 +8,15 @@ A Windows/Linux Node.js project for passively listening to a live RS485 Modbus R
 - Interactive COM-port selection if `--port` is omitted.
 - Opens the selected serial port with configurable baud/parity/data/stop bits.
 - Retries after unplug/replug, open failure, or temporary busy state.
+- Remembers the USB adapter identity and can follow it if Windows changes its COM number after reconnect.
 - Splits Modbus RTU frames using protocol lengths + CRC16 and an inter-frame gap timer.
 - Validates Modbus CRC.
-- Decodes FC01, FC02, FC03, FC04, FC05, FC06, FC15 and FC16.
+- Decodes common standard functions including FC01/02/03/04/05/06/07/08/11/12/15/16/17/22/23; unknown/vendor frames are still captured when CRC-valid.
 - Decodes Modbus exception responses.
 - Infers request/response direction from frame structure and pending transactions.
 - Pairs responses to requests and calculates response time (RTT).
-- Maps FC03/FC04 response words back to the exact requested register addresses.
-- Optional meter/register map with scale, data type and 32-bit byte order.
+- Maps FC03/FC04/FC23 response words back to the exact requested register addresses.
+- Optional meter/register map with scaling, signed/unsigned/float/64-bit data types, and byte/word order.
 - Optional CSV transaction logging.
 - Reports undecodable/noise bytes to help identify wrong baud/parity/wiring.
 
@@ -40,13 +41,13 @@ PLC / Master                Inverter / Meter / Logger
      +------ Sniffer GND (recommended)
 ```
 
-The Node.js application never calls `port.write()`.
+The application never calls `port.write()`.
 
 Do **not** add another 120-ohm termination resistor just for the sniffer. Prefer an isolated RS485 adapter at industrial sites.
 
 ## Install
 
-Install Node.js 20+.
+Install Node.js 20+ and run:
 
 ```bash
 npm install
@@ -56,14 +57,6 @@ npm install
 
 ```bash
 npm run ports
-```
-
-Example:
-
-```text
-Available serial ports:
-  [1] COM2
-  [2] COM5  -  FTDI | PID:6001 | VID:0403
 ```
 
 ## Start sniffing
@@ -78,27 +71,21 @@ For 19200 8E1:
 npm start -- --port COM5 --baud 19200 --parity even --data-bits 8 --stop-bits 1
 ```
 
-If you omit `--port`, the program lists ports and asks you to select one.
+If `--port` is omitted, the program lists the available ports and asks you to select one.
 
-## Example console output
+## Console output
 
 ```text
-[11:10:22.104] REQ | S=1 | FC=03 | Read Holding Registers | addr=32335 | qty=2
+[11:10:22.104] | REQ | S=1 | FC=03 | Read Holding Registers | addr=32335 | qty=2
   RAW: 01 03 7E 4F 00 02 ...
 
-[11:10:22.159] RSP | S=1 | FC=03 | Read Holding Registers | RTT=55ms | addr=32335 | 32335=17194(0x432A) 32336=0(0x0000)
+[11:10:22.159] | RSP | S=1 | FC=03 | Read Holding Registers | RTT=55ms | addr=32335 | 32335=17194(0x432A) 32336=0(0x0000)
   RAW: 01 03 04 43 2A 00 00 ...
 ```
 
 ## Optional meter decoding
 
-Use the example map:
-
-```text
-config/register-map.example.json
-```
-
-Then run:
+Use `config/register-map.example.json`, then run:
 
 ```bash
 npm start -- --port COM5 --baud 9600 --map config/register-map.example.json
@@ -121,9 +108,15 @@ Example map item:
 
 Supported types: `uint16`, `int16`, `uint32`, `int32`, `float32`, `uint64`, `int64`.
 
-Supported 32-bit byte orders: `ABCD`, `BADC`, `CDAB`, `DCBA`.
+32-bit byte orders: `ABCD`, `BADC`, `CDAB`, `DCBA`.
 
-The `address` must be the **raw start address actually present in the Modbus request packet**. If a manual uses `40001` notation, verify whether the master actually sends address `0`, `1`, `40001`, etc.
+64-bit byte orders: `ABCDEFGH`, `BADCFEHG`, `GHEFCDAB`, `HGFEDCBA`.
+
+The `address` must be the **raw PDU register address actually seen on the wire**. If a manual uses `40001` notation, check the actual Modbus request before adding the map.
+
+## Automatic COM-port recovery
+
+When available, the sniffer remembers the adapter serial number / VID / PID. If the adapter is unplugged and Windows later assigns it another COM number, the sniffer automatically rebinds when it can identify the adapter unambiguously. Disable this behavior with `--no-rebind`.
 
 ## CSV logging
 
@@ -131,18 +124,16 @@ The `address` must be the **raw start address actually present in the Modbus req
 npm start -- --port COM5 --baud 9600 --csv logs/site-capture.csv
 ```
 
-## Wrong serial settings
+## Troubleshooting
 
-If the console repeatedly reports undecodable/noise bytes, check baud rate, parity, data bits, stop bits, A/B polarity, common reference/GND, adapter driver, and whether you are connected to the correct RS485 pair.
+If noise bytes keep increasing, check baud rate, parity, data bits, stop bits, A/B polarity, common reference/GND, adapter driver, and the selected RS485 pair.
+
+If Windows reports access denied/busy, another program probably owns the same COM port. Close Modbus Poll, ModScan, PuTTY, Arduino Serial Monitor, vendor commissioning tools, etc., or use a second adapter as a passive tap.
 
 ## Tests
-
-The protocol tests do not need real hardware:
 
 ```bash
 npm test
 ```
 
-## Next phase
-
-The console core is intentionally separated from the UI. A later phase can add a web dashboard (Express/WebSocket + React) without changing the serial capture and Modbus decoding engine.
+The protocol tests do not need hardware.
