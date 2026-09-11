@@ -18,4 +18,6 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm install
+      - run: node --check public/app.js
+      - run: node --check public/enhancements.js
       - run: npm test
