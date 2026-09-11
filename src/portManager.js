@@ -20,7 +20,9 @@ class PortManager extends EventEmitter {
   }
 
   async start() {
+    if (!this.options.port) throw new Error('No serial port selected.');
     this.stopping = false;
+    this.currentPath = this.options.port;
     await this._captureIdentity();
     await this._open();
   }
@@ -32,6 +34,14 @@ class PortManager extends EventEmitter {
     const p = this.port;
     this.port = null;
     if (p?.isOpen) await new Promise(resolve => p.close(() => resolve()));
+  }
+
+  async reconfigure(nextOptions) {
+    await this.stop();
+    Object.assign(this.options, nextOptions);
+    this.currentPath = this.options.port;
+    this.identity = null;
+    await this.start();
   }
 
   async _captureIdentity() {
