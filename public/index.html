@@ -6,14 +6,12 @@
   <meta name="color-scheme" content="dark">
   <title>Modbus Sniffer</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/ui-v3.css?v=20260911-1">
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">M</div>
-        <div><strong>Modbus Sniffer</strong><span>RTU Analyzer</span></div>
-      </div>
+      <div class="brand"><div class="brand-mark">M</div><div><strong>Modbus Sniffer</strong><span>RTU Analyzer</span></div></div>
       <nav class="nav" aria-label="Main navigation">
         <button class="nav-item active" data-page="dashboard"><span>◫</span> Dashboard</button>
         <button class="nav-item" data-page="traffic"><span>⇄</span> Live Traffic</button>
@@ -21,22 +19,13 @@
         <button class="nav-item" data-page="registers"><span>▦</span> Registers</button>
         <button class="nav-item" data-page="settings"><span>⚙</span> Settings</button>
       </nav>
-      <div class="sidebar-foot">
-        <div class="passive-badge"><i></i> PASSIVE / RX ONLY</div>
-        <small>Modbus RTU protocol workstation</small>
-      </div>
+      <div class="sidebar-foot"><div class="passive-badge"><i></i> PASSIVE / RX ONLY</div><small>Modbus RTU protocol workstation</small></div>
     </aside>
 
     <div class="workspace">
       <header class="topbar">
-        <div>
-          <h1 id="pageTitle">Dashboard</h1>
-          <p id="pageSubtitle">Live RS485 / Modbus RTU visibility</p>
-        </div>
-        <div class="top-actions">
-          <div class="connection-pill" id="connectionPill"><i></i><span id="connectionText">Idle</span></div>
-          <div class="serial-summary" id="serialSummary">No port selected</div>
-        </div>
+        <div><h1 id="pageTitle">Dashboard</h1><p id="pageSubtitle">Live RS485 / Modbus RTU visibility</p></div>
+        <div class="top-actions"><span class="version-badge">UI v3.1</span><div class="connection-pill" id="connectionPill"><i></i><span id="connectionText">Idle</span></div><div class="serial-summary" id="serialSummary">No port selected</div></div>
       </header>
 
       <main>
@@ -48,130 +37,78 @@
             <article class="kpi"><span>Exceptions</span><strong id="kpiExceptions">0</strong><small id="kpiNoise">0 noise bytes</small></article>
             <article class="kpi"><span>Captured</span><strong id="kpiBytes">0 B</strong><small id="kpiUptime">00:00:00 uptime</small></article>
           </div>
-
           <div class="grid-2 wide-left">
-            <article class="panel">
-              <div class="panel-head"><div><h2>Bus activity</h2><p>Frames per second · last 60 seconds</p></div><span class="live-dot">LIVE</span></div>
-              <canvas id="trafficChart" height="220"></canvas>
-            </article>
-            <article class="panel">
-              <div class="panel-head"><div><h2>Bus health</h2><p>Capture quality overview</p></div></div>
-              <div class="health-layout">
-                <div class="health-ring" id="dashHealthRing"><span id="dashHealthScore">100</span><small>/100</small></div>
-                <div class="health-list">
-                  <div><span>Exception rate</span><strong id="dashExceptionRate">0%</strong></div>
-                  <div><span>Unmatched responses</span><strong id="dashUnmatchedRate">0%</strong></div>
-                  <div><span>Noise ratio</span><strong id="dashNoiseRate">0%</strong></div>
-                </div>
-              </div>
-            </article>
+            <article class="panel"><div class="panel-head"><div><h2>Bus activity</h2><p>Frames per second · last 60 seconds</p></div><span class="live-dot">LIVE</span></div><canvas id="trafficChart" height="220"></canvas></article>
+            <article class="panel"><div class="panel-head"><div><h2>Bus health</h2><p>Capture quality overview</p></div></div><div class="health-layout"><div class="health-ring" id="dashHealthRing"><span id="dashHealthScore">100</span><small>/100</small></div><div class="health-list"><div><span>Exception rate</span><strong id="dashExceptionRate">0%</strong></div><div><span>Unmatched responses</span><strong id="dashUnmatchedRate">0%</strong></div><div><span>Noise ratio</span><strong id="dashNoiseRate">0%</strong></div></div></div></article>
           </div>
-
           <div class="grid-2">
-            <article class="panel">
-              <div class="panel-head"><div><h2>Detected slaves</h2><p>Devices observed on the bus</p></div><button class="ghost" data-go="analysis">Analyze</button></div>
-              <div class="table-wrap compact"><table><thead><tr><th>Slave</th><th>Frames</th><th>Exceptions</th><th>Avg RTT</th><th>Last seen</th></tr></thead><tbody id="dashboardSlaves"></tbody></table></div>
-            </article>
-            <article class="panel">
-              <div class="panel-head"><div><h2>Recent transactions</h2><p>Newest decoded Modbus traffic</p></div><button class="ghost" data-go="traffic">Open traffic</button></div>
-              <div class="table-wrap compact"><table><thead><tr><th>Time</th><th>Dir</th><th>Slave</th><th>FC</th><th>Details</th><th>RTT</th></tr></thead><tbody id="dashboardTraffic"></tbody></table></div>
-            </article>
+            <article class="panel"><div class="panel-head"><div><h2>Detected slaves</h2><p>Devices observed on the bus</p></div><button class="ghost" data-go="analysis">Analyze</button></div><div class="table-wrap compact"><table><thead><tr><th>Slave</th><th>Frames</th><th>Exceptions</th><th>Avg RTT</th><th>Last seen</th></tr></thead><tbody id="dashboardSlaves"></tbody></table></div></article>
+            <article class="panel"><div class="panel-head"><div><h2>Recent transactions</h2><p>Newest decoded Modbus traffic</p></div><button class="ghost" data-go="traffic">Open traffic</button></div><div class="table-wrap compact"><table><thead><tr><th>Time</th><th>Dir</th><th>Slave</th><th>FC</th><th>Details</th><th>RTT</th></tr></thead><tbody id="dashboardTraffic"></tbody></table></div></article>
           </div>
         </section>
 
         <section class="page" id="page-traffic">
           <article class="panel toolbar-panel">
-            <div class="filters">
-              <label>Slave<input id="trafficSlave" type="number" min="0" max="247" placeholder="All"></label>
-              <label>Function<input id="trafficFc" type="number" min="1" max="127" placeholder="All"></label>
-              <label>Direction<select id="trafficDirection"><option value="">All</option><option>REQ</option><option>RSP</option><option>UNK</option></select></label>
-              <label class="search-field">Search<input id="trafficSearch" placeholder="HEX, function, exception…"></label>
-            </div>
-            <div class="toolbar-actions">
-              <button class="secondary" id="pauseTraffic">Pause</button>
-              <a class="button secondary" href="/api/export/transactions.csv">Export CSV</a>
-              <button class="danger-outline" id="clearCapture">Clear capture</button>
-            </div>
+            <div class="filters"><label>Slave<input id="trafficSlave" type="number" min="0" max="247" placeholder="All"></label><label>Function<input id="trafficFc" type="number" min="1" max="127" placeholder="All"></label><label>Direction<select id="trafficDirection"><option value="">All</option><option>REQ</option><option>RSP</option><option>UNK</option></select></label><label class="search-field">Search<input id="trafficSearch" placeholder="HEX, function, exception…"></label></div>
+            <div class="toolbar-actions"><button class="secondary" id="pauseTraffic">Pause</button><a class="button secondary" href="/api/export/transactions.csv">Export CSV</a><button class="danger-outline" id="clearCapture">Clear capture</button></div>
           </article>
-
           <div class="traffic-layout">
-            <article class="panel traffic-panel">
-              <div class="panel-head"><div><h2>Packet stream</h2><p><span id="trafficCount">0</span> transactions in view</p></div><span class="live-dot" id="trafficLiveBadge">LIVE</span></div>
-              <div class="table-wrap traffic-table-wrap"><table class="traffic-table"><thead><tr><th>#</th><th>Time</th><th>Dir</th><th>Slave</th><th>FC</th><th>Function / address</th><th>RTT</th><th>Bytes</th><th>Raw</th></tr></thead><tbody id="trafficBody"></tbody></table></div>
-            </article>
-            <aside class="panel inspector" id="packetInspector">
-              <div class="panel-head"><div><h2>Packet inspector</h2><p>Select a transaction</p></div></div>
-              <div id="inspectorContent" class="empty-state">Click any packet row to inspect decoded fields, request matching and raw bytes.</div>
-            </aside>
+            <article class="panel traffic-panel"><div class="panel-head"><div><h2>Packet stream</h2><p><span id="trafficCount">0</span> transactions in view</p></div><span class="live-dot" id="trafficLiveBadge">LIVE</span></div><div class="table-wrap traffic-table-wrap"><table class="traffic-table"><thead><tr><th>#</th><th>Time</th><th>Dir</th><th>Slave</th><th>FC</th><th>Function / address</th><th>RTT</th><th>Bytes</th><th>Raw</th></tr></thead><tbody id="trafficBody"></tbody></table></div></article>
+            <aside class="panel inspector" id="packetInspector"><div class="panel-head"><div><h2>Packet inspector</h2><p>Select a transaction</p></div></div><div id="inspectorContent" class="empty-state">Click any packet row to inspect decoded fields, request matching and raw bytes.</div></aside>
           </div>
         </section>
 
         <section class="page" id="page-analysis">
-          <div class="analysis-hero">
-            <article class="panel health-card">
-              <div class="health-ring large" id="analysisHealthRing"><span id="analysisHealthScore">100</span><small>/100</small></div>
-              <div><h2>Capture health score</h2><p>Preparing engineering analysis…</p><div id="healthLabel" class="status-label good">Healthy capture</div></div>
-            </article>
-            <article class="metric-card"><span>P50 RTT</span><strong id="rttP50">—</strong><small>median response</small></article>
-            <article class="metric-card"><span>P95 RTT</span><strong id="rttP95">—</strong><small>slow response bound</small></article>
-            <article class="metric-card"><span>P99 RTT</span><strong id="rttP99">—</strong><small>tail latency</small></article>
+          <div class="analysis-commandbar">
+            <div><h2>Engineering analysis</h2><p>Use captured Modbus traffic to find line-quality problems, slow slaves, exceptions, address activity and write commands.</p></div>
+            <div class="analysis-command-actions"><button class="secondary" id="analysisLatestException">Latest exception</button><button class="secondary" id="analysisSlowestPacket">Slowest response</button><button class="secondary" id="analysisShowWrites">Show writes</button><a class="button secondary" href="/api/export/transactions.csv">Export capture</a></div>
           </div>
-          <canvas id="functionChart" height="1"></canvas>
-          <div id="analysisObservations"></div>
-          <table style="display:none"><tbody id="analysisSlaves"></tbody><tbody id="analysisFunctions"></tbody><tbody id="analysisRanges"></tbody></table>
+
+          <div class="analysis-overview">
+            <article class="panel analysis-health-main"><div class="health-ring large" id="analysisHealthRing"><span id="analysisHealthScore">100</span><small>/100</small></div><div class="analysis-health-copy"><h2 id="analysisVerdictTitle">Waiting for valid Modbus traffic</h2><div id="healthLabel" class="status-label good">Healthy capture</div><p class="analysis-verdict" id="analysisVerdictBody">Select the correct COM port and serial format to begin engineering analysis.</p><div class="analysis-quality"><div class="quality-chip"><span>Request match</span><strong id="analysisMatchRate">100%</strong></div><div class="quality-chip"><span>Exception-free</span><strong id="analysisExceptionFree">100%</strong></div><div class="quality-chip"><span>Clean line</span><strong id="analysisCleanLine">100%</strong></div></div></div></article>
+            <article class="analysis-stat"><span>P50 RTT</span><strong id="rttP50">—</strong><small>Typical response latency</small></article>
+            <article class="analysis-stat"><span>P95 RTT</span><strong id="rttP95">—</strong><small>Slow response boundary</small></article>
+            <article class="analysis-stat"><span>P99 RTT</span><strong id="rttP99">—</strong><small>Worst response tail</small></article>
+          </div>
+
+          <div class="analysis-summary"><div class="analysis-summary-tile"><span>Valid frames</span><strong id="analysisFrames">0</strong></div><div class="analysis-summary-tile"><span>Requests</span><strong id="analysisRequests">0</strong></div><div class="analysis-summary-tile"><span>Responses</span><strong id="analysisResponses">0</strong></div><div class="analysis-summary-tile"><span>Slaves</span><strong id="analysisSlaveCount">0</strong></div><div class="analysis-summary-tile"><span>Registers</span><strong id="analysisRegisterCount">0</strong></div><div class="analysis-summary-tile"><span>Bus activity</span><strong id="analysisFps">0 fps</strong></div></div>
+
+          <div class="analysis-main-grid">
+            <article class="panel"><div class="panel-head"><div><h2>Response-time distribution</h2><p>Matched request → response samples grouped by latency</p></div><strong id="analysisRttSamples" class="muted">0 SAMPLES</strong></div><div class="analysis-panel-body"><div class="latency-head"><div class="latency-kpi"><span>Average</span><strong id="analysisRttAvg">—</strong></div><div class="latency-kpi"><span>Minimum</span><strong id="analysisRttMin">—</strong></div><div class="latency-kpi"><span>Maximum</span><strong id="analysisRttMax">—</strong></div><div class="latency-kpi"><span>P95</span><strong id="analysisRttP95">—</strong></div></div><div class="latency-histogram" id="analysisLatencyHistogram"></div></div></article>
+            <article class="panel"><div class="panel-head"><div><h2>Communication diagnostics</h2><p>What is affecting capture and Modbus reliability</p></div></div><div class="analysis-panel-body diagnostic-stack" id="analysisDiagnostics"></div></article>
+          </div>
+
+          <div class="grid-2">
+            <article class="panel"><div class="panel-head"><div><h2>Device health</h2><p>Click a slave to filter Live Traffic for that device</p></div></div><div class="analysis-panel-body device-card-grid" id="analysisDevices"></div></article>
+            <article class="panel"><div class="panel-head"><div><h2>Protocol mix</h2><p>Click a function code to see its packets</p></div></div><div class="analysis-panel-body protocol-mix" id="analysisProtocolMix"></div></article>
+          </div>
+
+          <div class="grid-2">
+            <article class="panel"><div class="panel-head"><div><h2>Analyzer findings</h2><p>Actionable observations from the current capture</p></div><span class="live-dot" id="analysisFindingCount">0 FINDINGS</span></div><div id="analysisObservations" class="observation-list"></div></article>
+            <article class="panel"><div class="panel-head"><div><h2>Slowest responses</h2><p>Click a row to inspect the actual packet</p></div></div><div class="table-wrap compact"><table><thead><tr><th>Slave</th><th>FC</th><th>RTT</th><th>Details</th></tr></thead><tbody id="analysisSlowRows"></tbody></table></div></article>
+          </div>
+
+          <article class="panel" style="margin-top:14px"><div class="panel-head"><div><h2>Slave performance</h2><p>Request/reply matching and timing by slave</p></div></div><div class="table-wrap"><table><thead><tr><th>Slave</th><th>Frames</th><th>REQ</th><th>RSP</th><th>Match</th><th>Exceptions</th><th>Unmatched</th><th>Avg RTT</th><th>P95 RTT</th><th>Last seen</th></tr></thead><tbody id="analysisSlaves"></tbody></table></div></article>
+
+          <div class="grid-2">
+            <article class="panel"><div class="panel-head"><div><h2>Function codes</h2><p>Click a row to inspect matching traffic</p></div></div><div class="table-wrap compact"><table><thead><tr><th>FC</th><th>Name</th><th>Frames</th><th>REQ</th><th>RSP</th><th>Exceptions</th></tr></thead><tbody id="analysisFunctions"></tbody></table></div></article>
+            <article class="panel"><div class="panel-head"><div><h2>Discovered address ranges</h2><p>Click a row to open the register explorer</p></div></div><div class="table-wrap compact"><table><thead><tr><th>Slave</th><th>FC</th><th>Start</th><th>End</th><th>Count</th></tr></thead><tbody id="analysisRanges"></tbody></table></div></article>
+          </div>
         </section>
 
         <section class="page" id="page-registers">
-          <article class="panel toolbar-panel">
-            <div class="filters">
-              <label>Slave<input id="regSlave" type="number" placeholder="All"></label>
-              <label>Function<input id="regFc" type="number" placeholder="All"></label>
-              <label class="search-field">Address / value<input id="regSearch" placeholder="Filter discovered registers…"></label>
-            </div>
-            <div class="toolbar-actions"><a class="button secondary" href="/api/export/registers.csv">Export register map</a></div>
-          </article>
-          <article class="panel">
-            <div class="panel-head"><div><h2>Discovered register explorer</h2><p>Built automatically from FC03/04 reads and FC06/16/23 writes · raw PDU addresses</p></div><strong id="registerCount">0 registers</strong></div>
-            <div class="table-wrap register-table-wrap"><table><thead><tr><th>Slave</th><th>FC</th><th>Address</th><th>Last value</th><th>HEX</th><th>Min</th><th>Max</th><th>Reads</th><th>Writes</th><th>Changes</th><th>Last seen</th></tr></thead><tbody id="registerBody"></tbody></table></div>
-          </article>
+          <article class="panel toolbar-panel"><div class="filters"><label>Slave<input id="regSlave" type="number" placeholder="All"></label><label>Function<input id="regFc" type="number" placeholder="All"></label><label class="search-field">Address / value<input id="regSearch" placeholder="Filter discovered registers…"></label></div><div class="toolbar-actions"><a class="button secondary" href="/api/export/registers.csv">Export register map</a></div></article>
+          <article class="panel"><div class="panel-head"><div><h2>Discovered register explorer</h2><p>Built automatically from FC03/04 reads and FC06/16/23 writes · raw PDU addresses</p></div><strong id="registerCount">0 registers</strong></div><div class="table-wrap register-table-wrap"><table><thead><tr><th>Slave</th><th>FC</th><th>Address</th><th>Last value</th><th>HEX</th><th>Min</th><th>Max</th><th>Reads</th><th>Writes</th><th>Changes</th><th>Last seen</th></tr></thead><tbody id="registerBody"></tbody></table></div></article>
         </section>
 
         <section class="page" id="page-settings">
           <div class="grid-2 settings-grid">
-            <article class="panel">
-              <div class="panel-head"><div><h2>Serial interface</h2><p>Select a passive capture interface and communication format</p></div><button class="ghost" id="refreshPorts">Refresh ports</button></div>
-              <form id="serialForm" class="settings-form">
-                <label>COM / serial port<select id="serialPort" required></select></label>
-                <div class="form-row"><label>Baud rate<input id="serialBaud" type="number" min="300" value="9600" required></label><label>Parity<select id="serialParity"><option>none</option><option>even</option><option>odd</option><option>mark</option><option>space</option></select></label></div>
-                <div class="form-row"><label>Data bits<select id="serialDataBits"><option>8</option><option>7</option><option>6</option><option>5</option></select></label><label>Stop bits<select id="serialStopBits"><option>1</option><option>2</option></select></label></div>
-                <label>Reconnect interval (ms)<input id="serialReconnect" type="number" min="250" value="2000"></label>
-                <button class="primary" type="submit">Apply & reconnect</button>
-                <p class="form-note" id="serialFormNote">Click a detected port card or choose a port above. Review the serial settings, then apply.</p>
-              </form>
-            </article>
-            <article class="panel">
-              <div class="panel-head"><div><h2>Detected serial ports</h2><p>Click any port card to select it</p></div></div>
-              <div id="portsList" class="ports-list"></div>
-            </article>
+            <article class="panel"><div class="panel-head"><div><h2>Serial interface</h2><p>Select a port by clicking its card, then apply the serial format</p></div><button class="ghost" id="refreshPorts">Refresh ports</button></div><form id="serialForm" class="settings-form"><label>COM / serial port<select id="serialPort" required></select></label><div class="form-row"><label>Baud rate<input id="serialBaud" type="number" min="300" value="9600" required></label><label>Parity<select id="serialParity"><option>none</option><option>even</option><option>odd</option><option>mark</option><option>space</option></select></label></div><div class="form-row"><label>Data bits<select id="serialDataBits"><option>8</option><option>7</option><option>6</option><option>5</option></select></label><label>Stop bits<select id="serialStopBits"><option>1</option><option>2</option></select></label></div><label>Reconnect interval (ms)<input id="serialReconnect" type="number" min="250" value="2000"></label><button class="primary" type="submit">Apply & reconnect</button><p class="form-note" id="serialFormNote">Click a detected port card to select it, confirm the serial format, then Apply & reconnect.</p></form></article>
+            <article class="panel"><div class="panel-head"><div><h2>Detected serial ports</h2><p>Click the whole card to select. CONNECT applies immediately.</p></div></div><div id="portsList" class="ports-list"></div></article>
           </div>
-
           <div class="grid-2 settings-grid">
-            <article class="panel">
-              <div class="panel-head"><div><h2>Capture management</h2><p>Local in-memory capture and exports</p></div></div>
-              <div class="action-stack">
-                <a class="button secondary" href="/api/export/transactions.csv">Export packet CSV</a>
-                <a class="button secondary" href="/api/export/registers.csv">Export discovered register CSV</a>
-                <button class="danger-outline" id="settingsClearCapture">Clear in-memory capture</button>
-              </div>
-            </article>
-            <article class="panel">
-              <div class="panel-head"><div><h2>Safety / deployment</h2><p>How this workstation is intended to be used</p></div></div>
-              <div class="safety-copy">
-                <p><strong>Receive-only application:</strong> the serial capture engine never sends Modbus frames.</p>
-                <p>Use a separate high-impedance / isolated USB-RS485 adapter in parallel with the live A/B pair for true passive monitoring.</p>
-                <p>The web server binds to <code>127.0.0.1</code> by default. Only use <code>0.0.0.0</code> on a trusted engineering network.</p>
-              </div>
-            </article>
+            <article class="panel"><div class="panel-head"><div><h2>Capture management</h2><p>Local in-memory capture and exports</p></div></div><div class="action-stack"><a class="button secondary" href="/api/export/transactions.csv">Export packet CSV</a><a class="button secondary" href="/api/export/registers.csv">Export discovered register CSV</a><button class="danger-outline" id="settingsClearCapture">Clear in-memory capture</button></div></article>
+            <article class="panel"><div class="panel-head"><div><h2>Safety / deployment</h2><p>How this workstation is intended to be used</p></div></div><div class="safety-copy"><p><strong>Receive-only application:</strong> the serial capture engine never sends Modbus frames.</p><p>Use a separate high-impedance / isolated USB-RS485 adapter in parallel with the live A/B pair for true passive monitoring.</p><p>The web server binds to <code>127.0.0.1</code> by default.</p></div></article>
           </div>
         </section>
       </main>
@@ -179,7 +116,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js" defer></script>
-  <script src="/enhancements.js" defer></script>
+  <script src="/app-v3.js?v=20260911-1" defer></script>
 </body>
 </html>
