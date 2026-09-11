@@ -1,19 +1,22 @@
 {
   "name": "modbus-rtu-sniffer-console",
-  "version": "1.1.0",
-  "description": "Passive Modbus RTU/RS485 sniffer with COM-port discovery/rebind, reconnect, CRC validation, request/response pairing, register decoding and console meter display.",
+  "version": "2.0.0",
+  "description": "Passive Modbus RTU/RS485 protocol workstation with Node.js capture engine, live browser UI, packet inspector, protocol analysis and automatic register discovery.",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
     "start": "node src/index.js",
     "ports": "node src/index.js --list-ports",
+    "demo": "node src/index.js --demo",
     "test": "node --test"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "serialport": "^13.0.0"
+    "express": "^5.1.0",
+    "serialport": "^13.0.0",
+    "ws": "^8.18.3"
   },
   "license": "MIT"
 }
