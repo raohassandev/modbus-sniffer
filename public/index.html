@@ -110,39 +110,15 @@
           <div class="analysis-hero">
             <article class="panel health-card">
               <div class="health-ring large" id="analysisHealthRing"><span id="analysisHealthScore">100</span><small>/100</small></div>
-              <div><h2>Capture health score</h2><p>Heuristic score from line noise, Modbus exceptions, unmatched responses and response latency.</p><div id="healthLabel" class="status-label good">Healthy capture</div></div>
+              <div><h2>Capture health score</h2><p>Preparing engineering analysis…</p><div id="healthLabel" class="status-label good">Healthy capture</div></div>
             </article>
             <article class="metric-card"><span>P50 RTT</span><strong id="rttP50">—</strong><small>median response</small></article>
             <article class="metric-card"><span>P95 RTT</span><strong id="rttP95">—</strong><small>slow response bound</small></article>
             <article class="metric-card"><span>P99 RTT</span><strong id="rttP99">—</strong><small>tail latency</small></article>
           </div>
-
-          <div class="grid-2">
-            <article class="panel">
-              <div class="panel-head"><div><h2>Function-code distribution</h2><p>Observed traffic by Modbus operation</p></div></div>
-              <canvas id="functionChart" height="260"></canvas>
-            </article>
-            <article class="panel">
-              <div class="panel-head"><div><h2>Analyzer observations</h2><p>Automatic findings from the current capture</p></div></div>
-              <div id="analysisObservations" class="observation-list"></div>
-            </article>
-          </div>
-
-          <article class="panel" style="margin-top:14px">
-            <div class="panel-head"><div><h2>Slave performance</h2><p>Per-device response and exception statistics</p></div></div>
-            <div class="table-wrap"><table><thead><tr><th>Slave</th><th>Frames</th><th>Requests</th><th>Responses</th><th>Exceptions</th><th>Unmatched</th><th>Avg RTT</th><th>P95 RTT</th><th>Last seen</th></tr></thead><tbody id="analysisSlaves"></tbody></table></div>
-          </article>
-
-          <div class="grid-2">
-            <article class="panel">
-              <div class="panel-head"><div><h2>Function codes</h2><p>Request / response behavior</p></div></div>
-              <div class="table-wrap compact"><table><thead><tr><th>FC</th><th>Name</th><th>Frames</th><th>REQ</th><th>RSP</th><th>Exceptions</th></tr></thead><tbody id="analysisFunctions"></tbody></table></div>
-            </article>
-            <article class="panel">
-              <div class="panel-head"><div><h2>Discovered address ranges</h2><p>Contiguous register areas observed automatically</p></div></div>
-              <div class="table-wrap compact"><table><thead><tr><th>Slave</th><th>FC</th><th>Start</th><th>End</th><th>Count</th></tr></thead><tbody id="analysisRanges"></tbody></table></div>
-            </article>
-          </div>
+          <canvas id="functionChart" height="1"></canvas>
+          <div id="analysisObservations"></div>
+          <table style="display:none"><tbody id="analysisSlaves"></tbody><tbody id="analysisFunctions"></tbody><tbody id="analysisRanges"></tbody></table>
         </section>
 
         <section class="page" id="page-registers">
@@ -163,18 +139,18 @@
         <section class="page" id="page-settings">
           <div class="grid-2 settings-grid">
             <article class="panel">
-              <div class="panel-head"><div><h2>Serial interface</h2><p>Change the passive capture interface without restarting Node.js</p></div><button class="ghost" id="refreshPorts">Refresh ports</button></div>
+              <div class="panel-head"><div><h2>Serial interface</h2><p>Select a passive capture interface and communication format</p></div><button class="ghost" id="refreshPorts">Refresh ports</button></div>
               <form id="serialForm" class="settings-form">
                 <label>COM / serial port<select id="serialPort" required></select></label>
                 <div class="form-row"><label>Baud rate<input id="serialBaud" type="number" min="300" value="9600" required></label><label>Parity<select id="serialParity"><option>none</option><option>even</option><option>odd</option><option>mark</option><option>space</option></select></label></div>
                 <div class="form-row"><label>Data bits<select id="serialDataBits"><option>8</option><option>7</option><option>6</option><option>5</option></select></label><label>Stop bits<select id="serialStopBits"><option>1</option><option>2</option></select></label></div>
                 <label>Reconnect interval (ms)<input id="serialReconnect" type="number" min="250" value="2000"></label>
                 <button class="primary" type="submit">Apply & reconnect</button>
-                <p class="form-note" id="serialFormNote">The sniffer remains receive-only. Changing settings closes the current capture port and reopens the selected interface.</p>
+                <p class="form-note" id="serialFormNote">Click a detected port card or choose a port above. Review the serial settings, then apply.</p>
               </form>
             </article>
             <article class="panel">
-              <div class="panel-head"><div><h2>Detected serial ports</h2><p>USB identity helps the sniffer recover if Windows changes the COM number</p></div></div>
+              <div class="panel-head"><div><h2>Detected serial ports</h2><p>Click any port card to select it</p></div></div>
               <div id="portsList" class="ports-list"></div>
             </article>
           </div>
@@ -204,5 +180,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/app.js" defer></script>
+  <script src="/enhancements.js" defer></script>
 </body>
 </html>
