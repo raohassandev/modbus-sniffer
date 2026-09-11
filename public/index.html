@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Modbus Sniffer</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">M</div>
+        <div><strong>Modbus Sniffer</strong><span>RTU Analyzer</span></div>
+      </div>
+      <nav class="nav" aria-label="Main navigation">
+        <button class="nav-item active" data-page="dashboard"><span>◫</span> Dashboard</button>
+        <button class="nav-item" data-page="traffic"><span>⇄</span> Live Traffic</button>
+        <button class="nav-item" data-page="analysis"><span>⌁</span> Analysis</button>
+        <button class="nav-item" data-page="registers"><span>▦</span> Registers</button>
+        <button class="nav-item" data-page="settings"><span>⚙</span> Settings</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="passive-badge"><i></i> PASSIVE / RX ONLY</div>
+        <small>Modbus RTU protocol workstation</small>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">Dashboard</h1>
+          <p id="pageSubtitle">Live RS485 / Modbus RTU visibility</p>
+        </div>
+        <div class="top-actions">
+          <div class="connection-pill" id="connectionPill"><i></i><span id="connectionText">Idle</span></div>
+          <div class="serial-summary" id="serialSummary">No port selected</div>
+        </div>
+      </header>
+
+      <main>
+        <section class="page active" id="page-dashboard">
+          <div class="kpi-grid">
+            <article class="kpi"><span>Frames</span><strong id="kpiFrames">0</strong><small id="kpiFps">0 fps</small></article>
+            <article class="kpi"><span>Active slaves</span><strong id="kpiSlaves">0</strong><small id="kpiRegisters">0 registers found</small></article>
+            <article class="kpi"><span>Average RTT</span><strong id="kpiRtt">—</strong><small id="kpiP95">P95 —</small></article>
+            <article class="kpi"><span>Exceptions</span><strong id="kpiExceptions">0</strong><small id="kpiNoise">0 noise bytes</small></article>
+            <article class="kpi"><span>Captured</span><strong id="kpiBytes">0 B</strong><small id="kpiUptime">00:00:00 uptime</small></article>
+          </div>
+
+          <div class="grid-2 wide-left">
+            <article class="panel">
+              <div class="panel-head"><div><h2>Bus activity</h2><p>Frames per second · last 60 seconds</p></div><span class="live-dot">LIVE</span></div>
+              <canvas id="trafficChart" height="220"></canvas>
+            </article>
+            <article class="panel">
+              <div class="panel-head"><div><h2>Bus health</h2><p>Capture quality overview</p></div></div>
+              <div class="health-layout">
+                <div class="health-ring" id="dashHealthRing"><span id="dashHealthScore">100</span><small>/100</small></div>
+                <div class="health-list">
+                  <div><span>Exception rate</span><strong id="dashExceptionRate">0%</strong></div>
+                  <div><span>Unmatched responses</span><strong id="dashUnmatchedRate">0%</strong></div>
+                  <div><span>Noise ratio</span><strong id="dashNoiseRate">0%</strong></div>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div class="grid-2">
+            <article class="panel">
+              <div class="panel-head"><div><h2>Detected slaves</h2><p>Devices observed on the bus</p></div><button class="ghost" data-go="analysis">Analyze</button></div>
+              <div class="table-wrap compact"><table><thead><tr><th>Slave</th><th>Frames</th><th>Exceptions</th><th>Avg RTT</th><th>Last seen</th></tr></thead><tbody id="dashboardSlaves"></tbody></table></div>
+            </article>
+            <article class="panel">
+              <div class="panel-head"><div><h2>Recent transactions</h2><p>Newest decoded Modbus traffic</p></div><button class="ghost" data-go="traffic">Open traffic</button></div>
+              <div class="table-wrap compact"><table><thead><tr><th>Time</th><th>Dir</th><th>Slave</th><th>FC</th><th>Details</th><th>RTT</th></tr></thead><tbody id="dashboardTraffic"></tbody></table></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="page" id="page-traffic">
+          <article class="panel toolbar-panel">
+            <div class="filters">
+              <label>Slave<input id="trafficSlave" type="number" min="0" max="247" placeholder="All"></label>
+              <label>Function<input id="trafficFc" type="number" min="1" max="127" placeholder="All"></label>
+              <label>Direction<select id="trafficDirection"><option value="">All</option><option>REQ</option><option>RSP</option><option>UNK</option></select></label>
+              <label class="search-field">Search<input id="trafficSearch" placeholder="HEX, function, exception…"></label>
+            </div>
+            <div class="toolbar-actions">
+              <button class="secondary" id="pauseTraffic">Pause</button>
+              <a class="button secondary" href="/api/export/transactions.csv">Export CSV</a>
+              <button class="danger-outline" id="clearCapture">Clear capture</button>
+            </div>
+          </article>
+
+          <div class="traffic-layout">
+            <article class="panel traffic-panel">
+              <div class="panel-head"><div><h2>Packet stream</h2><p><span id="trafficCount">0</span> transactions in view</p></div><span class="live-dot" id="trafficLiveBadge">LIVE</span></div>
+              <div class="table-wrap traffic-table-wrap"><table class="traffic-table"><thead><tr><th>#</th><th>Time</th><th>Dir</th><th>Slave</th><th>FC</th><th>Function / address</th><th>RTT</th><th>Bytes</th><th>Raw</th></tr></thead><tbody id="trafficBody"></tbody></table></div>
+            </article>
+            <aside class="panel inspector" id="packetInspector">
+              <div class="panel-head"><div><h2>Packet inspector</h2><p>Select a transaction</p></div></div>
+              <div id="inspectorContent" class="empty-state">Click any packet row to inspect decoded fields, request matching and raw bytes.</div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="page" id="page-analysis">
+          <div class="analysis-hero">
+            <article class="panel health-card">
+              <div class="health-ring large" id="analysisHealthRing"><span id="analysisHealthScore">100</span><small>/100</small></div>
+              <div><h2>Capture health score</h2><p>Heuristic score from line noise, Modbus exceptions, unmatched responses and response latency.</p><div id="healthLabel" class="status-label good">Healthy capture</div></div>
+            </article>
+            <article class="metric-card"><span>P50 RTT</span><strong id="rttP50">—</strong><small>median response</small></article>
+            <article class="metric-card"><span>P95 RTT</span><strong id="rttP95">—</strong><small>slow response bound</small></article>
+            <article class="metric-card"><span>P99 RTT</span><strong id="rttP99">—</strong><small>tail latency</small></article>
+          </div>
+
+          <div class="grid-2">
+            <article class="panel">
+              <div class="panel-head"><div><h2>Function-code distribution</h2><p>Observed traffic by Modbus operation</p></div></div>
+              <canvas id="functionChart" height="260"></canvas>
+            </article>
+            <article class="panel">
+              <div class="panel-head"><div><h2>Analyzer observations</h2><p>Automatic findings from the current capture</p></div></div>
+              <div id="analysisObservations" class="observation-list"></div>
+            </article>
+          </div>
+
+          <article class="panel" style="margin-top:14px">
+            <div class="panel-head"><div><h2>Slave performance</h2><p>Per-device response and exception statistics</p></div></div>
+            <div class="table-wrap"><table><thead><tr><th>Slave</th><th>Frames</th><th>Requests</th><th>Responses</th><th>Exceptions</th><th>Unmatched</th><th>Avg RTT</th><th>P95 RTT</th><th>Last seen</th></tr></thead><tbody id="analysisSlaves"></tbody></table></div>
+          </article>
+
+          <div class="grid-2">
+            <article class="panel">
+              <div class="panel-head"><div><h2>Function codes</h2><p>Request / response behavior</p></div></div>
+              <div class="table-wrap compact"><table><thead><tr><th>FC</th><th>Name</th><th>Frames</th><th>REQ</th><th>RSP</th><th>Exceptions</th></tr></thead><tbody id="analysisFunctions"></tbody></table></div>
+            </article>
+            <article class="panel">
+              <div class="panel-head"><div><h2>Discovered address ranges</h2><p>Contiguous register areas observed automatically</p></div></div>
+              <div class="table-wrap compact"><table><thead><tr><th>Slave</th><th>FC</th><th>Start</th><th>End</th><th>Count</th></tr></thead><tbody id="analysisRanges"></tbody></table></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="page" id="page-registers">
+          <article class="panel toolbar-panel">
+            <div class="filters">
+              <label>Slave<input id="regSlave" type="number" placeholder="All"></label>
+              <label>Function<input id="regFc" type="number" placeholder="All"></label>
+              <label class="search-field">Address / value<input id="regSearch" placeholder="Filter discovered registers…"></label>
+            </div>
+            <div class="toolbar-actions"><a class="button secondary" href="/api/export/registers.csv">Export register map</a></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div><h2>Discovered register explorer</h2><p>Built automatically from FC03/04 reads and FC06/16/23 writes · raw PDU addresses</p></div><strong id="registerCount">0 registers</strong></div>
+            <div class="table-wrap register-table-wrap"><table><thead><tr><th>Slave</th><th>FC</th><th>Address</th><th>Last value</th><th>HEX</th><th>Min</th><th>Max</th><th>Reads</th><th>Writes</th><th>Changes</th><th>Last seen</th></tr></thead><tbody id="registerBody"></tbody></table></div>
+          </article>
+        </section>
+
+        <section class="page" id="page-settings">
+          <div class="grid-2 settings-grid">
+            <article class="panel">
+              <div class="panel-head"><div><h2>Serial interface</h2><p>Change the passive capture interface without restarting Node.js</p></div><button class="ghost" id="refreshPorts">Refresh ports</button></div>
+              <form id="serialForm" class="settings-form">
+                <label>COM / serial port<select id="serialPort" required></select></label>
+                <div class="form-row"><label>Baud rate<input id="serialBaud" type="number" min="300" value="9600" required></label><label>Parity<select id="serialParity"><option>none</option><option>even</option><option>odd</option><option>mark</option><option>space</option></select></label></div>
+                <div class="form-row"><label>Data bits<select id="serialDataBits"><option>8</option><option>7</option><option>6</option><option>5</option></select></label><label>Stop bits<select id="serialStopBits"><option>1</option><option>2</option></select></label></div>
+                <label>Reconnect interval (ms)<input id="serialReconnect" type="number" min="250" value="2000"></label>
+                <button class="primary" type="submit">Apply & reconnect</button>
+                <p class="form-note" id="serialFormNote">The sniffer remains receive-only. Changing settings closes the current capture port and reopens the selected interface.</p>
+              </form>
+            </article>
+            <article class="panel">
+              <div class="panel-head"><div><h2>Detected serial ports</h2><p>USB identity helps the sniffer recover if Windows changes the COM number</p></div></div>
+              <div id="portsList" class="ports-list"></div>
+            </article>
+          </div>
+
+          <div class="grid-2 settings-grid">
+            <article class="panel">
+              <div class="panel-head"><div><h2>Capture management</h2><p>Local in-memory capture and exports</p></div></div>
+              <div class="action-stack">
+                <a class="button secondary" href="/api/export/transactions.csv">Export packet CSV</a>
+                <a class="button secondary" href="/api/export/registers.csv">Export discovered register CSV</a>
+                <button class="danger-outline" id="settingsClearCapture">Clear in-memory capture</button>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panel-head"><div><h2>Safety / deployment</h2><p>How this workstation is intended to be used</p></div></div>
+              <div class="safety-copy">
+                <p><strong>Receive-only application:</strong> the serial capture engine never sends Modbus frames.</p>
+                <p>Use a separate high-impedance / isolated USB-RS485 adapter in parallel with the live A/B pair for true passive monitoring.</p>
+                <p>The web server binds to <code>127.0.0.1</code> by default. Only use <code>0.0.0.0</code> on a trusted engineering network.</p>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
