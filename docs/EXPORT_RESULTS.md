@@ -16,7 +16,7 @@ The workbook contains these sheets:
 - Timeouts
 - Exceptions
 - Traffic
-- History
+- Project History
 
 Each data sheet has a frozen header row and filters. Device names come from the active project, while raw protocol values come from the current capture/runtime state.
 
@@ -75,4 +75,4 @@ The Reports page also keeps individual CSV/JSON exports under **Individual CSV /
 
 ## Validation
 
-The v6.1 smoke test downloads the XLSX, PDF and ZIP endpoints and verifies their content type, file signature and minimum payload size. The normal Windows/Linux CI matrix runs this smoke test automatically.
+The v6.1 smoke test downloads the XLSX, PDF and ZIP endpoints, checks their file signatures and content types, and opens the generated XLSX to verify all expected worksheet names. The normal Windows/Linux CI matrix runs this smoke test automatically.
