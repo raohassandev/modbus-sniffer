@@ -21,6 +21,12 @@ function wordsFromData(data) {
   return words;
 }
 
+function bitsFromData(data) {
+  const bits = [];
+  for (const b of data) for (let bit = 0; bit < 8; bit++) bits.push(Boolean(b & (1 << bit)));
+  return bits;
+}
+
 function decodeFrame(frame) {
   const slaveId = frame[0];
   const rawFc = frame[1];
@@ -36,16 +42,36 @@ function decodeFrame(frame) {
   }
 
   switch (fc) {
-    case 1: case 2: case 3: case 4:
+    case 1: case 2: {
+      // FC01/02 have one unavoidable wire-level ambiguity: a response with byteCount=3
+      // is also 8 bytes long, exactly like a normal read request. Preserve both
+      // interpretations and let the transaction tracker resolve it using pending-request
+      // context and the expected response byte count.
+      if (frame.length === 8 && frame[2] === 3) {
+        out.kind = 'ambiguous-read';
+        out.startAddress = u16(frame, 2);
+        out.quantity = u16(frame, 4);
+        out.byteCount = frame[2];
+        out.data = frame.subarray(3, 3 + out.byteCount);
+        out.bits = bitsFromData(out.data);
+      } else if (frame.length === 8) {
+        out.kind = 'request';
+        out.startAddress = u16(frame, 2);
+        out.quantity = u16(frame, 4);
+      } else {
+        out.kind = 'response';
+        out.byteCount = frame[2];
+        out.data = frame.subarray(3, 3 + out.byteCount);
+        out.bits = bitsFromData(out.data);
+      }
+      break;
+    }
+    case 3: case 4:
       if (frame.length === 8) {
         out.kind = 'request'; out.startAddress = u16(frame, 2); out.quantity = u16(frame, 4);
       } else {
         out.kind = 'response'; out.byteCount = frame[2]; out.data = frame.subarray(3, 3 + out.byteCount);
-        if (fc === 3 || fc === 4) out.words = wordsFromData(out.data);
-        else {
-          out.bits = [];
-          for (const b of out.data) for (let bit = 0; bit < 8; bit++) out.bits.push(Boolean(b & (1 << bit)));
-        }
+        out.words = wordsFromData(out.data);
       }
       break;
     case 5: case 6:
