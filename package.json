@@ -1,6 +1,6 @@
 {
   "name": "modbus-engineering-analyzer",
-  "version": "6.0.0",
+  "version": "6.1.0",
   "description": "Modbus RTU/TCP engineering analyzer with automatic device formation, persistent projects, register engineering maps, history, diagnostics and desktop packaging.",
   "main": "src/index-v6.js",
   "type": "commonjs",
@@ -18,6 +18,13 @@
     "desktop:win": "npm --prefix desktop run dist:win"
   },
   "engines": { "node": ">=20" },
-  "dependencies": { "express": "^5.1.0", "serialport": "^13.0.0", "ws": "^8.18.3" },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "pdfkit": "^0.17.2",
+    "serialport": "^13.0.0",
+    "ws": "^8.18.3"
+  },
   "license": "MIT"
 }
