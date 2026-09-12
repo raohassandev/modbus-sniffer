@@ -63,7 +63,7 @@ async function main() {
     else if (ports.length === 1) { options.port = ports[0].path; console.log(`Auto-selected only available port: ${options.port}`); }
   }
 
-  console.log('\n=== Modbus RTU Passive Sniffer v4 ===');
+  console.log('\n=== Modbus RTU Passive Sniffer v4.1 ===');
   console.log(`Mode      : ${options.demo ? 'DEMO / SIMULATED TRAFFIC' : 'RECEIVE/LISTEN ONLY'}`);
   if (!options.demo) {
     console.log(`Port      : ${options.port || 'not selected yet (use Web UI > Settings)'}`);
@@ -234,7 +234,9 @@ async function main() {
     console.log('[PORT] No port selected. Open the Web UI and choose one under Settings.');
   }
 
-  const timeoutTimer = setInterval(() => tracker.expire(Date.now()), Math.max(50, Math.min(250, Math.floor(options.requestTimeoutMs / 4))));
+  // Keep this cadence fixed and short. The tracker itself owns the current timeout value,
+  // so Settings can change requestTimeoutMs at runtime without leaving an old interval cadence behind.
+  const timeoutTimer = setInterval(() => tracker.expire(Date.now()), 50);
   timeoutTimer.unref?.();
   const statsTimer = setInterval(() => {
     if (options.quiet) return;
