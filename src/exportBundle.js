@@ -85,7 +85,7 @@ function sheetColumns(name) {
     Traffic: [
       ['ID','id'],['Timestamp','timestampIso'],['Transport','transport'],['Direction','direction'],['Slave','slaveId'],['FC','functionCode'],['Function','functionName'],['RTT ms','rttMs'],['Timeout ms','timeoutMs'],['Exception','exceptionName'],['Raw HEX','rawHex']
     ],
-    History: [
+    'Project History': [
       ['Timestamp','timestampIso'],['Health','healthScore'],['Frames','frames'],['Devices','devices'],['Timeouts','timeouts'],['Timeout Rate %','timeoutRate'],['Avg RTT ms','avgRttMs'],['Connection','connection']
     ]
   };
@@ -101,8 +101,15 @@ function normalizeRows(model, sheet) {
   if (sheet === 'Timeouts') return model.timeouts.map(x => ({ ...x, timestampIso: x.timestamp ? new Date(x.timestamp).toISOString() : '', address: x.request?.startAddress ?? x.request?.address ?? x.decoded?.startAddress ?? x.decoded?.address ?? '', quantity: x.request?.quantity ?? x.decoded?.quantity ?? '', details: x.functionName || '' }));
   if (sheet === 'Exceptions') return model.exceptions.map(x => ({ ...x, timestampIso: x.timestamp ? new Date(x.timestamp).toISOString() : '' }));
   if (sheet === 'Traffic') return model.transactions.map(x => ({ ...x, timestampIso: x.timestamp ? new Date(x.timestamp).toISOString() : '' }));
-  if (sheet === 'History') return model.history.map(x => ({ timestampIso: x.recordedAt ? new Date(x.recordedAt).toISOString() : '', healthScore: x.healthScore, frames: x.totals?.frames, devices: x.totals?.devices ?? x.devices?.length, timeouts: x.totals?.timeouts, timeoutRate: x.rates?.timeoutRate, avgRttMs: x.totals?.avgRttMs, connection: x.connection?.status }));
+  if (sheet === 'Project History') return model.history.map(x => ({ timestampIso: x.recordedAt ? new Date(x.recordedAt).toISOString() : '', healthScore: x.healthScore, frames: x.totals?.frames, devices: x.totals?.devices ?? x.devices?.length, timeouts: x.totals?.timeouts, timeoutRate: x.rates?.timeoutRate, avgRttMs: x.totals?.avgRttMs, connection: x.connection?.status }));
   return [];
+}
+
+function excelValue(v) {
+  if (v == null) return '';
+  if (typeof v === 'bigint') return v.toString();
+  if (Array.isArray(v) || (typeof v === 'object' && !(v instanceof Date))) return JSON.stringify(v);
+  return v;
 }
 
 function applySheetStyle(ws) {
@@ -127,14 +134,16 @@ async function buildWorkbook(model) {
   wb.subject = `${model.project?.name || 'Modbus'} engineering results`;
   const summary = wb.addWorksheet('Summary');
   summary.columns = [{ header: 'Metric', key: 'metric', width: 32 }, { header: 'Value', key: 'value', width: 32 }];
-  for (const [metric, value] of model.summary) summary.addRow({ metric, value });
+  for (const [metric, value] of model.summary) summary.addRow({ metric, value:excelValue(value) });
   applySheetStyle(summary);
   summary.getColumn(1).font = { bold: true };
 
-  for (const name of ['Devices','Polling Groups','Registers','Engineering Values','Timeouts','Exceptions','Traffic','History']) {
+  for (const name of ['Devices','Polling Groups','Registers','Engineering Values','Timeouts','Exceptions','Traffic','Project History']) {
     const defs = sheetColumns(name); const ws = wb.addWorksheet(name);
     ws.columns = defs.map(([header,key]) => ({ header, key }));
-    for (const row of normalizeRows(model, name)) ws.addRow(row);
+    for (const source of normalizeRows(model, name)) {
+      const row={}; for(const [,key] of defs) row[key]=excelValue(source[key]); ws.addRow(row);
+    }
     applySheetStyle(ws);
   }
   return Buffer.from(await wb.xlsx.writeBuffer());
@@ -180,7 +189,7 @@ function buildPdf(model) {
       {label:'Slave',width:0.6,value:r=>r.slaveId},{label:'FC',width:0.5,value:r=>r.functionCode},{label:'Range',width:1.1,value:r=>`${r.startAddress??'—'}…${r.endAddress??'—'}`},{label:'REQ',width:0.7,value:r=>r.requests},{label:'RSP',width:0.7,value:r=>r.responses},{label:'TO',width:0.6,value:r=>r.timeouts},{label:'Median ms',width:0.9,value:r=>r.medianIntervalMs},{label:'Jitter %',width:0.8,value:r=>r.jitterPct},{label:'RTT ms',width:0.8,value:r=>r.avgRttMs}
     ], model.polls, 140);
     addPdfTable(doc, 'Engineering values', [
-      {label:'Slave',width:0.5,value:r=>r.slaveId},{label:'FC',width:0.4,value:r=>r.functionCode},{label:'Address',width:0.8,value:r=>r.address},{label:'Name',width:1.6,value:r=>r.name},{label:'Type',width:0.8,value:r=>r.type},{label:'Order',width:0.8,value:r=>r.byteOrder},{label:'Value',width:1,value:r=>r.engineeringValue},{label:'Unit',width:0.6,value:r=>r.unit}
+      {label:'Slave',width:0.5,value:r=>r.slaveId},{label:'FC',width:0.4,value:r=>r.functionCode},{label:'Address',width:0.8,value:r=>r.address},{label:'Name',width:1.6,value:r=>r.name},{label:'Type',width:0.8,value:r=>r.type},{label:'Order',width:0.8,value:r=>r.byteOrder},{label:'Value',width:1,value:r=>Array.isArray(r.engineeringValue)?JSON.stringify(r.engineeringValue):r.engineeringValue},{label:'Unit',width:0.6,value:r=>r.unit}
     ], model.mappings, 160);
     doc.end();
   });
