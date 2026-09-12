@@ -28,6 +28,19 @@ class AdvancedTransactionTracker {
       this._decorateReadResponse(tx);
       return tx;
     }
+    if (decoded.kind === 'ambiguous-read') {
+      const idx = this._findAmbiguousReadMatch(decoded);
+      if (idx >= 0) {
+        const [req] = this.pending.splice(idx, 1);
+        const rsp = { ...decoded, kind: 'response' };
+        const tx = { direction: 'RSP', decoded: rsp, request: req, rttMs: timestamp - req.timestamp };
+        this._decorateReadResponse(tx);
+        return tx;
+      }
+      const req = { ...decoded, kind: 'request', timestamp };
+      this.pending.push(req);
+      return { direction: 'REQ', decoded: req, request: req, rttMs: null };
+    }
     if (decoded.kind === 'ambiguous') {
       const idx = this._findAmbiguousMatch(decoded);
       if (idx >= 0) {
@@ -56,6 +69,14 @@ class AdvancedTransactionTracker {
 
   clear() {
     this.pending = [];
+  }
+
+  _findAmbiguousReadMatch(decoded) {
+    return this.pending.findIndex(p => {
+      if (p.slaveId !== decoded.slaveId || p.functionCode !== decoded.functionCode) return false;
+      if (!Number.isInteger(p.quantity)) return false;
+      return Math.ceil(p.quantity / 8) === Number(decoded.byteCount);
+    });
   }
 
   _findAmbiguousMatch(decoded) {
