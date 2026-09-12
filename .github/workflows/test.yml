@@ -23,6 +23,7 @@ jobs:
       - run: node --check src/advancedWebServer.js
       - run: node --check src/dataTypeAnalyzer.js
       - run: node --check src/replayController.js
+      - run: node --check src/demoGenerator.js
       - run: node --check src/modbus/advancedTransactionTracker.js
       - run: node --check public/app-v4.js
       - run: npm test
