@@ -15,13 +15,26 @@ class TransactionTracker {
     if (decoded.kind === 'request') {
       const req = { ...decoded, timestamp };
       this.pending.push(req);
-      return { direction: 'REQ', decoded, request: req, rttMs: null };
+      return { direction: 'REQ', decoded: req, request: req, rttMs: null };
     }
     if (decoded.kind === 'response') {
       const req = this._takeMatching(decoded.slaveId, decoded.functionCode);
       const tx = { direction: 'RSP', decoded, request: req, rttMs: req ? timestamp - req.timestamp : null };
       this._decorateReadResponse(tx);
       return tx;
+    }
+    if (decoded.kind === 'ambiguous-read') {
+      const idx = this.pending.findIndex(p => p.slaveId === decoded.slaveId && p.functionCode === decoded.functionCode && Number.isInteger(p.quantity) && Math.ceil(p.quantity / 8) === Number(decoded.byteCount));
+      if (idx >= 0) {
+        const [req] = this.pending.splice(idx, 1);
+        const rsp = { ...decoded, kind: 'response' };
+        const tx = { direction: 'RSP', decoded: rsp, request: req, rttMs: timestamp - req.timestamp };
+        this._decorateReadResponse(tx);
+        return tx;
+      }
+      const req = { ...decoded, kind: 'request', timestamp };
+      this.pending.push(req);
+      return { direction: 'REQ', decoded: req, request: req, rttMs: null };
     }
     if (decoded.kind === 'ambiguous') {
       const idx = this.pending.findIndex(p => p.slaveId === decoded.slaveId && p.functionCode === decoded.functionCode && p.matchToken === decoded.matchToken);
