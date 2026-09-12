@@ -1,13 +1,13 @@
 {
   "name": "modbus-rtu-sniffer-console",
-  "version": "2.0.0",
-  "description": "Passive Modbus RTU/RS485 protocol workstation with Node.js capture engine, live browser UI, packet inspector, protocol analysis and automatic register discovery.",
-  "main": "src/index.js",
+  "version": "4.0.0",
+  "description": "Passive Modbus RTU/RS485 engineering analyzer with automatic slave-device formation, polling-cycle analysis, missing-response detection, register decoding, capture replay and serial-format detection.",
+  "main": "src/index-v4.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index.js",
-    "ports": "node src/index.js --list-ports",
-    "demo": "node src/index.js --demo",
+    "start": "node src/index-v4.js",
+    "ports": "node src/index-v4.js --list-ports",
+    "demo": "node src/index-v4.js --demo",
     "test": "node --test"
   },
   "engines": {
