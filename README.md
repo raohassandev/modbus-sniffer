@@ -1,37 +1,167 @@
-# Modbus Sniffer
+# Modbus Sniffer v4
 
-A passive **Modbus RTU / RS485 protocol workstation** written in Node.js. It captures a live bus through a separate USB-RS485 receive tap, validates CRC, pairs requests with responses, decodes Modbus functions, reconstructs register addresses, measures response time, discovers register maps automatically, and exposes the result in both the console and a live browser interface.
+A passive **Modbus RTU / RS485 engineering analyzer** written in Node.js. It listens to an existing bus through a separate USB-RS485 receive tap, validates CRC, pairs requests with responses, automatically forms slave devices, learns polling cycles and register groups, detects missing replies, analyzes timing, decodes register data types, and supports offline capture/replay.
 
-> The application does not transmit Modbus frames. For true passive monitoring, connect a separate USB-RS485 adapter in parallel with the existing A/B bus. Windows normally does not allow two applications to open the same COM port.
+> The application is receive-only. It does not transmit Modbus frames. For true passive monitoring, connect a separate USB-RS485 adapter in parallel with the existing A/B bus.
 
-## v2 browser workstation
+## v4 highlights
 
-Running the sniffer now starts a local HTML interface at **http://127.0.0.1:8080** by default.
+### Automatic slave-device formation
+
+No device configuration is required. Every observed Modbus Slave ID becomes a device automatically.
+
+If a master polls Slave IDs 1 through 10, the application creates ten device models independently. Each device keeps its own:
+
+- request and response counts
+- function codes
+- missing-response timeouts
+- exceptions and unmatched responses
+- average and P95 RTT
+- automatically learned polling groups
+- median/P95 request interval and jitter
+- contiguous register groups
+- latest register values and HEX
+- min/max/change/read/write counters
+- learned register poll interval
+- online/silent/offline state and health score
+
+A request such as:
+
+```text
+Slave 4 · FC03 · address 44112 · quantity 6
+```
+
+becomes a polling group owned by Slave 4. Repeated requests automatically build its request interval statistics. The matching response populates Slave 4 registers `44112..44117`; those values are never mixed with another slave that uses the same address.
+
+### Missing-response analyzer
+
+Requests that do not receive a matching response before the configured timeout become explicit `TIMEOUT` events. Timeouts are counted at bus, slave and polling-group level.
+
+Default:
+
+```text
+1000 ms
+```
+
+Configure from **Settings** or the CLI:
+
+```bash
+npm start -- --request-timeout 800
+```
+
+### Polling-cycle analyzer
+
+For every unique request group the analyzer learns:
+
+```text
+Slave ID
+Function code
+Read / write operation
+Start address
+Quantity
+Request count
+Response count
+Timeout count
+Exception count
+Median request interval
+P95 request interval
+Min / max interval
+Jitter ms / jitter %
+Average RTT / P95 RTT
+Latest values
+```
+
+This makes it possible to see exactly what a PLC/HMI is polling, how often, and which slave or register block is slow or unreliable.
+
+### Register data-type analyzer
+
+Select captured words and inspect them as:
+
+```text
+uint16 / int16
+uint32 / int32 / float32
+uint64 / int64 / float64
+```
+
+Common 32-bit orders:
+
+```text
+ABCD
+BADC
+CDAB
+DCBA
+```
+
+Common 64-bit orders include:
+
+```text
+ABCDEFGH
+BADCFEHG
+CDABGHEF
+EFGHABCD
+GHEFCDAB
+HGFEDCBA
+```
+
+The UI also shows common scale interpretations such as `x0.1`, `x0.01`, and `x0.001`.
+
+### Passive serial-format detection
+
+From **Settings**, select a COM port and run Quick Detect or Full Detect. The sniffer tests baud/parity candidates without transmitting any Modbus request and scores them using valid CRC frames versus undecodable bytes.
+
+Quick detection checks common combinations around:
+
+```text
+9600 / 19200 / 38400 / 115200
+8N1 / 8E1
+```
+
+Full detection expands to lower baud rates and odd parity.
+
+### Capture sessions and replay
+
+Save the complete analysis session as a `.mbcap` file. It preserves captured transactions so the device, polling and register models can be rebuilt later without hardware.
+
+The **Sessions** page can:
+
+- save a capture
+- load a capture for offline analysis
+- replay it at 0.5x, 1x, 2x, 5x or 10x
+- export packets, devices, polling groups and registers as CSV
+
+## Browser pages
+
+Running the application starts the local UI at:
+
+```text
+http://127.0.0.1:8080
+```
 
 Pages:
 
-- **Dashboard** — connection state, frame rate, slave count, RTT, exceptions, noise, bus-health score and live activity chart.
-- **Live Traffic** — request/response stream, filters, pause/resume, raw HEX, RTT and a detailed packet inspector.
-- **Analysis** — capture health, P50/P95/P99 latency, function-code distribution, per-slave statistics, automatic observations and discovered address ranges.
-- **Registers** — automatic register discovery with slave, FC, raw PDU address, current value, HEX, min/max, read/write counts and change count.
-- **Settings** — list active serial ports and change COM port, baud, parity, data bits and stop bits without restarting Node.js.
-
-Both transaction and discovered-register tables can be exported as CSV.
+- **Dashboard** — bus health, devices, poll groups, registers, timeouts, RTT, exceptions and activity.
+- **Devices** — automatically formed Slave-ID devices with per-device poll groups, register groups, values, timing and issues.
+- **Live Traffic** — REQ/RSP/TIMEOUT stream, filters, raw HEX and packet inspector.
+- **Analysis** — timeout rate, polling cadence, jitter, latency, device health and findings.
+- **Registers** — all automatically discovered registers grouped by Slave ID and function.
+- **Decoder** — 16/32/64-bit data-type and byte/word-order analysis.
+- **Sessions** — `.mbcap` save/load/replay and exports.
+- **Settings** — clickable COM ports, serial parameters, request timeout and passive format detection.
 
 ## Hardware connection
 
 ```text
-PLC / Master                Inverter / Meter / Logger
-    A+ ----------------------------- A+
-     |\
+PLC / Master                 Inverter / Meter / Logger
+    A+ ------------------------------ A+
+     |
      +------ Sniffer USB-RS485 A+
 
-    B- ----------------------------- B-
-     |\
+    B- ------------------------------ B-
+     |
      +------ Sniffer USB-RS485 B-
 
-   GND ----------------------------- GND
-     |\
+   GND ------------------------------ GND
+     |
      +------ Sniffer GND (recommended)
 ```
 
@@ -43,44 +173,13 @@ Do not add another 120-ohm termination resistor only for the sniffer. An isolate
 - Windows, Linux or macOS
 - USB-RS485 adapter for real RTU capture
 
-## Install
+## Install and run
 
 ```bash
+git clone https://github.com/raohassandev/modbus-sniffer.git
+cd modbus-sniffer
 npm install
-```
-
-## See available ports
-
-```bash
-npm run ports
-```
-
-## Run with real hardware
-
-```bash
-npm start -- --port COM5 --baud 9600 --parity none
-```
-
-Example 19200 8E1:
-
-```bash
-npm start -- --port COM5 --baud 19200 --parity even --data-bits 8 --stop-bits 1
-```
-
-You may also run only:
-
-```bash
 npm start
-```
-
-If exactly one serial port exists, it is selected automatically. If multiple ports exist, the web UI starts and you can select the capture interface from **Settings**. With `--no-web`, the original interactive console port picker is used.
-
-## Demo mode — no hardware required
-
-To evaluate the complete UI before going to site:
-
-```bash
-npm run demo
 ```
 
 Then open:
@@ -89,150 +188,93 @@ Then open:
 http://127.0.0.1:8080
 ```
 
-Demo mode generates synthetic FC03/FC04 reads, FC06 writes, occasional exceptions and a small amount of simulated noise so the analysis views have realistic data.
+Run on a known port directly:
 
-## Console output stays active
-
-The HTML workstation does not replace the console. Packets continue to be decoded and printed in real time:
-
-```text
-[11:10:22.104] | REQ | S=1 | FC=03 | Read Holding Registers | addr=32335 | qty=2
-  RAW: 01 03 7E 4F 00 02 ...
-
-[11:10:22.159] | RSP | S=1 | FC=03 | Read Holding Registers | RTT=55ms | addr=32335
-  32335=17194(0x432A) 32336=0(0x0000)
+```bash
+npm start -- --port COM5 --baud 9600 --parity none --request-timeout 1000
 ```
 
-## Supported Modbus RTU functions
+Example 19200 8E1:
 
-The decoder has explicit handling for common standard functions including:
+```bash
+npm start -- --port COM5 --baud 19200 --parity even --data-bits 8 --stop-bits 1
+```
 
-- FC01 Read Coils
-- FC02 Read Discrete Inputs
-- FC03 Read Holding Registers
-- FC04 Read Input Registers
-- FC05 Write Single Coil
-- FC06 Write Single Register
-- FC07 Read Exception Status
-- FC08 Diagnostics
-- FC11 Get Comm Event Counter
-- FC12 Get Comm Event Log
-- FC15 Write Multiple Coils
-- FC16 Write Multiple Registers
-- FC17 Report Server ID
-- FC22 Mask Write Register
-- FC23 Read/Write Multiple Registers
+List serial ports:
+
+```bash
+npm run ports
+```
+
+## Demo mode
+
+No hardware is required:
+
+```bash
+npm run demo
+```
+
+The v4 demo simulates a master polling **10 separate slave devices**, multiple register groups per slave, changing values, writes, exceptions, occasional missing replies and line noise. This is useful for verifying the automatic device/grouping behavior before going to site.
+
+## Supported Modbus functions
+
+Explicit decoding includes:
+
+```text
+FC01 Read Coils
+FC02 Read Discrete Inputs
+FC03 Read Holding Registers
+FC04 Read Input Registers
+FC05 Write Single Coil
+FC06 Write Single Register
+FC07 Read Exception Status
+FC08 Diagnostics
+FC11 Get Comm Event Counter
+FC12 Get Comm Event Log
+FC15 Write Multiple Coils
+FC16 Write Multiple Registers
+FC17 Report Server ID
+FC22 Mask Write Register
+FC23 Read/Write Multiple Registers
+```
 
 CRC-valid vendor/unknown function frames are still captured for inspection.
 
-## Automatic request/response analysis
+## API
 
-The sniffer remembers requests and uses them to interpret responses. For a read request such as:
-
-```text
-Slave 1 · FC03 · address 32335 · quantity 2
-```
-
-and its response, the analyzer reconstructs:
-
-```text
-32335 = 17194 (0x432A)
-32336 = 0     (0x0000)
-RTT   = 55 ms
-```
-
-This also feeds the automatic register explorer and per-slave latency analysis.
-
-## Optional engineering register map
-
-`config/register-map.example.json` can assign engineering meaning to known addresses:
-
-```json
-{
-  "slaveId": 1,
-  "function": 3,
-  "name": "Total Active Power",
-  "address": 32335,
-  "type": "int32",
-  "byteOrder": "ABCD",
-  "scale": 0.001,
-  "unit": "kW"
-}
-```
-
-Supported types include `uint16`, `int16`, `uint32`, `int32`, `float32`, `uint64`, and `int64`.
-
-32-bit byte orders: `ABCD`, `BADC`, `CDAB`, `DCBA`.
-
-64-bit byte orders: `ABCDEFGH`, `BADCFEHG`, `GHEFCDAB`, `HGFEDCBA`.
-
-Addresses are the **raw Modbus PDU addresses actually seen on the wire**, not automatically converted `4xxxx` notation.
-
-## CSV logging
-
-Persistent console capture logging:
-
-```bash
-npm start -- --port COM5 --baud 9600 --csv logs/site-capture.csv
-```
-
-The web UI also provides live exports:
-
-- `/api/export/transactions.csv`
-- `/api/export/registers.csv`
-
-## Automatic COM recovery
-
-When available, the sniffer remembers USB serial number / VID / PID. If an adapter is unplugged and Windows assigns the same device a different COM number, it can rebind automatically.
-
-Disable this with:
-
-```bash
-npm start -- --port COM5 --no-rebind
-```
-
-## Web options
-
-```text
---web-host 127.0.0.1    Bind locally (default)
---web-port 8080         Browser UI port
---no-web                Console only
---history 5000          In-memory transaction history
-```
-
-To view the UI from another machine on a trusted engineering LAN:
-
-```bash
-npm start -- --port COM5 --web-host 0.0.0.0
-```
-
-There is currently no authentication layer, so keep the default `127.0.0.1` binding unless LAN access is specifically required.
-
-## HTTP / WebSocket API
-
-Useful endpoints:
+Main endpoints:
 
 ```text
 GET  /api/status
 GET  /api/analysis
+GET  /api/devices
+GET  /api/devices/:slave
+GET  /api/polls
 GET  /api/transactions
 GET  /api/registers
+GET  /api/decode
 GET  /api/ports
 GET  /api/config
 POST /api/serial/configure
+POST /api/serial/disconnect
+POST /api/serial/autodetect
 POST /api/capture/clear
-GET  /api/export/transactions.csv
+GET  /api/capture/export.mbcap
+POST /api/capture/import
+POST /api/replay/start
+POST /api/replay/stop
+GET  /api/export/devices.csv
+GET  /api/export/polls.csv
 GET  /api/export/registers.csv
+GET  /api/export/transactions.csv
 WS   /ws
 ```
 
-This makes the capture core reusable later by a React/Electron desktop application or a larger monitoring platform.
+## Safety / passive behavior
 
-## Troubleshooting
+The application does not call serial `write()` for normal capture or serial-format detection. It only changes the local USB serial receiver configuration while testing baud/parity candidates.
 
-If noise bytes increase continuously, verify baud rate, parity, data bits, stop bits, A/B polarity, common reference/GND, correct RS485 pair and USB driver.
-
-If Windows reports the port as busy/access denied, close Modbus Poll, ModScan, PuTTY, Arduino Serial Monitor, commissioning software, or any other program using that same COM interface.
+Windows normally gives a COM port exclusive ownership. To inspect an independent PLC-to-device RS485 bus, use a second USB-RS485 adapter connected in parallel rather than trying to open a COM port already used by another application.
 
 ## Tests
 
@@ -240,4 +282,4 @@ If Windows reports the port as busy/access denied, close Modbus Poll, ModScan, P
 npm test
 ```
 
-The test suite covers protocol/core behavior and the v2 runtime analysis state without requiring actual RS485 hardware.
+The automated suite includes CRC/frame/parser behavior plus v4 tests for automatic multi-slave device formation, register ownership, polling intervals, missing-response assignment, data-type decoding and capture rebuild. GitHub Actions tests Node 20 and 22 on both Windows and Linux.
