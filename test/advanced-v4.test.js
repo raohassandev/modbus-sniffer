@@ -62,6 +62,19 @@ test('multiple Slave IDs automatically become separate devices with grouped regi
   assert.deepEqual(d2.registers.map(r => r.lastValue), [31,41,51]);
 });
 
+test('same register addresses on different slave IDs never mix values', () => {
+  const state = new AdvancedRuntimeState();
+  recordRead(state, 1, 44112, [111, 112], 1000, 1020);
+  recordRead(state, 2, 44112, [211, 212], 1100, 1125);
+  recordRead(state, 10, 44112, [1011, 1012], 1200, 1230);
+
+  assert.deepEqual(state.getRegisters({ slave: 1 }).map(r => r.lastValue), [111, 112]);
+  assert.deepEqual(state.getRegisters({ slave: 2 }).map(r => r.lastValue), [211, 212]);
+  assert.deepEqual(state.getRegisters({ slave: 10 }).map(r => r.lastValue), [1011, 1012]);
+  assert.equal(state.getDevices().length, 3);
+  assert.equal(state.getPollGroups().length, 3);
+});
+
 test('timeouts are assigned to the correct slave and polling group', () => {
   const state = new AdvancedRuntimeState();
   const request = req(10, 3000, 4, 1000);
