@@ -26,4 +26,8 @@ jobs:
       - run: node --check src/demoGenerator.js
       - run: node --check src/modbus/advancedTransactionTracker.js
       - run: node --check public/app-v4.js
+      - run: node --check scripts/acceptance.js
+      - run: node --check scripts/soak.js
+      - run: node --check scripts/field-check.js
       - run: npm test
+      - run: npm run acceptance
