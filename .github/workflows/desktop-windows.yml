@@ -1,0 +1,20 @@
+name: Build Windows desktop installer
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm --prefix desktop install
+      - run: npm --prefix desktop run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: modbus-engineering-analyzer-windows
+          path: desktop/dist/*

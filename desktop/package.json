@@ -1,0 +1,9 @@
+{
+  "name":"modbus-engineering-analyzer-desktop",
+  "version":"6.0.0",
+  "private":true,
+  "main":"main.js",
+  "scripts":{"start":"electron .","dist:win":"electron-builder --win nsis"},
+  "devDependencies":{"electron":"^38.0.0","electron-builder":"^26.0.12"},
+  "build":{"appId":"pk.automatrix.modbus-analyzer","productName":"Modbus Engineering Analyzer","asar":true,"files":["main.js"],"extraResources":[{"from":"../src","to":"backend/src"},{"from":"../public","to":"backend/public"},{"from":"../config","to":"backend/config"},{"from":"../node_modules","to":"backend/node_modules"},{"from":"../package.json","to":"backend/package.json"}],"win":{"target":"nsis"},"nsis":{"oneClick":false,"allowToChangeInstallationDirectory":true,"createDesktopShortcut":true,"createStartMenuShortcut":true}}
+}

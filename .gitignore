@@ -1,7 +1,11 @@
 node_modules/
 logs/
+data/
+desktop/node_modules/
+desktop/dist/
 *.csv
 *.log
+*.mbcap
 .env
 .DS_Store
 Thumbs.db

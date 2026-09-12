@@ -18,16 +18,18 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm install
-      - run: node --check src/index-v4.js
-      - run: node --check src/advancedRuntimeState.js
-      - run: node --check src/advancedWebServer.js
-      - run: node --check src/dataTypeAnalyzer.js
-      - run: node --check src/replayController.js
-      - run: node --check src/demoGenerator.js
-      - run: node --check src/modbus/advancedTransactionTracker.js
+      - run: node --check src/index-v6.js
+      - run: node --check src/platformWebServer.js
+      - run: node --check src/workspaceStore.js
+      - run: node --check src/historyStore.js
+      - run: node --check src/engineering.js
+      - run: node --check src/modbusTcpProxy.js
+      - run: node --check src/modbus/tcpParser.js
+      - run: node --check src/modbus/tcpTransactionTracker.js
+      - run: node --check src/deepDiagnostics.js
+      - run: node --check src/reportGenerator.js
       - run: node --check public/app-v4.js
-      - run: node --check scripts/acceptance.js
-      - run: node --check scripts/soak.js
-      - run: node --check scripts/field-check.js
+      - run: node --check public/platform-v6.js
+      - run: node --check desktop/main.js
       - run: npm test
       - run: npm run acceptance

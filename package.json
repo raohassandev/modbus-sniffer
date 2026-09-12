@@ -1,21 +1,22 @@
 {
-  "name": "modbus-rtu-sniffer-console",
-  "version": "4.1.0",
-  "description": "Passive Modbus RTU/RS485 engineering analyzer with automatic slave-device formation, polling-cycle analysis, missing-response detection, register decoding, capture replay and serial-format detection.",
-  "main": "src/index-v4.js",
+  "name": "modbus-engineering-analyzer",
+  "version": "6.0.0",
+  "description": "Modbus RTU/TCP engineering analyzer with automatic device formation, persistent projects, register engineering maps, history, diagnostics and desktop packaging.",
+  "main": "src/index-v6.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index-v4.js",
-    "ports": "node src/index-v4.js --list-ports",
-    "demo": "node src/index-v4.js --demo",
+    "start": "node src/index-v6.js",
+    "ports": "node src/index-v6.js --list-ports",
+    "demo": "node src/index-v6.js --demo",
     "test": "node --test",
     "acceptance": "node scripts/acceptance.js",
     "soak": "node scripts/soak.js",
-    "field-check": "node scripts/field-check.js"
+    "field-check": "node scripts/field-check.js",
+    "desktop:install": "npm --prefix desktop install",
+    "desktop": "npm --prefix desktop start",
+    "desktop:win": "npm --prefix desktop run dist:win"
   },
-  "engines": {
-    "node": ">=20"
-  },
+  "engines": { "node": ">=20" },
   "dependencies": {
     "express": "^5.1.0",
     "serialport": "^13.0.0",
