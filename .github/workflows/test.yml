@@ -19,6 +19,8 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: npm install
       - run: node --check src/index-v6.js
+      - run: node --check src/platformWebServerV61.js
+      - run: node --check src/exportBundle.js
       - run: node --check src/platformWebServer.js
       - run: node --check src/workspaceStore.js
       - run: node --check src/historyStore.js
@@ -31,6 +33,7 @@ jobs:
       - run: node --check public/app-v4.js
       - run: node --check public/platform-v6.js
       - run: node --check public/platform-v6-main.js
+      - run: node --check public/export-v6.js
       - run: node --check desktop/main.js
       - run: node --check scripts/smoke.js
       - run: npm test
