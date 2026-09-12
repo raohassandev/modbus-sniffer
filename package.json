@@ -1,6 +1,6 @@
 {
   "name": "modbus-rtu-sniffer-console",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Passive Modbus RTU/RS485 engineering analyzer with automatic slave-device formation, polling-cycle analysis, missing-response detection, register decoding, capture replay and serial-format detection.",
   "main": "src/index-v4.js",
   "type": "commonjs",
@@ -8,7 +8,10 @@
     "start": "node src/index-v4.js",
     "ports": "node src/index-v4.js --list-ports",
     "demo": "node src/index-v4.js --demo",
-    "test": "node --test"
+    "test": "node --test",
+    "acceptance": "node scripts/acceptance.js",
+    "soak": "node scripts/soak.js",
+    "field-check": "node scripts/field-check.js"
   },
   "engines": {
     "node": ">=20"
