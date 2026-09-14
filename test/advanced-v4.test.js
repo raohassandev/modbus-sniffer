@@ -33,6 +33,42 @@ test('tracker emits an explicit missing-response timeout', () => {
   assert.equal(seen[0].ms, 100);
 });
 
+test('overlapping RTU reads use byte count only when it uniquely identifies the request', () => {
+  const tracker=new AdvancedTransactionTracker();
+  const a=tracker.process(req(1,100,1,1000),1000).request;
+  const b=tracker.process(req(1,200,2,1010),1010).request;
+  assert.equal(a.pairingRisk,'same-unit-function-overlap');
+  assert.equal(b.overlappingOutstanding,1);
+  const rsp={slaveId:1,functionCode:3,functionName:'Read Holding Registers',kind:'response',byteCount:4,words:[10,20]};
+  const tx=tracker.process(rsp,1040);
+  assert.equal(tx.request.startAddress,200);
+  assert.deepEqual(tx.decoded.registers.map(x=>x.address),[200,201]);
+  assert.equal(tracker.pending.length,1);
+  assert.equal(tracker.pending[0].startAddress,100);
+});
+
+test('ambiguous same-size overlapping RTU reads are left unmatched instead of guessed', () => {
+  const tracker=new AdvancedTransactionTracker();
+  tracker.process(req(1,100,2,1000),1000);
+  tracker.process(req(1,200,2,1010),1010);
+  const rsp={slaveId:1,functionCode:3,functionName:'Read Holding Registers',kind:'response',byteCount:4,words:[10,20]};
+  const tx=tracker.process(rsp,1040);
+  assert.equal(tx.request,null);
+  assert.match(tx.decoded.protocolWarning,/Ambiguous RTU response/);
+  assert.equal(tracker.pending.length,2);
+});
+
+test('mismatched RTU read byte count is not converted into register values', () => {
+  const tracker=new AdvancedTransactionTracker();
+  tracker.process(req(4,100,2,1000),1000);
+  const rsp={slaveId:4,functionCode:3,functionName:'Read Holding Registers',kind:'response',byteCount:2,words:[99]};
+  const tx=tracker.process(rsp,1030);
+  assert.equal(tx.request.startAddress,100);
+  assert.equal(tx.decoded.payloadValid,false);
+  assert.equal(tx.decoded.registers,undefined);
+  assert.match(tx.decoded.protocolWarning,/does not match expected/);
+});
+
 test('multiple Slave IDs automatically become separate devices with grouped registers and polling intervals', () => {
   const state = new AdvancedRuntimeState({ historyLimit: 1000 });
   recordRead(state, 1, 100, [10,20], 1000, 1040);
