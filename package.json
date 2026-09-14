@@ -1,7 +1,7 @@
 {
   "name": "modbus-engineering-analyzer",
-  "version": "6.1.0",
-  "description": "Modbus RTU/TCP engineering analyzer with automatic device formation, persistent projects, register engineering maps, history, diagnostics and desktop packaging.",
+  "version": "6.2.0",
+  "description": "Transport-aware Modbus RTU/TCP engineering analyzer with isolated channels, persistent projects, register maps, history, diagnostics and desktop packaging.",
   "main": "src/index-v6.js",
   "type": "commonjs",
   "scripts": {
@@ -13,6 +13,7 @@
     "acceptance": "node scripts/acceptance.js",
     "soak": "node scripts/soak.js",
     "field-check": "node scripts/field-check.js",
+    "e2e": "playwright test",
     "desktop:install": "npm --prefix desktop install",
     "desktop": "npm --prefix desktop start",
     "desktop:win": "npm --prefix desktop run dist:win"
@@ -25,6 +26,9 @@
     "pdfkit": "^0.17.2",
     "serialport": "^13.0.0",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
   },
   "license": "MIT"
 }
