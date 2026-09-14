@@ -12,7 +12,7 @@ const { AdvancedTransactionTracker } = require('./modbus/advancedTransactionTrac
 const { MeterMap } = require('./meterMap');
 const { CsvLogger } = require('./csvLogger');
 const { renderTransaction, renderMeters, renderPorts } = require('./consoleRenderer');
-const { PlatformRuntimeState } = require('./platformRuntimeState');
+const { PlatformRuntimeStateV62 } = require('./platformRuntimeStateV62');
 const { startPlatformWebServer } = require('./platformWebServerV61');
 const { ReplayController } = require('./replayController');
 const { startDemo } = require('./demoGenerator');
@@ -49,14 +49,14 @@ async function main(){
   if(options.listPorts){renderPorts(ports);return;}
   if(!options.demo&&!options.port&&!options.tcpProxy){if(!options.webEnabled)options.port=await choosePort(ports);else if(ports.length===1)options.port=ports[0].path;}
 
-  console.log('\n=== Modbus Engineering Analyzer v6.1 ===');
+  console.log('\n=== Modbus Engineering Analyzer v6.2 ===');
   console.log(`RTU       : ${options.demo?'DEMO':options.port||'not connected'}`);
   console.log(`Web       : ${options.webEnabled?`${options.webHost}:${options.webPort}`:'disabled'}`);
   console.log(`Projects  : ${path.resolve(options.dataDir)}`);
   console.log('RTU TX    : disabled by design');
   console.log('TCP mode  : optional inline forwarding proxy; never fabricates Modbus requests\n');
 
-  const state=new PlatformRuntimeState({historyLimit:options.historyLimit});
+  const state=new PlatformRuntimeStateV62({historyLimit:options.historyLimit});
   const replay=new ReplayController(state);
   const meterMap=MeterMap.fromFile(options.mapFile);
   const csv=new CsvLogger(options.csvFile);
@@ -83,7 +83,7 @@ async function main(){
     const decoded={...decodeFrame(raw),transport:'RTU',channelId:rtuChannel.channelId,channel:rtuChannel,unitId:raw[0],slaveId:raw[0]};
     processTx(tracker.process(decoded,ts),raw,ts);
   };
-  const bindExtractor=()=>{const x=new FrameExtractor(options);x.on('frame',(r,t)=>processFrame(r,t));x.on('noise',b=>state.recordNoise(b.length));extractor=x;};
+  const bindExtractor=()=>{const x=new FrameExtractor(options);x.on('frame',(r,t)=>processFrame(r,t));x.on('noise',b=>state.recordNoise(b.length,Date.now(),rtuChannel.channelId));extractor=x;};
   bindExtractor();
 
   const pm=new PortManager(options);
@@ -123,13 +123,14 @@ async function main(){
 
   const tcpProxy=new ModbusTcpProxy({listenHost:options.tcpListenHost,listenPort:options.tcpListenPort,targetHost:options.tcpTargetHost,targetPort:options.tcpTargetPort,requestTimeoutMs:5000,onTransaction:(tx,raw,ts)=>processTx(tx,raw,ts),onTimeout:(req,ts,ms)=>state.recordTimeout(req,ts,ms,'TCP')});
   tcpProxy.on('status',status=>{if(status.channel)syncChannelToProject(status.channel);});
+  tcpProxy.on('diagnostic',x=>state.recordTcpDiagnostic(x.channel,x.type,x));
   tcpProxy.on('connection-error',x=>{if(!options.quiet)console.warn(`[TCP] ${x.side||'connection'}: ${x.error?.message||x.message||x}`);});
   tcpProxy.on('noise',x=>{if(!options.quiet)console.warn(`[TCP] undecodable bytes: ${x.bytes}`);});
 
   let web=null;
   if(options.webEnabled){web=await startPlatformWebServer({state,options,configureSerial,disconnectSerial,autoDetectSerial,replay,demo:options.demo,workspaces,history,tcpProxy});console.log(`[WEB] ${web.url}`);}
   let stopDemo=null;
-  if(options.demo){state.setConnection('demo',{path:'SIMULATOR',message:'Synthetic Modbus RTU traffic',channelId:rtuChannel.channelId});stopDemo=startDemo({onFrame:processFrame,onNoise:n=>state.recordNoise(n)});}
+  if(options.demo){state.setConnection('demo',{path:'SIMULATOR',message:'Synthetic Modbus RTU traffic',channelId:rtuChannel.channelId});stopDemo=startDemo({onFrame:processFrame,onNoise:n=>state.recordNoise(n,Date.now(),rtuChannel.channelId)});}
   else if(options.port){state.setConnection('connecting',{path:options.port,message:'Opening serial port',channelId:rtuChannel.channelId});await pm.start();}
   else state.setConnection('idle',{path:null,message:options.tcpProxy?'TCP proxy mode':'Select a serial port in Settings'});
   if(options.tcpProxy){await tcpProxy.start({listenHost:options.tcpListenHost,listenPort:options.tcpListenPort,targetHost:options.tcpTargetHost,targetPort:options.tcpTargetPort});console.log(`[TCP] proxy ${options.tcpListenHost}:${options.tcpListenPort} -> ${options.tcpTargetHost}:${options.tcpTargetPort}`);}
