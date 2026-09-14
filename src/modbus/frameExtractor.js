@@ -32,6 +32,19 @@ class FrameExtractor extends EventEmitter {
     this._extract(true, Date.now());
   }
 
+  _fc43ResponseLength(buf){
+    if(buf.length<8||buf[2]!==0x0E)return null;
+    const count=buf[7];
+    let pos=8;
+    for(let i=0;i<count;i++){
+      if(pos+2>buf.length)return null;
+      const len=buf[pos+1];pos+=2;
+      if(pos+len>buf.length)return null;
+      pos+=len;
+    }
+    return pos+2; // CRC
+  }
+
   _candidateLengths(buf) {
     if (buf.length < 2) return [];
     const fc = buf[1];
@@ -58,6 +71,16 @@ class FrameExtractor extends EventEmitter {
         if (buf.length >= 3 && buf[2] <= 250) lengths.add(5 + buf[2]);
         if (buf.length >= 11 && buf[10] <= 242) lengths.add(13 + buf[10]);
         break;
+      case 43: {
+        // Read Device Identification request: slave, FC43, MEI 0x0E, read-code,
+        // object-id, CRC. Responses carry a variable number of TLV objects.
+        if(buf.length>=3&&buf[2]===0x0E){
+          lengths.add(7);
+          const responseLength=this._fc43ResponseLength(buf);
+          if(responseLength&&responseLength<=256)lengths.add(responseLength);
+        }
+        break;
+      }
       default: break;
     }
     return [...lengths].sort((a, b) => a - b);
