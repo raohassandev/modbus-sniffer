@@ -26,6 +26,7 @@ jobs:
       - run: node --check src/replayController.js
       - run: node --check src/exportBundle.js
       - run: node --check src/discoveryService.js
+      - run: node --check src/activeDiscovery.js
       - run: node --check src/platformWebServer.js
       - run: node --check src/workspaceStore.js
       - run: node --check src/historyStore.js
@@ -46,6 +47,7 @@ jobs:
       - run: node --check desktop/main.js
       - run: node --check desktop/storage.js
       - run: node --check scripts/smoke.js
+      - run: node --check scripts/discover.js
       - run: node --check playwright.config.js
       - run: npm test
       - run: npm run smoke
