@@ -61,8 +61,6 @@ test('traffic chart has a hard stable layout height across live redraw cycles', 
   expect(before.pixelW).toBeLessThanOrEqual(Math.ceil(before.chartW*2)+2);
   expect(before.dpr).toBeGreaterThanOrEqual(2);
 
-  // Demo traffic redraws every second. Wait through several live updates and verify
-  // that neither the canvas nor its containing panel can ratchet taller over time.
   await page.waitForTimeout(4200);
   const afterLive=await measure();
   expect(Math.abs(afterLive.frameH-before.frameH)).toBeLessThanOrEqual(1);
@@ -81,11 +79,28 @@ test('traffic chart has a hard stable layout height across live redraw cycles', 
 test('channel filters and engineering workspace preserve explicit channel identity', async ({ page }) => {
   await page.locator('[data-page="traffic"]').click();
   await expect(page.locator('#trafficChannel')).toBeVisible();
-  await expect(page.locator('#trafficChannel option')).toHaveCount(2); // All + demo RTU channel
+  await expect(page.locator('#trafficChannel option')).toHaveCount(2);
 
   await page.locator('[data-page="engineering"]').click();
   await expect(page.locator('#mapDevice')).toBeVisible();
   const firstOption=page.locator('#mapDevice option').nth(1);
   await expect(firstOption).toContainText('RTU');
   await expect(firstOption).toContainText('Slave');
+});
+
+test('Modbus TCP listen host is a PC adapter selector, not a free-text device IP field', async ({ page }) => {
+  await page.locator('[data-page="tcp"]').click();
+  const listen=page.locator('#tcpListenHost');
+  await expect(listen).toBeVisible();
+  await expect(listen).toHaveJSProperty('tagName','SELECT');
+  await expect(listen.locator('option[value="127.0.0.1"]')).toHaveCount(1);
+  await expect(listen.locator('option[value="0.0.0.0"]')).toHaveCount(1);
+  await expect(page.locator('#tcpRefreshInterfaces')).toBeVisible();
+  await expect(page.locator('#tcpInterfaceHint')).toBeVisible();
+
+  const status=await page.request.get('/api/tcp/status');
+  expect(status.ok()).toBeTruthy();
+  const json=await status.json();
+  expect(Array.isArray(json.localInterfaces)).toBeTruthy();
+  expect(json.localInterfaces.some(x=>x.address==='127.0.0.1')).toBeTruthy();
 });
