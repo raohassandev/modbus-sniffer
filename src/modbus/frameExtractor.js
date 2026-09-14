@@ -42,7 +42,7 @@ class FrameExtractor extends EventEmitter {
       if(pos+len>buf.length)return null;
       pos+=len;
     }
-    return pos+2; // CRC
+    return pos+2;
   }
 
   _candidateLengths(buf) {
@@ -72,12 +72,14 @@ class FrameExtractor extends EventEmitter {
         if (buf.length >= 11 && buf[10] <= 242) lengths.add(13 + buf[10]);
         break;
       case 43: {
-        // Read Device Identification request: slave, FC43, MEI 0x0E, read-code,
-        // object-id, CRC. Responses carry a variable number of TLV objects.
         if(buf.length>=3&&buf[2]===0x0E){
-          lengths.add(7);
+          lengths.add(7); // request length
           const responseLength=this._fc43ResponseLength(buf);
           if(responseLength&&responseLength<=256)lengths.add(responseLength);
+          // A response is variable-length. Until all declared TLV objects are present,
+          // keep one future candidate so streaming extraction waits instead of treating
+          // the first response byte as noise merely because the 7-byte request CRC fails.
+          else if(buf.length>=8&&buf.length<256)lengths.add(buf.length+1);
         }
         break;
       }
