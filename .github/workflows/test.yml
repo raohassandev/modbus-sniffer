@@ -18,6 +18,9 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm install
+      - run: node --check src/index-v7.js
+      - run: node --check src/intelligenceV7.js
+      - run: node --check src/platformRuntimeStateV7.js
       - run: node --check src/index-v6.js
       - run: node --check src/platformWebServerV61.js
       - run: node --check src/platformRuntimeState.js
@@ -43,6 +46,7 @@ jobs:
       - run: node --check public/platform-v62-ui.js
       - run: node --check public/tcp-interface-v62.js
       - run: node --check public/discovery-v63.js
+      - run: node --check public/intelligence-v7.js
       - run: node --check public/export-v6.js
       - run: node --check desktop/main.js
       - run: node --check desktop/storage.js
