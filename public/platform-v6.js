@@ -20,7 +20,7 @@ window.addEventListener('DOMContentLoaded',()=>{
       v62.src='/platform-v62-ui.js?v=20260914-2';
       v62.onload=()=>{
         const guard=document.createElement('script');
-        guard.src='/chart-height-fix.js?v=20260914-1';
+        guard.src='/chart-height-fix.js?v=20260914-2';
         guard.onload=()=>{
           const inventory=document.createElement('script');
           inventory.src='/device-inventory-v62.js?v=20260914-1';
