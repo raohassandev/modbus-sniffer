@@ -9,6 +9,17 @@ function rate(num,den){return den?Number(num||0)/Number(den):0;}
 class PlatformRuntimeStateV62 extends PlatformRuntimeState {
   clearCapture(){const out=super.clearCapture();this.rtuNoiseByChannel=new Map();this.tcpDiagnostics=new Map();this.captureReferenceTime=null;return out;}
 
+  _isRtuBroadcast(value={}){
+    const d=value.decoded||value;
+    const transport=String(value.transport||d.transport||'RTU').toUpperCase();
+    const unit=Number(value.unitId??value.slaveId??d.unitId??d.slaveId);
+    return transport==='RTU'&&unit===0;
+  }
+
+  _recordSlave(event){if(this._isRtuBroadcast(event))return;return super._recordSlave(event);}
+  _recordPollRequest(event){if(this._isRtuBroadcast(event))return;return super._recordPollRequest(event);}
+  _recordRegisters(tx,timestamp){if(this._isRtuBroadcast(tx))return;return super._recordRegisters(tx,timestamp);}
+
   recordNoise(count,timestamp=Date.now(),channelId=null){super.recordNoise(count,timestamp);if(channelId){const key=String(channelId);this.rtuNoiseByChannel.set(key,(this.rtuNoiseByChannel.get(key)||0)+Number(count||0));}}
 
   _tcpDiag(channelId){
@@ -37,6 +48,7 @@ class PlatformRuntimeStateV62 extends PlatformRuntimeState {
   }
 
   recordTimeout(request,expiredAt=Date.now(),timeoutMs=1000,transport=null){
+    if(this._isRtuBroadcast({...request,transport:transport||request?.transport||'RTU'}))return null;
     const event=super.recordTimeout(request,expiredAt,timeoutMs,transport);
     if(event){event.outcome=request?.outcome||'timeout';event.connectionClosed=Boolean(request?.connectionClosed);if(event.request){event.request.outcome=event.outcome;event.request.connectionClosed=event.connectionClosed;}if(event.decoded){event.decoded.outcome=event.outcome;event.decoded.connectionClosed=event.connectionClosed;}}
     return event;
@@ -45,11 +57,61 @@ class PlatformRuntimeStateV62 extends PlatformRuntimeState {
   _analysisReferenceTime(){if(this.captureSource==='capture'&&Number.isFinite(this.captureReferenceTime))return this.captureReferenceTime;if(this.captureSource==='replay'&&this.transactions.length){let latest=0;for(const t of this.transactions)latest=Math.max(latest,Number(t.timestamp)||0);return latest||Date.now();}return Date.now();}
 
   _deviceSummary(device){
-    const summary=super._deviceSummary(device);if(!['capture','replay'].includes(this.captureSource))return summary;
+    const summary=super._deviceSummary(device),broadcast=this._isRtuBroadcast(summary),confirmed=!broadcast&&Number(summary.responses||0)>0&&Number.isFinite(Number(summary.lastResponseAt));
+    const reference=this._analysisReferenceTime();
+    if(!confirmed){
+      return {...summary,confirmed:false,status:broadcast?'broadcast':'unconfirmed',healthScore:null,statusReference:this.captureSource,referenceTime:reference,lastConfirmedAt:null};
+    }
     const polls=this.getPollGroups({deviceKey:device.deviceKey}),intervals=polls.map(p=>p.medianIntervalMs).filter(Number.isFinite),expected=intervals.length?median(intervals):null;
-    const reference=this._analysisReferenceTime(),silenceLimit=Math.max(3000,Number(expected||0)*3),age=Math.max(0,reference-Number(device.lastSeen||reference)),desired=age<=silenceLimit?'online':age<=silenceLimit*3?'silent':'offline';
+    const silenceLimit=Math.max(3000,Number(expected||0)*3),age=Math.max(0,reference-Number(summary.lastResponseAt||reference)),desired=age<=silenceLimit?'online':age<=silenceLimit*3?'silent':'offline';
     const oldPenalty=summary.status==='offline'?30:summary.status==='silent'?10:0,newPenalty=desired==='offline'?30:desired==='silent'?10:0;
-    return {...summary,status:desired,healthScore:Math.max(0,Math.min(100,summary.healthScore+oldPenalty-newPenalty)),statusReference:this.captureSource,referenceTime:reference};
+    return {...summary,confirmed:true,status:desired,healthScore:Math.max(0,Math.min(100,Number(summary.healthScore||0)+oldPenalty-newPenalty)),statusReference:this.captureSource,referenceTime:reference,lastConfirmedAt:summary.lastResponseAt};
+  }
+
+  getDevices(filters={}){
+    return super.getDevices(filters).filter(d=>!this._isRtuBroadcast(d));
+  }
+
+  _inventoryCounts(devices=this.getDevices()){
+    const confirmed=devices.filter(d=>d.confirmed),unconfirmed=devices.filter(d=>!d.confirmed);
+    return {
+      observedUnitIds:devices.length,
+      devices:confirmed.length,
+      confirmedDevices:confirmed.length,
+      unconfirmedDevices:unconfirmed.length,
+      onlineDevices:confirmed.filter(d=>d.status==='online').length,
+      silentDevices:confirmed.filter(d=>d.status==='silent').length,
+      offlineDevices:confirmed.filter(d=>d.status==='offline').length
+    };
+  }
+
+  getChannels(){
+    const base=super.getChannels(),devices=this.getDevices();
+    return base.map(channel=>{
+      const list=devices.filter(d=>d.channelId===channel.channelId),counts=this._inventoryCounts(list);
+      return {...channel,deviceCount:counts.devices,confirmedDeviceCount:counts.confirmedDevices,observedUnitCount:counts.observedUnitIds,unconfirmedDeviceCount:counts.unconfirmedDevices,onlineDeviceCount:counts.onlineDevices,silentDeviceCount:counts.silentDevices,offlineDeviceCount:counts.offlineDevices};
+    });
+  }
+
+  getTransportSummary(){
+    const base=super.getTransportSummary(),devices=this.getDevices();
+    for(const transport of ['RTU','TCP']){
+      const counts=this._inventoryCounts(devices.filter(d=>d.transport===transport));
+      base[transport].devices=counts.devices;
+      base[transport].confirmedDevices=counts.confirmedDevices;
+      base[transport].observedUnitIds=counts.observedUnitIds;
+      base[transport].unconfirmedDevices=counts.unconfirmedDevices;
+      base[transport].onlineDevices=counts.onlineDevices;
+      base[transport].silentDevices=counts.silentDevices;
+      base[transport].offlineDevices=counts.offlineDevices;
+    }
+    return base;
+  }
+
+  getStatus(){
+    const status=super.getStatus(),counts=this._inventoryCounts();
+    Object.assign(status.totals,counts,{slaves:counts.devices});
+    return status;
   }
 
   _channelTransactions(channelId){return this.transactions.filter(t=>t.channelId===channelId);}
@@ -75,12 +137,9 @@ class PlatformRuntimeStateV62 extends PlatformRuntimeState {
     return{healthScore:Math.max(0,Math.round(score)),metrics:{...common,mbapErrors,protocolIdErrors:Number(diag.protocolIdErrors||0),invalidLengthErrors:Number(diag.invalidLengthErrors||0),truncatedAdus:Number(diag.truncatedAdus||0),oversizedAdus:Number(diag.oversizedAdus||0),disconnects,resets,reconnects:Number(diag.reconnects||0),targetConnectFailures:connectFailures,transactionIdCollisions:collisions,backpressurePauses:Number(diag.backpressurePauses||0),rejectedSessions:Number(diag.rejectedSessions||0)}};
   }
 
-  getChannels(){return super.getChannels().map(channel=>{const h=this._channelHealth(channel);return{...channel,healthScore:h.healthScore,health:h.metrics};});}
-  getTransportSummary(){const base=super.getTransportSummary(),channels=this.getChannels();for(const transport of ['RTU','TCP']){const group=channels.filter(c=>c.transport===transport);base[transport].healthScore=group.length?Math.min(...group.map(c=>c.healthScore)):null;base[transport].channels=group.length;}return base;}
-
   getAnalysis(){
     const analysis=super.getAnalysis(),channels=this.getChannels();if(channels.length)analysis.healthScore=Math.min(...channels.map(c=>c.healthScore));analysis.healthAggregation='minimum-channel-score';analysis.channels=channels;
-    const rtu=channels.filter(c=>c.transport==='RTU'),rtuBytes=rtu.reduce((s,c)=>s+Number(c.health?.bytes||0),0),rtuNoise=rtu.reduce((s,c)=>s+Number(c.health?.noiseBytes||0),0);analysis.rates.noiseRatio=rtuBytes+rtuNoise?round(rtuNoise/(rtuBytes+rtuNoise)*100,3):0;analysis.rates.noiseScope='RTU-only';analysis.transportHealth={RTU:rtu.map(c=>({channelId:c.channelId,healthScore:c.healthScore,metrics:c.health})),TCP:channels.filter(c=>c.transport==='TCP').map(c=>({channelId:c.channelId,healthScore:c.healthScore,metrics:c.health}))};return analysis;
+    const rtu=channels.filter(c=>c.transport==='RTU'),rtuBytes=rtu.reduce((s,c)=>s+Number(c.health?.bytes||0),0),rtuNoise=rtu.reduce((s,c)=>s+Number(c.health?.noiseBytes||0),0);analysis.rates.noiseRatio=rtuBytes+rtuNoise?round(rtuNoise/(rtuBytes+rtuNoise)*100,3):0;analysis.rates.noiseScope='RTU-only';analysis.transportHealth={RTU:rtu.map(c=>({channelId:c.channelId,healthScore:c.healthScore,metrics:c.health})),TCP:channels.filter(c=>c.transport==='TCP').map(c=>({channelId:c.channelId,healthScore:c.healthScore,metrics:c.health}))};analysis.deviceInventory=this._inventoryCounts();return analysis;
   }
 
   exportCapture(){const capture=super.exportCapture();capture.analyzerVersion='6.2.0';capture.captureReferenceTime=this._analysisReferenceTime();capture.transactions=capture.transactions.map(t=>({...t,sourceTimestamp:Number(t.sourceTimestamp??t.timestamp)}));return capture;}

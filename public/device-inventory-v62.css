@@ -1,0 +1,1 @@
+.device-status.unconfirmed{color:var(--warn,#f6c85f)!important;background:color-mix(in srgb,var(--warn,#f6c85f) 10%,transparent)!important;border-color:color-mix(in srgb,var(--warn,#f6c85f) 35%,var(--border))!important}.device-status.broadcast{color:var(--text-muted)!important;background:var(--surface-3)!important;border-color:var(--border-soft)!important}

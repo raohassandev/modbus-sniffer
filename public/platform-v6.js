@@ -3,7 +3,7 @@
 window.addEventListener('DOMContentLoaded',()=>{
   // Load the v6.2 visual foundation immediately instead of waiting for nested scripts.
   // This also makes the fixed chart layout and theme available before the first live redraw.
-  for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1']){
+  for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1','/device-inventory-v62.css?v=20260914-1']){
     if(document.querySelector(`link[href="${href}"]`))continue;
     const link=document.createElement('link');link.rel='stylesheet';link.href=href;document.head.appendChild(link);
   }
@@ -21,6 +21,11 @@ window.addEventListener('DOMContentLoaded',()=>{
       v62.onload=()=>{
         const guard=document.createElement('script');
         guard.src='/chart-height-fix.js?v=20260914-1';
+        guard.onload=()=>{
+          const inventory=document.createElement('script');
+          inventory.src='/device-inventory-v62.js?v=20260914-1';
+          document.body.appendChild(inventory);
+        };
         document.body.appendChild(guard);
       };
       document.body.appendChild(v62);
