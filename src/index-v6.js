@@ -122,7 +122,7 @@ async function main(){
   };
 
   const tcpProxy=new ModbusTcpProxy({listenHost:options.tcpListenHost,listenPort:options.tcpListenPort,targetHost:options.tcpTargetHost,targetPort:options.tcpTargetPort,requestTimeoutMs:5000,onTransaction:(tx,raw,ts)=>processTx(tx,raw,ts),onTimeout:(req,ts,ms)=>state.recordTimeout(req,ts,ms,'TCP')});
-  tcpProxy.on('status',status=>{if(status.channel)syncChannelToProject(status.channel);});
+  tcpProxy.on('status',status=>{if(status.channel)syncChannelToProject(status.channel);state.recordTcpProxyStatus(status);});
   tcpProxy.on('diagnostic',x=>state.recordTcpDiagnostic(x.channel,x.type,x));
   tcpProxy.on('connection-error',x=>{if(!options.quiet)console.warn(`[TCP] ${x.side||'connection'}: ${x.error?.message||x.message||x}`);});
   tcpProxy.on('noise',x=>{if(!options.quiet)console.warn(`[TCP] undecodable bytes: ${x.bytes}`);});
