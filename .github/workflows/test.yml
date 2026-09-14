@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-        node: [20, 22]
+        node: [20, 22, 24]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +43,18 @@ jobs:
       - run: node --check desktop/main.js
       - run: node --check desktop/storage.js
       - run: node --check scripts/smoke.js
+      - run: node --check playwright.config.js
       - run: npm test
       - run: npm run smoke
       - run: npm run acceptance
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
