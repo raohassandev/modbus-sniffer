@@ -24,6 +24,11 @@ window.addEventListener('DOMContentLoaded',()=>{
         guard.onload=()=>{
           const inventory=document.createElement('script');
           inventory.src='/device-inventory-v62.js?v=20260914-1';
+          inventory.onload=()=>{
+            const tcpInterfaces=document.createElement('script');
+            tcpInterfaces.src='/tcp-interface-v62.js?v=20260914-1';
+            document.body.appendChild(tcpInterfaces);
+          };
           document.body.appendChild(inventory);
         };
         document.body.appendChild(guard);
