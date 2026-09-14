@@ -20,7 +20,7 @@ module.exports = defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport:{width:1280,height:800}, deviceScaleFactor:2 } }
   ],
   webServer: {
-    command: 'node src/index-v6.js --demo --quiet --web-port 18777 --web-host 127.0.0.1 --data-dir .tmp/e2e',
+    command: 'node src/index-v7.js --demo --quiet --web-port 18777 --web-host 127.0.0.1 --data-dir .tmp/e2e',
     url: 'http://127.0.0.1:18777/api/status',
     timeout: 20000,
     reuseExistingServer: !process.env.CI
