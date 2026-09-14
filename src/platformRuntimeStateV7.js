@@ -15,19 +15,8 @@ class PlatformRuntimeStateV7 extends PlatformRuntimeStateV62 {
   constructor(options={}) {
     super(options);
     this.intelligenceVersion = '7.0.0';
+    this.intelligenceCacheMs = 4000;
     this._intelligenceCache = null;
-  }
-
-  _ingestEvent(event, options={}) {
-    const out = super._ingestEvent(event, options);
-    this._intelligenceCache = null;
-    return out;
-  }
-
-  recordTimeout(request, expiredAt=Date.now(), timeoutMs=1000, transport=null) {
-    const out = super.recordTimeout(request, expiredAt, timeoutMs, transport);
-    if (out) this._intelligenceCache = null;
-    return out;
   }
 
   clearCapture() {
@@ -46,9 +35,9 @@ class PlatformRuntimeStateV7 extends PlatformRuntimeStateV62 {
   getIntelligenceSummary(filters={}) {
     const unrestricted = !filters || Object.keys(filters).length === 0;
     const now = Date.now();
-    if (unrestricted && this._intelligenceCache && now - this._intelligenceCache.at < 1500 && this._intelligenceCache.sequence === this.sequence) return this._intelligenceCache.value;
+    if (unrestricted && this._intelligenceCache && now - this._intelligenceCache.at < this.intelligenceCacheMs) return this._intelligenceCache.value;
     const value = buildIntelligenceSummary(this, filters || {});
-    if (unrestricted) this._intelligenceCache = { at:now, sequence:this.sequence, value };
+    if (unrestricted) this._intelligenceCache = { at:now, value };
     return value;
   }
 
