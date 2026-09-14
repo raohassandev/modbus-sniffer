@@ -10,6 +10,7 @@ const {TcpTransactionTracker}=require('../src/modbus/tcpTransactionTracker');
 const {PlatformRuntimeStateV62}=require('../src/platformRuntimeStateV62');
 const {buildRtuChannel,buildTcpChannel}=require('../src/transportIdentity');
 const {HistoryStore}=require('../src/historyStore');
+const {validateTcp,isLoopbackHost}=require('../src/platformWebServerV61');
 
 function rspTx(channel,unitId,value,address=100){return{direction:'RSP',transport:channel.transport,channel,decoded:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',registers:[{address,value}]},request:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',startAddress:address,quantity:1,timestamp:1000},rttMs:20};}
 
@@ -42,10 +43,23 @@ test('TCP tracker preserves reused transaction IDs and pairs out-of-order respon
   const tx3=t.response(r3,1050);assert.equal(tx3.request.functionCode,3);assert.equal(tx3.decoded.registers[0].address,10);assert.equal(t.pendingCount(),0);
 });
 
+test('TCP read payload mismatch is flagged and not mapped to engineering registers',()=>{
+  const t=new TcpTransactionTracker(),request=decodeTcpAdu(Buffer.from([0,3,0,0,0,6,1,3,0,10,0,2])),response=decodeTcpAdu(Buffer.from([0,3,0,0,0,5,1,3,2,0,11]));
+  t.request(request,1000);const tx=t.response(response,1020);assert.equal(tx.decoded.payloadValid,false);assert.equal(tx.decoded.registers,undefined);assert.match(tx.decoded.protocolWarning,/does not match expected/);
+});
+
 test('TCP tracker drains pending requests with explicit connection outcome',()=>{
   const outcomes=[];const t=new TcpTransactionTracker({onTimeout:r=>outcomes.push(r.outcome)});const f=decodeTcpAdu(reqRaw);
   t.request(f,1000);t.request({...f,transactionId:2},1010);const drained=t.drain('target-reset',1100);
   assert.equal(drained.length,2);assert.equal(t.pendingCount(),0);assert.deepEqual(outcomes,['target-reset','target-reset']);assert.ok(drained.every(x=>x.connectionClosed));
+});
+
+test('TCP proxy configuration is loopback-safe by default and external bind requires explicit confirmation',()=>{
+  assert.equal(isLoopbackHost('127.0.0.1'),true);assert.equal(isLoopbackHost('localhost'),true);assert.equal(isLoopbackHost('0.0.0.0'),false);
+  const local=validateTcp({targetHost:'192.168.1.5'});assert.equal(local.listenHost,'127.0.0.1');assert.equal(local.maxClientSessions,8);
+  assert.throws(()=>validateTcp({listenHost:'0.0.0.0',targetHost:'192.168.1.5'}),e=>e.code==='EXTERNAL_BIND_CONFIRMATION_REQUIRED');
+  const external=validateTcp({listenHost:'0.0.0.0',targetHost:'192.168.1.5',confirmExternalBind:true,maxClientSessions:4});assert.equal(external.maxClientSessions,4);
+  assert.throws(()=>validateTcp({targetHost:'192.168.1.5',maxClientSessions:129}),/1\.\.128/);
 });
 
 test('offline capture device status is relative to capture time, not current wall clock',()=>{
@@ -67,6 +81,12 @@ test('RTU and TCP health expose transport-specific metrics without mixing serial
   assert.ok(Object.hasOwn(r.health,'noiseRatio'));assert.ok(Object.hasOwn(r.health,'wireUtilizationPct'));
   assert.equal(Object.hasOwn(t.health,'noiseRatio'),false);assert.equal(Object.hasOwn(t.health,'wireUtilizationPct'),false);assert.equal(t.health.protocolIdErrors,1);
   const a=state.getAnalysis();assert.equal(a.healthAggregation,'minimum-channel-score');assert.equal(a.rates.noiseScope,'RTU-only');
+});
+
+test('TCP connection-close outcomes are separated from silent timeout rate',()=>{
+  const state=new PlatformRuntimeStateV62(),tcp=buildTcpChannel({targetHost:'10.0.0.2',targetPort:502});state.registerChannel(tcp);
+  const req={transport:'TCP',channel:tcp,channelId:tcp.channelId,unitId:1,slaveId:1,functionCode:3,functionName:'Read Holding Registers',startAddress:1,quantity:1,timestamp:1000,outcome:'target-reset',connectionClosed:true};
+  state.recordTimeout(req,1100,5000,'TCP');const c=state.getChannels().find(x=>x.channelId===tcp.channelId);assert.equal(c.health.timeouts,0);assert.equal(c.health.connectionClosedRequests,1);assert.equal(c.health.timeoutRate,0);
 });
 
 test('history query can isolate one channel or device without rewriting stored history',()=>{
