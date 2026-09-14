@@ -1,0 +1,77 @@
+'use strict';
+
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('fs');
+const os=require('os');
+const path=require('path');
+const {ModbusTcpStreamParser,decodeTcpAdu}=require('../src/modbus/tcpParser');
+const {TcpTransactionTracker}=require('../src/modbus/tcpTransactionTracker');
+const {PlatformRuntimeStateV62}=require('../src/platformRuntimeStateV62');
+const {buildRtuChannel,buildTcpChannel}=require('../src/transportIdentity');
+const {HistoryStore}=require('../src/historyStore');
+
+function rspTx(channel,unitId,value,address=100){return{direction:'RSP',transport:channel.transport,channel,decoded:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',registers:[{address,value}]},request:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',startAddress:address,quantity:1,timestamp:1000},rttMs:20};}
+
+const reqRaw=Buffer.from([0,1,0,0,0,6,1,3,0,100,0,2]);
+
+test('TCP parser accepts every fragmentation boundary and coalesced ADUs',()=>{
+  for(let split=1;split<reqRaw.length;split++){
+    const p=new ModbusTcpStreamParser(),seen=[];p.on('frame',f=>seen.push(f));
+    p.push(reqRaw.subarray(0,split),100);p.push(reqRaw.subarray(split),101);
+    assert.equal(seen.length,1,`split ${split}`);assert.equal(seen[0].decoded.startAddress,100);
+  }
+  const p=new ModbusTcpStreamParser(),seen=[];p.on('frame',f=>seen.push(f));p.push(Buffer.concat([reqRaw,reqRaw]),100);assert.equal(seen.length,2);
+});
+
+test('TCP parser reports malformed prefixes, resynchronizes, and reports truncated close',()=>{
+  const p=new ModbusTcpStreamParser(),seen=[],errors=[];p.on('frame',f=>seen.push(f));p.on('error-frame',e=>errors.push(e.code));
+  const malformed=Buffer.from([0,9,0,1,0,6,1,3,0,1,0,1]);p.push(Buffer.concat([malformed,reqRaw]),100);
+  assert.equal(seen.length,1);assert.ok(errors.includes('MBAP_PROTOCOL_ID'));
+  const q=new ModbusTcpStreamParser(),truncated=[];q.on('error-frame',e=>truncated.push(e.code));q.push(reqRaw.subarray(0,9),100);assert.equal(q.finish(101),9);assert.deepEqual(truncated,['MBAP_TRUNCATED']);
+});
+
+test('TCP tracker preserves reused transaction IDs and pairs out-of-order responses by function',()=>{
+  const fc3=decodeTcpAdu(Buffer.from([0,7,0,0,0,6,1,3,0,10,0,1]));
+  const fc4=decodeTcpAdu(Buffer.from([0,7,0,0,0,6,1,4,0,20,0,1]));
+  const r4=decodeTcpAdu(Buffer.from([0,7,0,0,0,5,1,4,2,0,22]));
+  const r3=decodeTcpAdu(Buffer.from([0,7,0,0,0,5,1,3,2,0,11]));
+  const collisions=[];const t=new TcpTransactionTracker({onCollision:x=>collisions.push(x)});
+  t.request(fc3,1000);t.request(fc4,1010);assert.equal(t.pendingCount(),2);assert.equal(t.collisions,1);assert.equal(collisions.length,1);
+  const tx4=t.response(r4,1040);assert.equal(tx4.request.functionCode,4);assert.equal(tx4.decoded.registers[0].address,20);
+  const tx3=t.response(r3,1050);assert.equal(tx3.request.functionCode,3);assert.equal(tx3.decoded.registers[0].address,10);assert.equal(t.pendingCount(),0);
+});
+
+test('TCP tracker drains pending requests with explicit connection outcome',()=>{
+  const outcomes=[];const t=new TcpTransactionTracker({onTimeout:r=>outcomes.push(r.outcome)});const f=decodeTcpAdu(reqRaw);
+  t.request(f,1000);t.request({...f,transactionId:2},1010);const drained=t.drain('target-reset',1100);
+  assert.equal(drained.length,2);assert.equal(t.pendingCount(),0);assert.deepEqual(outcomes,['target-reset','target-reset']);assert.ok(drained.every(x=>x.connectionClosed));
+});
+
+test('offline capture device status is relative to capture time, not current wall clock',()=>{
+  const channel=buildRtuChannel({port:'COM4',identity:{serialNumber:'OLD'},config:{baudRate:9600,parity:'none',dataBits:8,stopBits:1}});
+  const event={timestamp:1000,direction:'RSP',transport:'RTU',channelId:channel.channelId,channel,unitId:1,slaveId:1,functionCode:3,functionName:'Read Holding Registers',matched:true,rttMs:20,byteLength:7,rawHex:'01',decoded:{transport:'RTU',channelId:channel.channelId,unitId:1,slaveId:1,functionCode:3,functionName:'Read Holding Registers',registers:[{address:100,value:5}]},request:{transport:'RTU',channelId:channel.channelId,unitId:1,slaveId:1,functionCode:3,startAddress:100,quantity:1,timestamp:980}};
+  const state=new PlatformRuntimeStateV62();state.loadCapture({format:'mbcap',version:2,schemaVersion:2,channels:[channel],transactions:[event]});
+  const d=state.getDevices()[0];assert.equal(d.status,'online');assert.equal(d.statusReference,'capture');assert.equal(d.referenceTime,1000);
+});
+
+test('RTU and TCP health expose transport-specific metrics without mixing serial noise into TCP',()=>{
+  const state=new PlatformRuntimeStateV62();
+  const rtu=buildRtuChannel({port:'COM8',identity:{serialNumber:'R1'},config:{baudRate:9600,parity:'none',dataBits:8,stopBits:1}});
+  const tcp=buildTcpChannel({targetHost:'192.168.1.50',targetPort:502});
+  state.recordFrame(rspTx(rtu,1,10),1100,Buffer.from([1,3,2,0,10]));
+  state.recordFrame(rspTx(tcp,1,20),1200,Buffer.from([1,3,2,0,20]));
+  state.recordNoise(5,1200,rtu.channelId);
+  state.recordTcpDiagnostic(tcp,'parser-error',{code:'MBAP_PROTOCOL_ID',timestamp:1201});
+  const channels=state.getChannels(),r=channels.find(c=>c.transport==='RTU'),t=channels.find(c=>c.transport==='TCP');
+  assert.ok(Object.hasOwn(r.health,'noiseRatio'));assert.ok(Object.hasOwn(r.health,'wireUtilizationPct'));
+  assert.equal(Object.hasOwn(t.health,'noiseRatio'),false);assert.equal(Object.hasOwn(t.health,'wireUtilizationPct'),false);assert.equal(t.health.protocolIdErrors,1);
+  const a=state.getAnalysis();assert.equal(a.healthAggregation,'minimum-channel-score');assert.equal(a.rates.noiseScope,'RTU-only');
+});
+
+test('history query can isolate one channel or device without rewriting stored history',()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'mbhist62-')),h=new HistoryStore({dataDir:dir});
+  h.append('p',{recordedAt:100,channels:[{channelId:'a'},{channelId:'b'}],devices:[{deviceKey:'a|1',channelId:'a'},{deviceKey:'b|1',channelId:'b'}]});
+  const byChannel=h.query('p',{channelId:'b'});assert.deepEqual(byChannel[0].channels.map(x=>x.channelId),['b']);assert.deepEqual(byChannel[0].devices.map(x=>x.deviceKey),['b|1']);
+  const byDevice=h.query('p',{deviceKey:'a|1'});assert.deepEqual(byDevice[0].devices.map(x=>x.deviceKey),['a|1']);
+});
