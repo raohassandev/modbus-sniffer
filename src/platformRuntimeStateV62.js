@@ -88,15 +88,15 @@ class PlatformRuntimeStateV62 extends PlatformRuntimeState {
   getChannels(){
     const base=super.getChannels(),devices=this.getDevices();
     return base.map(channel=>{
-      const list=devices.filter(d=>d.channelId===channel.channelId),counts=this._inventoryCounts(list);
-      return {...channel,deviceCount:counts.devices,confirmedDeviceCount:counts.confirmedDevices,observedUnitCount:counts.observedUnitIds,unconfirmedDeviceCount:counts.unconfirmedDevices,onlineDeviceCount:counts.onlineDevices,silentDeviceCount:counts.silentDevices,offlineDeviceCount:counts.offlineDevices};
+      const list=devices.filter(d=>d.channelId===channel.channelId),counts=this._inventoryCounts(list),h=this._channelHealth(channel);
+      return {...channel,deviceCount:counts.devices,confirmedDeviceCount:counts.confirmedDevices,observedUnitCount:counts.observedUnitIds,unconfirmedDeviceCount:counts.unconfirmedDevices,onlineDeviceCount:counts.onlineDevices,silentDeviceCount:counts.silentDevices,offlineDeviceCount:counts.offlineDevices,healthScore:h.healthScore,health:h.metrics};
     });
   }
 
   getTransportSummary(){
-    const base=super.getTransportSummary(),devices=this.getDevices();
+    const base=super.getTransportSummary(),devices=this.getDevices(),channels=this.getChannels();
     for(const transport of ['RTU','TCP']){
-      const counts=this._inventoryCounts(devices.filter(d=>d.transport===transport));
+      const counts=this._inventoryCounts(devices.filter(d=>d.transport===transport)),group=channels.filter(c=>c.transport===transport);
       base[transport].devices=counts.devices;
       base[transport].confirmedDevices=counts.confirmedDevices;
       base[transport].observedUnitIds=counts.observedUnitIds;
@@ -104,6 +104,8 @@ class PlatformRuntimeStateV62 extends PlatformRuntimeState {
       base[transport].onlineDevices=counts.onlineDevices;
       base[transport].silentDevices=counts.silentDevices;
       base[transport].offlineDevices=counts.offlineDevices;
+      base[transport].healthScore=group.length?Math.min(...group.map(c=>c.healthScore)):null;
+      base[transport].channels=group.length;
     }
     return base;
   }
