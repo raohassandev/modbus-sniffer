@@ -13,6 +13,16 @@ class AdvancedTransactionTracker {
 
   process(decoded, timestamp = Date.now()) {
     this.expire(timestamp);
+
+    // Modbus RTU address 0 is broadcast. Slaves must not reply, therefore a passive
+    // analyzer must never queue it as an outstanding request or report a timeout.
+    // TCP Unit ID 0 is intentionally excluded: gateways may use it with normal replies.
+    if (decoded?.slaveId === 0 && String(decoded.transport || 'RTU').toUpperCase() !== 'TCP' &&
+        ['request','ambiguous','ambiguous-read'].includes(decoded.kind)) {
+      const req = { ...decoded, kind: 'request', timestamp, broadcast: true, noResponseExpected: true };
+      return { direction: 'REQ', decoded: req, request: req, rttMs: null, broadcast: true, noResponseExpected: true };
+    }
+
     if (decoded.exception) {
       const req = this._takeMatching(decoded.slaveId, decoded.functionCode, decoded.matchToken);
       return { direction: 'RSP', decoded, request: req, rttMs: req ? timestamp - req.timestamp : null };
