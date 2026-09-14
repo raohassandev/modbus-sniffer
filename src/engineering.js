@@ -5,10 +5,14 @@ function orderBytes(words, order) {
   const src=[]; for(const w of words){src.push((Number(w)>>8)&255,Number(w)&255);} const letters='ABCDEFGH'.slice(0,src.length); const ord=String(order||letters).toUpperCase();
   if(ord.length!==src.length||[...ord].some(c=>!letters.includes(c)))return Buffer.from(src); return Buffer.from([...ord].map(c=>src[letters.indexOf(c)]));
 }
+function readLookup(lookup,mapping,address){
+  if(mapping.deviceKey||lookup.length>=4)return lookup(mapping.deviceKey||null,mapping.slaveId,mapping.functionCode,address);
+  return lookup(mapping.slaveId,mapping.functionCode,address);
+}
 function decodeMapped(mapping, lookup) {
   const type=String(mapping.type||'uint16').toLowerCase(); const n=wordsForType(type); const words=[];
   for(let i=0;i<n;i++){
-    const v=lookup(mapping.deviceKey||null,mapping.slaveId,mapping.functionCode,mapping.address+i);
+    const v=readLookup(lookup,mapping,mapping.address+i);
     if(v==null)return{available:false,rawWords:words,value:null,engineeringValue:null};
     words.push(Number(v)&0xFFFF);
   }
