@@ -1,11 +1,67 @@
 'use strict';
 
 const net = require('net');
+const os = require('os');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { ModbusTcpStreamParser } = require('./modbus/tcpParser');
 const { TcpTransactionTracker } = require('./modbus/tcpTransactionTracker');
 const { buildTcpChannel } = require('./transportIdentity');
+
+function ipv4ToInt(address){
+  if(net.isIP(String(address||''))!==4)return null;
+  return String(address).split('.').reduce((n,p)=>((n<<8)|Number(p))>>>0,0)>>>0;
+}
+
+function prefixLength(netmask){
+  const n=ipv4ToInt(netmask);if(n==null)return 0;
+  let count=0,x=n;while(x){count+=x&1;x>>>=1;}return count;
+}
+
+function interfaceKind(name,internal=false){
+  const n=String(name||'').toLowerCase();
+  if(internal||n.includes('loopback'))return 'Loopback';
+  if(/wi[- ]?fi|wireless|wlan/.test(n))return 'Wi-Fi';
+  if(/ethernet|(^|\W)eth\d*/.test(n))return 'Ethernet';
+  if(/vpn|tun|tap/.test(n))return 'VPN';
+  if(/virtual|vmware|hyper-v|vbox|docker|wsl/.test(n))return 'Virtual';
+  return 'Network';
+}
+
+function listLocalIpv4Interfaces(networks=os.networkInterfaces()){
+  const out=[],seen=new Set();
+  for(const [name,entries] of Object.entries(networks||{})){
+    for(const entry of entries||[]){
+      if(!(entry.family==='IPv4'||entry.family===4)||net.isIP(entry.address)!==4||seen.has(entry.address))continue;
+      seen.add(entry.address);
+      out.push({
+        name,address:entry.address,netmask:entry.netmask||'255.255.255.255',cidr:entry.cidr||null,
+        internal:Boolean(entry.internal),mac:entry.mac||null,kind:interfaceKind(name,entry.internal),
+        linkLocal:String(entry.address).startsWith('169.254.')
+      });
+    }
+  }
+  if(!seen.has('127.0.0.1'))out.push({name:'Loopback',address:'127.0.0.1',netmask:'255.0.0.0',cidr:'127.0.0.1/8',internal:true,mac:null,kind:'Loopback',linkLocal:false});
+  return out.sort((a,b)=>Number(a.internal)-Number(b.internal)||Number(a.linkLocal)-Number(b.linkLocal)||a.name.localeCompare(b.name)||a.address.localeCompare(b.address));
+}
+
+function recommendedListenHost(targetHost,interfaces=listLocalIpv4Interfaces()){
+  const target=ipv4ToInt(targetHost);if(target==null)return null;
+  const matches=(interfaces||[]).filter(x=>{
+    const addr=ipv4ToInt(x.address),mask=ipv4ToInt(x.netmask);if(addr==null||mask==null)return false;
+    return ((addr&mask)>>>0)===((target&mask)>>>0);
+  });
+  if(!matches.length)return null;
+  matches.sort((a,b)=>Number(a.internal)-Number(b.internal)||Number(a.linkLocal)-Number(b.linkLocal)||prefixLength(b.netmask)-prefixLength(a.netmask)||a.name.localeCompare(b.name));
+  return matches[0].address;
+}
+
+function isLocalListenHost(host,interfaces=listLocalIpv4Interfaces()){
+  const h=String(host||'').trim().toLowerCase();
+  if(['0.0.0.0','127.0.0.1','localhost','::1','[::1]'].includes(h))return true;
+  if(net.isIP(h)!==4)return false;
+  return (interfaces||[]).some(x=>x.address===h);
+}
 
 class ModbusTcpProxy extends EventEmitter {
   constructor({
@@ -44,12 +100,16 @@ class ModbusTcpProxy extends EventEmitter {
     }
     this.stats.transactionIdCollisions=Math.max(this.stats.transactionIdCollisions,transactionIdCollisions);
     this.stats.maxOutstanding=Math.max(this.stats.maxOutstanding,maxOutstanding);
+    const localInterfaces=listLocalIpv4Interfaces();
     return {
       running:Boolean(this.server),listenHost:this.listenHost,listenPort:this.listenPort,
       targetHost:this.targetHost,targetPort:this.targetPort,connections:this.sessions.size,
       pendingRequests,transactionIdCollisions,maxOutstanding,
       maxClientSessions:this.maxClientSessions,stats:{...this.stats},
-      mode:'inline-proxy',channel:this.channel
+      mode:'inline-proxy',channel:this.channel,
+      localInterfaces,
+      recommendedListenHost:recommendedListenHost(this.targetHost,localInterfaces),
+      listenHostAssigned:isLocalListenHost(this.listenHost,localInterfaces)
     };
   }
 
@@ -57,6 +117,14 @@ class ModbusTcpProxy extends EventEmitter {
     if(this.server)await this.stop();
     Object.assign(this,config);
     this.maxClientSessions=Math.max(1,Math.min(128,Number(config.maxClientSessions??this.maxClientSessions)||8));
+    const localInterfaces=listLocalIpv4Interfaces();
+    if(!isLocalListenHost(this.listenHost,localInterfaces)){
+      const allowed=['127.0.0.1','0.0.0.0',...localInterfaces.filter(x=>!x.internal).map(x=>x.address)];
+      const e=new Error(`Listen host ${this.listenHost} is not assigned to this PC. Choose one of: ${[...new Set(allowed)].join(', ')}.`);
+      e.code='LISTEN_HOST_NOT_LOCAL';
+      e.allowedListenHosts=[...new Set(allowed)];
+      throw e;
+    }
     this.channel=buildTcpChannel({targetHost:this.targetHost,targetPort:this.targetPort,mode:'proxy'});
     this.stats=this._newStats();
     this.seenClients.clear();
@@ -195,4 +263,4 @@ class ModbusTcpProxy extends EventEmitter {
   }
 }
 
-module.exports={ModbusTcpProxy};
+module.exports={ModbusTcpProxy,listLocalIpv4Interfaces,recommendedListenHost,isLocalListenHost,ipv4ToInt};
