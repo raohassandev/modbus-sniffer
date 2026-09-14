@@ -11,6 +11,7 @@ const {PlatformRuntimeStateV62}=require('../src/platformRuntimeStateV62');
 const {buildRtuChannel,buildTcpChannel}=require('../src/transportIdentity');
 const {HistoryStore}=require('../src/historyStore');
 const {validateTcp,isLoopbackHost}=require('../src/platformWebServerV61');
+const {ModbusTcpProxy,listLocalIpv4Interfaces,recommendedListenHost,isLocalListenHost}=require('../src/modbusTcpProxy');
 
 function rspTx(channel,unitId,value,address=100){return{direction:'RSP',transport:channel.transport,channel,decoded:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',registers:[{address,value}]},request:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',startAddress:address,quantity:1,timestamp:1000},rttMs:20};}
 
@@ -60,6 +61,30 @@ test('TCP proxy configuration is loopback-safe by default and external bind requ
   assert.throws(()=>validateTcp({listenHost:'0.0.0.0',targetHost:'192.168.1.5'}),e=>e.code==='EXTERNAL_BIND_CONFIRMATION_REQUIRED');
   const external=validateTcp({listenHost:'0.0.0.0',targetHost:'192.168.1.5',confirmExternalBind:true,maxClientSessions:4});assert.equal(external.maxClientSessions,4);
   assert.throws(()=>validateTcp({targetHost:'192.168.1.5',maxClientSessions:129}),/1\.\.128/);
+});
+
+test('TCP interface inventory separates Ethernet Wi-Fi and loopback and recommends the target subnet',()=>{
+  const synthetic={
+    Ethernet:[{address:'192.168.10.20',netmask:'255.255.255.0',family:'IPv4',internal:false,mac:'00:11:22:33:44:55',cidr:'192.168.10.20/24'}],
+    'Wi-Fi':[{address:'192.168.1.30',netmask:'255.255.255.0',family:'IPv4',internal:false,mac:'00:11:22:33:44:66',cidr:'192.168.1.30/24'}],
+    Loopback:[{address:'127.0.0.1',netmask:'255.0.0.0',family:'IPv4',internal:true,mac:'00:00:00:00:00:00',cidr:'127.0.0.1/8'}]
+  };
+  const list=listLocalIpv4Interfaces(synthetic);
+  assert.deepEqual(list.map(x=>x.address).sort(),['127.0.0.1','192.168.1.30','192.168.10.20'].sort());
+  assert.equal(list.find(x=>x.address==='192.168.10.20').kind,'Ethernet');
+  assert.equal(list.find(x=>x.address==='192.168.1.30').kind,'Wi-Fi');
+  assert.equal(recommendedListenHost('192.168.10.50',list),'192.168.10.20');
+  assert.equal(recommendedListenHost('192.168.1.80',list),'192.168.1.30');
+  assert.equal(recommendedListenHost('10.0.0.5',list),null);
+  assert.equal(isLocalListenHost('192.168.1.30',list),true);
+  assert.equal(isLocalListenHost('203.0.113.77',list),false);
+  assert.equal(isLocalListenHost('0.0.0.0',list),true);
+});
+
+test('TCP proxy refuses a listen IP that is not assigned to this PC before opening a socket',async()=>{
+  const proxy=new ModbusTcpProxy();
+  await assert.rejects(proxy.start({listenHost:'203.0.113.77',targetHost:'127.0.0.1',targetPort:502}),e=>e.code==='LISTEN_HOST_NOT_LOCAL');
+  assert.equal(proxy.server,null);
 });
 
 test('offline capture device status is relative to capture time, not current wall clock',()=>{
