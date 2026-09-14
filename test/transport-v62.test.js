@@ -8,6 +8,7 @@ const path=require('path');
 const {PlatformRuntimeState}=require('../src/platformRuntimeState');
 const {WorkspaceStore,WorkspaceCorruptionError}=require('../src/workspaceStore');
 const {buildRtuChannel,buildTcpChannel,makeDeviceKey}=require('../src/transportIdentity');
+const {AdvancedTransactionTracker}=require('../src/modbus/advancedTransactionTracker');
 
 function responseTx(channel,unitId,value,address=100){return{direction:'RSP',transport:channel.transport,channel,decoded:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',registers:[{address,value}]},request:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',startAddress:address,quantity:1,timestamp:1000},rttMs:20};}
 
@@ -16,6 +17,10 @@ test('RTU channel stays stable across COM changes only when adapter identity is 
 test('TCP endpoints with the same Unit ID remain independent devices',()=>{const state=new PlatformRuntimeState();const a=buildTcpChannel({targetHost:'192.168.1.10',targetPort:502,mode:'proxy'});const b=buildTcpChannel({targetHost:'192.168.1.20',targetPort:502,mode:'proxy'});state.recordFrame(responseTx(a,1,111),1100,Buffer.from([1,3,2,0,111]));state.recordFrame(responseTx(b,1,222),1200,Buffer.from([1,3,2,0,222]));const regs=state.getRegisters({limit:20});assert.equal(regs.length,2);assert.equal(state.getRegisters({deviceKey:makeDeviceKey(a.channelId,1)})[0].lastValue,111);assert.equal(state.getRegisters({deviceKey:makeDeviceKey(b.channelId,1)})[0].lastValue,222);assert.throws(()=>state.getDevice(1),e=>e.code==='AMBIGUOUS_DEVICE');assert.equal(state.getDevice(makeDeviceKey(a.channelId,1)).summary.unitId,1);});
 
 test('RTU and TCP with identical Unit/Slave/register numbers never merge',()=>{const state=new PlatformRuntimeState();const rtu=buildRtuChannel({port:'COM5',identity:{serialNumber:'RTU-A'},config:{baudRate:9600}});const tcp=buildTcpChannel({targetHost:'10.0.0.2',targetPort:502});state.recordFrame(responseTx(rtu,7,10,44112),1000,Buffer.from([7,3,2,0,10]));state.recordFrame(responseTx(tcp,7,20,44112),1100,Buffer.from([7,3,2,0,20]));assert.equal(state.getDevices().length,2);assert.deepEqual(state.getRegisters({limit:10}).map(r=>r.lastValue).sort((a,b)=>a-b),[10,20]);});
+
+test('RTU broadcast address 0 is recorded as a request but never queued for timeout',()=>{const expired=[];const tracker=new AdvancedTransactionTracker({requestTimeoutMs:100,onTimeout:r=>expired.push(r)});const tx=tracker.process({transport:'RTU',slaveId:0,unitId:0,functionCode:6,functionName:'Write Single Register',kind:'ambiguous',address:10,value:1,matchToken:'10:1'},1000);assert.equal(tx.direction,'REQ');assert.equal(tx.broadcast,true);assert.equal(tx.noResponseExpected,true);assert.equal(tracker.pending.length,0);tracker.expire(5000);assert.equal(expired.length,0);});
+
+test('TCP Unit ID 0 is not treated as an RTU broadcast',()=>{const tracker=new AdvancedTransactionTracker({requestTimeoutMs:100});tracker.process({transport:'TCP',slaveId:0,unitId:0,functionCode:3,functionName:'Read Holding Registers',kind:'request',startAddress:0,quantity:1},1000);assert.equal(tracker.pending.length,1);});
 
 test('capture v2 preserves channel/device identity across reload',()=>{const state=new PlatformRuntimeState();const a=buildTcpChannel({targetHost:'192.168.50.10',targetPort:502});state.recordFrame(responseTx(a,3,333),1000,Buffer.from([3,3,2,1,77]));const cap=state.exportCapture();assert.equal(cap.schemaVersion,2);const next=new PlatformRuntimeState();next.loadCapture(cap);const key=makeDeviceKey(a.channelId,3);assert.equal(next.getRegisters({deviceKey:key})[0].lastValue,333);assert.equal(next.getChannels()[0].channelId,a.channelId);});
 
