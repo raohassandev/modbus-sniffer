@@ -71,7 +71,8 @@ class TcpTransactionTracker {
     if (queue.length) {
       // Function code helps when a broken client reused a TID for different
       // operations. Two identical outstanding requests cannot be distinguished
-      // from the wire, so FIFO is the only deterministic safe fallback.
+      // from the wire, so FIFO is the only deterministic safe fallback inside
+      // a TCP session where the transaction ID is nevertheless the primary key.
       let index = queue.findIndex(r => Number(r.functionCode) === Number(frame.decoded?.functionCode));
       if (index < 0) index = 0;
       [req] = queue.splice(index, 1);
@@ -131,23 +132,33 @@ class TcpTransactionTracker {
 
   clear() { this.pending.clear(); }
 
+  _expectedByteCount(request) {
+    if (!request) return null;
+    if ([1,2].includes(Number(request.functionCode)) && Number.isInteger(request.quantity)) return Math.ceil(request.quantity / 8);
+    if ([3,4].includes(Number(request.functionCode)) && Number.isInteger(request.quantity)) return request.quantity * 2;
+    if (Number(request.functionCode) === 23 && Number.isInteger(request.readQuantity)) return request.readQuantity * 2;
+    return null;
+  }
+
   _decorate(tx) {
-    const d = tx.decoded, r = tx.request;
-    if (!r) return;
+    const d=tx.decoded,r=tx.request;
+    if(!r)return;
+    const expected=this._expectedByteCount(r);
+    if(expected!=null&&Number.isInteger(Number(d.byteCount))&&Number(d.byteCount)!==expected){
+      d.protocolWarning=`Read response byte count ${d.byteCount} does not match expected ${expected}.`;
+      d.payloadValid=false;delete d.registers;delete d.points;return;
+    }
+    d.payloadValid=true;
     let start;
-    if ([3, 4].includes(d.functionCode)) start = r.startAddress;
-    if (d.functionCode === 23) start = r.readStartAddress;
-    if (start !== undefined && Array.isArray(d.words)) {
-      d.registers = d.words.map((value, i) => ({
-        address: start + i,
-        value,
-        hex: `0x${Number(value).toString(16).toUpperCase().padStart(4, '0')}`
-      }));
+    if([3,4].includes(d.functionCode))start=r.startAddress;
+    if(d.functionCode===23)start=r.readStartAddress;
+    if(start!==undefined&&Array.isArray(d.words)){
+      const expectedWords=Number(d.functionCode)===23?r.readQuantity:r.quantity;
+      if(Number.isInteger(expectedWords)&&d.words.length!==expectedWords){d.protocolWarning=`Read response contains ${d.words.length} word(s), expected ${expectedWords}.`;d.payloadValid=false;return;}
+      d.registers=d.words.map((value,i)=>({address:start+i,value,hex:`0x${Number(value).toString(16).toUpperCase().padStart(4,'0')}`}));
     }
-    if ([1, 2].includes(d.functionCode) && Array.isArray(d.bits)) {
-      d.points = d.bits.slice(0, r.quantity).map((value, i) => ({ address: r.startAddress + i, value }));
-    }
+    if([1,2].includes(d.functionCode)&&Array.isArray(d.bits))d.points=d.bits.slice(0,r.quantity).map((value,i)=>({address:r.startAddress+i,value}));
   }
 }
 
-module.exports = { TcpTransactionTracker };
+module.exports={TcpTransactionTracker};
