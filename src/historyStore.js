@@ -22,7 +22,16 @@ class HistoryStore {
 
 class HistoryRecorder {
   constructor({ state, workspaces, history, intervalMs=10000 }={}){this.state=state;this.workspaces=workspaces;this.history=history;this.intervalMs=Math.max(1000,intervalMs);this.timer=null;}
-  snapshot(){const p=this.workspaces.getActiveProject();if(!p)return null;const s=this.state.getStatus();const a=this.state.getAnalysis();const devices=this.state.getDevices();const snap={recordedAt:Date.now(),totals:s.totals,rates:a.rates,healthScore:a.healthScore,connection:s.connection,devices:devices.map(d=>({slaveId:d.slaveId,status:d.status,healthScore:d.healthScore,requests:d.requests,responses:d.responses,timeouts:d.timeouts,avgRttMs:d.avgRttMs,p95RttMs:d.p95RttMs,registerCount:d.registerCount,pollGroupCount:d.pollGroupCount}))};this.history.append(p.id,snap);return snap;}
+  snapshot(){
+    const p=this.workspaces.getActiveProject();if(!p)return null;
+    const s=this.state.getStatus(),a=this.state.getAnalysis(),devices=this.state.getDevices();
+    const snap={
+      schemaVersion:2,recordedAt:Date.now(),totals:s.totals,rates:a.rates,healthScore:a.healthScore,connection:s.connection,
+      channels:(s.channels||[]).map(c=>({channelId:c.channelId,transport:c.transport,mode:c.mode,name:c.name,endpoint:c.endpoint||null,deviceCount:c.deviceCount||0})),
+      devices:devices.map(d=>({deviceKey:d.deviceKey,channelId:d.channelId,transport:d.transport,unitId:d.unitId,slaveId:d.slaveId,status:d.status,healthScore:d.healthScore,requests:d.requests,responses:d.responses,timeouts:d.timeouts,avgRttMs:d.avgRttMs,p95RttMs:d.p95RttMs,registerCount:d.registerCount,pollGroupCount:d.pollGroupCount}))
+    };
+    this.history.append(p.id,snap);return snap;
+  }
   start(){if(this.timer)return;this.timer=setInterval(()=>{try{this.snapshot();}catch{}},this.intervalMs);this.timer.unref?.();}
   stop(){clearInterval(this.timer);this.timer=null;}
 }
