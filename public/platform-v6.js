@@ -1,9 +1,7 @@
 'use strict';
 
 window.addEventListener('DOMContentLoaded',()=>{
-  // Load the v6.2 visual foundation immediately instead of waiting for nested scripts.
-  // This also makes the fixed chart layout and theme available before the first live redraw.
-  for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1','/device-inventory-v62.css?v=20260914-1']){
+  for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1','/device-inventory-v62.css?v=20260914-1','/discovery-v63.css?v=20260914-1']){
     if(document.querySelector(`link[href="${href}"]`))continue;
     const link=document.createElement('link');link.rel='stylesheet';link.href=href;document.head.appendChild(link);
   }
@@ -27,6 +25,11 @@ window.addEventListener('DOMContentLoaded',()=>{
           inventory.onload=()=>{
             const tcpInterfaces=document.createElement('script');
             tcpInterfaces.src='/tcp-interface-v62.js?v=20260914-1';
+            tcpInterfaces.onload=()=>{
+              const discovery=document.createElement('script');
+              discovery.src='/discovery-v63.js?v=20260914-1';
+              document.body.appendChild(discovery);
+            };
             document.body.appendChild(tcpInterfaces);
           };
           document.body.appendChild(inventory);
