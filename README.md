@@ -1,12 +1,16 @@
-# Modbus Engineering Analyzer v6
+# Modbus Engineering Analyzer v7
 
-A field-oriented **Modbus RTU / RS485 and Modbus TCP engineering analyzer** built with Node.js and a local browser UI. It automatically forms devices from observed Slave IDs, reconstructs register groups, learns polling intervals, detects missing replies, analyzes RTT/jitter/exceptions, decodes register data types, saves capture sessions, maintains persistent site projects and engineering maps, records history, generates diagnostic reports, and includes Windows desktop packaging.
+A field-oriented **Modbus RTU / RS485 and Modbus TCP engineering analyzer and reverse-engineering workstation** built with Node.js and a local browser UI.
+
+v7 automatically forms devices from observed Unit/Slave IDs, reconstructs register groups and polling intervals, detects missing replies, analyzes RTT/jitter/exceptions, infers register data types and byte orders, reconstructs the master polling cycle, fingerprints similar devices, detects register relationships and communication anomalies, compares captures, maintains persistent engineering projects, and generates handover reports.
 
 ## Safety model
 
-**Modbus RTU capture is receive-only.** The application does not transmit Modbus RTU requests. For passive RTU monitoring, use a separate USB-RS485 adapter connected in parallel with the existing A/B bus.
+**Passive Modbus RTU capture is receive-only.** The normal analyzer does not transmit production Modbus RTU requests. Use a separate high-impedance / isolated USB-RS485 adapter connected in parallel with the live A/B bus.
 
-The optional **Modbus TCP analyzer is an inline forwarding proxy**, not a passive Ethernet tap. It forwards bytes sent by the connected Modbus TCP client to the configured target and analyzes the MBAP request/response traffic. It does not fabricate polling requests.
+The optional **Modbus TCP analyzer is an inline forwarding proxy**, not a passive Ethernet tap. It forwards existing client/server bytes unchanged and analyzes the MBAP request/response traffic.
+
+The separate active device-identification scanner is intentionally guarded. RTU active discovery requires explicit maintenance-mode and exclusive-bus confirmation before it can transmit read-only identification requests.
 
 ## Requirements
 
@@ -29,9 +33,9 @@ Open:
 http://127.0.0.1:8080
 ```
 
-The top-right UI badge should show **UI v6.0**.
+The top-right badge should show **UI v7.0**.
 
-If the repository is already cloned:
+For an existing clone:
 
 ```powershell
 cd modbus-sniffer
@@ -42,82 +46,135 @@ npm start
 
 ## Demo mode
 
-Run the full analyzer without hardware:
+Run the complete analyzer without hardware:
 
 ```powershell
 npm run demo
 ```
 
-The simulator generates multi-slave traffic so automatic devices, polling groups, registers, timing, exceptions, writes, timeouts, and analysis views can be evaluated before going to site.
+The simulator produces multi-device Modbus traffic so device formation, registers, polling, timeouts, analysis and the v7 Intelligence workspace can be evaluated before site deployment.
 
 ## Automatic device formation
 
-No manual slave configuration is required. Every observed Modbus Slave ID automatically becomes a device.
+No manual slave configuration is required. Every observed Modbus Unit/Slave ID becomes an independent device under its exact transport/channel identity.
 
-If a master polls ten slaves, the analyzer creates ten independent device models. Each device tracks its own:
+If a master polls ten RTU slaves, the analyzer creates ten device models automatically. Each device tracks:
 
-- read/write requests and responses
-- function codes
-- register groups and latest values
-- polling groups and request intervals
+- requests, responses and function codes
+- discovered register groups and current raw values
+- polling request groups and intervals
 - median/P95 interval and jitter
 - missing-response timeouts
 - exceptions and unmatched replies
 - average/P95 RTT
-- online/silent/offline status
+- online / silent / offline state
 - health score
 
-Identical register addresses on different slaves remain isolated by Slave ID and function code.
+Identical register addresses on different slaves remain isolated.
 
-## Main UI workspaces
+## v7 Intelligence workspace
 
-The browser application contains:
+### Automatic register intelligence
 
-- **Dashboard** — traffic, health, devices, registers, RTT, timeouts, exceptions and bus activity.
-- **Devices** — automatically formed Slave-ID devices with polling groups, register ranges, values and device-specific findings.
-- **Live Traffic** — request/response/timeout stream, filters, raw HEX and packet inspector.
-- **Analysis** — polling cadence, jitter, slow replies, timeout behavior and engineering findings.
-- **Registers** — automatically discovered register explorer.
-- **Decoder** — 16/32/64-bit integer/float interpretations and common byte/word orders.
-- **Sessions** — save/load/replay `.mbcap` captures.
-- **Projects** — persistent site/bus workspaces.
-- **Engineering** — device naming, register maps, scaling, units and reusable device profiles.
-- **History** — persistent project health/communication snapshots.
-- **Modbus TCP** — inline MBAP proxy configuration and status.
-- **Reports** — deeper diagnostics, engineering exports and printable diagnostic report.
-- **Settings** — serial port selection, live reconnect and passive serial-format detection.
+For discovered register windows, v7 evaluates likely interpretations using multiple observed response samples rather than only one current value:
 
-## Persistent projects
+- `uint16` / `int16`
+- `uint32` / `int32` / `float32`
+- `uint64` / `int64` / `float64`
+- common byte/word orders such as ABCD, BADC, CDAB and DCBA
+- ASCII candidates
+- likely timestamps
+- monotonic and resetting counters
+- low-cardinality status / bitfield behavior
 
-Project information is stored locally under the `data/` directory by default. A project can contain:
+Every hypothesis has a confidence score. These are reverse-engineering suggestions, not substitutes for manufacturer documentation.
+
+### Master polling-cycle reconstruction
+
+The ordered Modbus request stream is analyzed per channel to recover the master's repeating communication program:
 
 ```text
-Project: Factory A
-Site: Lahore Plant
-Bus: Solar RS485-1
+Channel: RTU Bus 1
+Cycle: 2.01 s
 
-Slave 1  Huawei Logger
-Slave 2  Energy Meter
-Slave 3  Inverter-01
+1  Slave 1  FC03  0..19
+2  Slave 1  FC03  100..119
+3  Slave 2  FC04  300..305
+4  Slave 3  FC03  44112..44131
 ...
 ```
 
-Device identity fields include name, manufacturer, model and notes.
+The model reports requests per cycle, devices per cycle, slot confidence, median/P95 cycle duration, jitter and inter-request gaps.
 
-Use another storage location with:
+### Device fingerprinting
 
-```powershell
-npm start -- --data-dir D:\ModbusProjects
-```
+Devices receive fingerprints derived from:
 
-`data/` is git-ignored.
+- function-code usage
+- register blocks
+- polling request shapes
+- passive FC43 Device Identification data when available
+
+Similar devices are scored against one another and v7 can suggest when the same engineering profile is likely reusable.
+
+### Register relationship analysis
+
+The analyzer searches observed values for useful reverse-engineering relationships including:
+
+- duplicate registers
+- strong correlations
+- monotonic / resetting counters
+- totals that approximate the sum of nearby component registers
+- multiplicative relationships with a stable scale factor
+
+### Anomaly engine
+
+The live capture is evaluated for:
+
+- device silent/offline transitions
+- missing responses
+- high polling jitter
+- changed polling intervals
+- observed write commands
+- RTT shifts
+- increasing line-noise activity
+- newly observed devices
+
+### Session comparison
+
+The Intelligence page can compare two `.mbcap` captures and highlight:
+
+- devices added or removed
+- register-map changes
+- poll groups added/removed
+- polling interval changes
+- timeout/exception changes
+- response-time changes
+
+## Main workspaces
+
+- **Dashboard** — current bus health and traffic overview
+- **Devices** — automatically formed devices with device-specific registers/polls
+- **Live Traffic** — decoded request/response/timeout stream and raw HEX
+- **Analysis** — timing, exceptions, timeouts and engineering findings
+- **Registers** — automatically discovered register explorer
+- **Decoder** — 16/32/64-bit interpretations and byte/word order analysis
+- **Intelligence** — v7 reverse-engineering engine
+- **Sessions** — save/load/replay `.mbcap` captures
+- **Projects** — persistent site and bus workspaces
+- **Engineering** — names, mappings, scaling, units and reusable profiles
+- **History** — persistent communication/health snapshots
+- **Discovery** — passive topology and FC43 identity visibility
+- **Modbus TCP** — inline MBAP proxy analysis
+- **Reports** — diagnostic outputs and engineering handover
+- **Settings** — serial selection, reconnect and passive format detection
 
 ## Engineering register maps
 
-A discovered register can be assigned engineering metadata directly from the UI:
+A discovered register can be assigned persistent engineering metadata:
 
 ```text
-Slave       3
+Device      Slave 3
 Function    FC03
 Address     44112
 Name        Total Active Power
@@ -128,109 +185,51 @@ Offset      0
 Unit        kW
 ```
 
-Supported mapped types include:
-
-```text
-uint16  int16
-uint32  int32  float32
-uint64  int64  float64
-ascii   bits
-```
-
-Mappings are persistent and live values are calculated from the current captured register words.
-
-Reusable **device profiles** can be created from one mapped slave and applied to other devices using the same register map.
-
-## Persistent history
-
-While the analyzer is running, the active project receives periodic history snapshots containing bus totals, rates, health and per-device summaries. History is stored as local JSONL data with file rotation and can be reviewed from the History page.
+Reusable device profiles can be generated from one mapped device and applied to another matching device.
 
 ## Missing-response and polling analysis
 
 Requests without a matching response before the configured timeout become explicit `TIMEOUT` events.
 
-Default RTU timeout:
+Default RTU request timeout:
 
 ```text
 1000 ms
 ```
 
-Override from Settings or CLI:
+Override it with:
 
 ```powershell
 npm start -- --request-timeout 800
 ```
 
-For each unique polling request group the analyzer learns request count, response count, timeout count, exception count, median/P95 interval, min/max interval, jitter, average/P95 RTT and latest values.
-
 ## Passive serial-format detection
 
-Settings provides Quick Detect and Full Detect. The analyzer tries common baud/parity combinations and scores them from valid CRC frames versus undecodable bytes. It does not send Modbus requests during detection.
+Settings provides Quick Detect and Full Detect. The analyzer tries common baud/parity combinations and scores valid CRC frames versus undecodable bytes. No Modbus request is transmitted during passive serial detection.
 
 ## Capture and replay
 
-Save the current session as `.mbcap`, reload it later without hardware, and replay the traffic through the analysis model.
+Save the current session as `.mbcap`, reload it later without hardware, and replay captured traffic through the analysis model.
 
-CSV exports are available for:
-
-- transactions
-- devices
-- polling groups
-- discovered registers
-- engineering mappings
-
-## Deep diagnostics and report
-
-The Reports workspace analyzes conditions such as:
-
-- missing responses
-- unmatched responses
-- high polling jitter
-- write traffic observed on the monitored bus
-- possible duplicate Slave-ID / capture asymmetry behavior
-- estimated RTU utilization
-
-The printable HTML report includes project information, health, diagnostic findings, device statistics, polling groups and engineering mappings. Use the browser Print / Save PDF function when a PDF report is required.
+Engineering exports include CSV, XLSX, PDF and complete project ZIP outputs.
 
 ## Modbus TCP analysis
 
-The v6 TCP engine parses fragmented MBAP streams and pairs requests/responses using transaction ID + Unit ID.
-
-Start the inline proxy from the UI or CLI:
+Start the inline TCP analyzer from the UI or CLI:
 
 ```powershell
 npm start -- --tcp-proxy --tcp-listen-port 1502 --tcp-target-host 192.168.1.50 --tcp-target-port 502
 ```
 
-Then point the existing Modbus TCP client at:
+Point the existing Modbus TCP client to the analyzer PC on port `1502`; the analyzer forwards traffic to the target on port `502` while preserving transaction and Unit-ID isolation.
 
-```text
-Analyzer PC :1502
-```
-
-The analyzer forwards that connection to:
-
-```text
-192.168.1.50 :502
-```
-
-and records MBAP traffic and RTT while forwarding bytes unchanged.
-
-## Real RTU hardware example
+## Real RTU example
 
 ```powershell
 npm start -- --port COM5 --baud 9600 --parity none --data-bits 8 --stop-bits 1
 ```
 
-Or simply run:
-
-```powershell
-npm start
-```
-
-and select the port from Settings.
-
-Recommended passive wiring:
+Recommended passive topology:
 
 ```text
 Master / PLC                   Slave bus
@@ -241,37 +240,32 @@ Master / PLC                   Slave bus
       \---- Sniffer USB-RS485 B-
 
    GND --------------------------- GND
-      \---- Sniffer GND
+      \---- Sniffer reference/GND
 ```
 
 Use an isolated adapter where practical. Do not add a new 120-ohm termination resistor only for the sniffer.
 
-## Validation commands
-
-Run the complete software checks:
+## Validation
 
 ```powershell
 npm test
 npm run smoke
 npm run acceptance
+npm run e2e
 npm run soak
 ```
 
-`npm run smoke` launches the v6 demo server and validates the HTTP/UI bootstrap, persistent project APIs, engineering mapping, diagnostics, TCP subsystem and report generation.
+CI runs syntax, unit, smoke and acceptance checks on Windows and Linux across supported Node versions, plus a browser E2E gate.
 
-For a real site capture, for example ten expected slave devices:
+For a real site with ten expected devices:
 
 ```powershell
 npm run field-check -- --min-devices 10 --min-frames 500
 ```
 
-See `docs/SITE_ACCEPTANCE.md` for the full hardware acceptance procedure.
+Real production acceptance still requires hardware/site testing because wiring, termination, adapter behavior, noise and device timing cannot be proven by software CI.
 
-## Windows desktop application
-
-The repository includes an Electron/NSIS desktop packaging project.
-
-Build locally on Windows:
+## Windows desktop build
 
 ```powershell
 npm install
@@ -279,47 +273,10 @@ npm run desktop:install
 npm run desktop:win
 ```
 
-Installer output is created under:
+Installer output is created under `desktop/dist/`.
 
-```text
-desktop/dist/
-```
+## Documentation
 
-A manual GitHub Actions workflow named **Build Windows desktop installer** is also included and uploads the generated installer as an artifact.
-
-## Useful API endpoints
-
-```text
-GET  /api/status
-GET  /api/analysis
-GET  /api/transactions
-GET  /api/devices
-GET  /api/devices/:slave
-GET  /api/registers
-GET  /api/polls
-GET  /api/engineering
-GET  /api/diagnostics/deep
-GET  /api/history
-GET  /api/workspaces
-GET  /api/project
-GET  /api/profiles
-GET  /api/tcp/status
-GET  /api/report.html
-
-POST /api/serial/autodetect
-POST /api/serial/configure
-POST /api/capture/import
-POST /api/replay/start
-POST /api/tcp/start
-POST /api/tcp/stop
-```
-
-The UI binds to `127.0.0.1` by default. There is no authentication layer, so keep the local-only binding unless access from a trusted engineering LAN is intentionally required.
-
-## Current release status
-
-**v6.0 software roadmap implemented.** Automated syntax, unit, end-to-end smoke and acceptance checks run on Windows and Linux with Node 20 and Node 22.
-
-Production acceptance for a specific RS485 installation still requires the real-hardware procedure in `docs/SITE_ACCEPTANCE.md`, because physical wiring, adapter behavior, noise, actual device timing and site-specific traffic cannot be validated from software CI alone.
-
-Additional implementation details are documented in `docs/V6_PLATFORM.md`.
+- `docs/V7_INTELLIGENCE.md` — v7 reverse-engineering layer
+- `docs/V6_PLATFORM.md` — persistent platform / TCP / projects foundation
+- `docs/SITE_ACCEPTANCE.md` — real-hardware acceptance procedure
