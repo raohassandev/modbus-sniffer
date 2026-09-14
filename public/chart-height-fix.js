@@ -12,26 +12,32 @@
     frame.appendChild(canvas);
   }
 
+  const forceStyle=(name,value)=>{
+    if(canvas.style.getPropertyValue(name)!==value||canvas.style.getPropertyPriority(name)!=='important'){
+      canvas.style.setProperty(name,value,'important');
+    }
+  };
+  const forceLayout=()=>{
+    forceStyle('width','100%');
+    forceStyle('height','100%');
+    forceStyle('min-height','0');
+    forceStyle('max-height','none');
+  };
+
   // The frame owns layout. Canvas width/height are backing-store pixels only.
   canvas.removeAttribute('height');
-  canvas.style.setProperty('width','100%','important');
-  canvas.style.setProperty('height','100%','important');
-  canvas.style.setProperty('min-height','0','important');
-  canvas.style.setProperty('max-height','none','important');
+  forceLayout();
 
   let raf=0,lastW=0,lastH=0,lastDpr=0;
   const enforce=()=>{
     raf=0;
+    forceLayout();
     const rect=frame.getBoundingClientRect();
     const cssW=Math.max(1,Math.round(rect.width));
     const cssH=Math.max(1,Math.round(rect.height));
     const dpr=Math.min(window.devicePixelRatio||1,2);
     const pixelW=Math.max(1,Math.round(cssW*dpr));
     const pixelH=Math.max(1,Math.round(cssH*dpr));
-
-    // Inline styles from older renderers must never be allowed to drive layout.
-    canvas.style.setProperty('width','100%','important');
-    canvas.style.setProperty('height','100%','important');
 
     // Only touch the backing bitmap when the actual frame size/DPI changed.
     if(cssW!==lastW||cssH!==lastH||dpr!==lastDpr){
@@ -47,8 +53,8 @@
   window.addEventListener('resize',schedule,{passive:true});
 
   // Guard against legacy renderers writing canvas.style.height on each live refresh.
-  const styleObserver=new MutationObserver(schedule);
-  styleObserver.observe(canvas,{attributes:true,attributeFilter:['style','width','height']});
+  // Re-applying identical !important values is avoided so this observer cannot self-loop.
+  new MutationObserver(schedule).observe(canvas,{attributes:true,attributeFilter:['style','width','height']});
 
   schedule();
 })();
