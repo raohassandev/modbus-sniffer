@@ -10,6 +10,7 @@ const { enrichMappings } = require('./engineering');
 const { analyzeDeep } = require('./deepDiagnostics');
 const { reportHtml } = require('./reportGenerator');
 const { collectExportModel, buildWorkbook, buildPdf, streamProjectZip, safeName } = require('./exportBundle');
+const { makeDeviceKey, parseDeviceKey } = require('./transportIdentity');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -78,9 +79,31 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     for (const ws of wss.clients) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
   };
   const active = () => workspaces.getActiveProject();
-  const engineering = () => enrichMappings(workspaces.listRegisters(active().id), state.getRegisters({ limit: 20000 }));
+  const apiError = (r,e,defaultStatus=400) => r.status(e?.code==='AMBIGUOUS_DEVICE'?409:defaultStatus).json({error:e.message,code:e.code||null,deviceKeys:e.deviceKeys||undefined});
+  const syncRuntimeChannels = () => {
+    const p=active(),saved=p.channels||{};
+    for(const c of state.getChannels?.()||[]){
+      const old=saved[c.channelId];
+      if(!old||old.transport!==c.transport||old.mode!==c.mode||old.endpoint!==c.endpoint||old.name!==c.name)workspaces.upsertChannel(p.id,c);
+    }
+    return active();
+  };
+  const resolveObserved = (ref,channelId=null) => {
+    const parsed=typeof ref==='string'?parseDeviceKey(ref):null;
+    if(parsed)return parsed.deviceKey;
+    const key=state.resolveDeviceKey(ref,channelId||null);
+    if(!key){const e=new Error(`Unit/Slave ${ref} has not been observed on the selected channel.`);e.code='DEVICE_NOT_FOUND';throw e;}
+    return key;
+  };
+  const resolveForWrite = (body={},routeRef=null) => {
+    if(body.deviceKey)return body.deviceKey;
+    const ref=body.unitId??body.slaveId??routeRef;
+    if(body.channelId&&ref!==undefined&&ref!==null)return makeDeviceKey(body.channelId,Number(ref));
+    return resolveObserved(ref,null);
+  };
+  const engineering = () => { syncRuntimeChannels(); return enrichMappings(workspaces.listRegisters(active().id), state.getRegisters({ limit: 20000 })); };
   const exportModel = () => {
-    const p = active();
+    const p = syncRuntimeChannels();
     return collectExportModel({
       project: p,
       state,
@@ -93,16 +116,17 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
 
   app.get('/api/status', (_q,r) => r.json(state.getStatus()));
   app.get('/api/analysis', (_q,r) => r.json(state.getAnalysis()));
-  app.get('/api/transactions', (q,r) => r.json(state.getTransactions(q.query)));
-  app.get('/api/registers', (q,r) => r.json(state.getRegisters(q.query)));
-  app.get('/api/polls', (q,r) => r.json(state.getPollGroups(q.query)));
-  app.get('/api/devices', (_q,r) => r.json(state.getDevices()));
-  app.get('/api/devices/:slave', (q,r) => { const d = state.getDevice(q.params.slave); if (!d) return r.status(404).json({ error:`Slave ${q.params.slave} has not been observed.` }); r.json(d); });
+  app.get('/api/channels', (_q,r) => { syncRuntimeChannels(); r.json(state.getChannels?.()||[]); });
+  app.get('/api/transactions', (q,r) => { try{r.json(state.getTransactions(q.query));}catch(e){apiError(r,e);} });
+  app.get('/api/registers', (q,r) => { try{r.json(state.getRegisters(q.query));}catch(e){apiError(r,e);} });
+  app.get('/api/polls', (q,r) => { try{r.json(state.getPollGroups(q.query));}catch(e){apiError(r,e);} });
+  app.get('/api/devices', (q,r) => { try{r.json(state.getDevices(q.query));}catch(e){apiError(r,e);} });
+  app.get('/api/devices/:ref', (q,r) => { try{const d=state.getDevice(decodeURIComponent(q.params.ref),{channelId:q.query.channelId||null});if(!d)return r.status(404).json({error:`Device ${q.params.ref} has not been observed.`});r.json(d);}catch(e){apiError(r,e);} });
   app.get('/api/decode', (q,r) => r.json(state.getDataTypeAnalysis(q.query)));
-  app.get('/api/config', (_q,r) => r.json({ ...state.config, demo, version:'6.1.0' }));
+  app.get('/api/config', (_q,r) => r.json({ ...state.config, demo, version:'6.2.0-dev' }));
   app.get('/api/replay/status', (_q,r) => r.json(replay.status()));
   app.get('/api/diagnostics/deep', (_q,r) => r.json(analyzeDeep({ state, config:state.config })));
-  app.get('/api/engineering', (_q,r) => r.json(engineering()));
+  app.get('/api/engineering', (_q,r) => { try{r.json(engineering());}catch(e){apiError(r,e);} });
 
   app.get('/api/ports', async (_q,r) => { try { r.json(await PortManager.list()); } catch(e) { r.status(500).json({ error:e.message }); } });
   app.post('/api/serial/configure', async (q,r) => { if (demo) return r.status(409).json({ error:'Serial configuration is disabled in demo mode.' }); try { replay.stop(); await configureSerial(validateSerialConfig(q.body || {})); r.json({ ok:true, config:state.config }); } catch(e) { r.status(400).json({ error:e.message }); } });
@@ -111,45 +135,46 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
 
   app.post('/api/capture/clear', (_q,r) => { replay.stop(); state.clearCapture(); r.json({ ok:true }); });
   app.get('/api/capture/export.mbcap', (_q,r) => {
-    const capture = state.exportCapture(); capture.project = active(); const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+    const capture = state.exportCapture(); capture.project = syncRuntimeChannels(); const stamp = new Date().toISOString().replace(/[:.]/g,'-');
     r.setHeader('Content-Type','application/json; charset=utf-8'); r.setHeader('Content-Disposition',`attachment; filename="modbus-${stamp}.mbcap"`); r.send(JSON.stringify(capture,null,2));
   });
-  app.post('/api/capture/import', async (q,r) => { try { if (!demo && state.connection.status === 'open') await disconnectSerial(); replay.load(q.body); const status = state.loadCapture(q.body,{emit:false}); state.setConnection('capture',{path:'CAPTURE',message:`${q.body.transactions.length} captured events loaded`}); r.json({ok:true,status,replay:replay.status()}); } catch(e) { r.status(400).json({ error:e.message }); } });
+  app.post('/api/capture/import', async (q,r) => { try { if (!demo && state.connection.status === 'open') await disconnectSerial(); replay.load(q.body); const status = state.loadCapture(q.body,{emit:false}); syncRuntimeChannels(); state.setConnection('capture',{path:'CAPTURE',message:`${q.body.transactions.length} captured events loaded`}); r.json({ok:true,status,replay:replay.status()}); } catch(e) { r.status(400).json({ error:e.message }); } });
   app.post('/api/replay/start', async (q,r) => { try { if (!demo && state.connection.status === 'open') await disconnectSerial(); r.json({ok:true,replay:replay.start({speed:q.body?.speed})}); } catch(e) { r.status(400).json({ error:e.message }); } });
   app.post('/api/replay/stop', (_q,r) => { replay.stop(); r.json({ok:true,replay:replay.status()}); });
 
-  app.get('/api/workspaces', (_q,r) => r.json({ activeProjectId:active().id, projects:workspaces.listProjects() }));
-  app.get('/api/project', (_q,r) => r.json(active()));
-  app.post('/api/workspaces', (q,r) => { try { const p=workspaces.createProject(q.body||{}); broadcast('workspace',{project:p}); r.json(p); } catch(e) { r.status(400).json({error:e.message}); } });
-  app.patch('/api/workspaces/:id', (q,r) => { try { const p=workspaces.updateProject(q.params.id,q.body||{}); broadcast('workspace',{project:p}); r.json(p); } catch(e) { r.status(400).json({error:e.message}); } });
-  app.post('/api/workspaces/:id/select', (q,r) => { try { const p=workspaces.selectProject(q.params.id); broadcast('workspace',{project:p}); r.json(p); } catch(e) { r.status(400).json({error:e.message}); } });
-  app.delete('/api/workspaces/:id', (q,r) => { try { workspaces.deleteProject(q.params.id); broadcast('workspace',{project:active()}); r.json({ok:true,active:active()}); } catch(e) { r.status(400).json({error:e.message}); } });
-  app.put('/api/project/devices/:slave', (q,r) => { try { const d=workspaces.setDevice(active().id,q.params.slave,q.body||{}); broadcast('workspace',{project:active()}); r.json(d); } catch(e) { r.status(400).json({error:e.message}); } });
-  app.put('/api/project/registers', (q,r) => { try { const m=workspaces.setRegister(active().id,q.body||{}); broadcast('workspace',{project:active()}); r.json(m); } catch(e) { r.status(400).json({error:e.message}); } });
-  app.delete('/api/project/registers/:slave/:fc/:address', (q,r) => { const ok=workspaces.deleteRegister(active().id,q.params.slave,q.params.fc,q.params.address); broadcast('workspace',{project:active()}); r.json({ok}); });
+  app.get('/api/workspaces', (_q,r) => { syncRuntimeChannels(); r.json({ activeProjectId:active().id, projects:workspaces.listProjects() }); });
+  app.get('/api/project', (_q,r) => r.json(syncRuntimeChannels()));
+  app.get('/api/project/legacy-unassigned', (_q,r) => r.json(workspaces.getLegacyUnassigned(active().id)));
+  app.post('/api/workspaces', (q,r) => { try { const p=workspaces.createProject(q.body||{}); for(const c of state.getChannels?.()||[])workspaces.upsertChannel(p.id,c); broadcast('workspace',{project:active()}); r.json(active()); } catch(e) { apiError(r,e); } });
+  app.patch('/api/workspaces/:id', (q,r) => { try { const p=workspaces.updateProject(q.params.id,q.body||{}); broadcast('workspace',{project:p}); r.json(p); } catch(e) { apiError(r,e); } });
+  app.post('/api/workspaces/:id/select', (q,r) => { try { let p=workspaces.selectProject(q.params.id); for(const c of state.getChannels?.()||[])workspaces.upsertChannel(p.id,c); p=active(); broadcast('workspace',{project:p}); r.json(p); } catch(e) { apiError(r,e); } });
+  app.delete('/api/workspaces/:id', (q,r) => { try { workspaces.deleteProject(q.params.id); broadcast('workspace',{project:active()}); r.json({ok:true,active:active()}); } catch(e) { apiError(r,e); } });
+  app.put('/api/project/devices/:ref', (q,r) => { try { syncRuntimeChannels(); const key=resolveForWrite(q.body||{},decodeURIComponent(q.params.ref)); const d=workspaces.setDevice(active().id,key,q.body||{}); broadcast('workspace',{project:active()}); r.json(d); } catch(e) { apiError(r,e,e?.code==='DEVICE_NOT_FOUND'?404:400); } });
+  app.put('/api/project/registers', (q,r) => { try { syncRuntimeChannels(); const key=resolveForWrite(q.body||{}); const m=workspaces.setRegister(active().id,{...q.body,deviceKey:key}); broadcast('workspace',{project:active()}); r.json(m); } catch(e) { apiError(r,e,e?.code==='DEVICE_NOT_FOUND'?404:400); } });
+  app.delete('/api/project/registers/:ref/:fc/:address', (q,r) => { try{syncRuntimeChannels();const key=resolveObserved(decodeURIComponent(q.params.ref),q.query.channelId||null);const ok=workspaces.deleteRegister(active().id,key,q.params.fc,q.params.address);broadcast('workspace',{project:active()});r.json({ok});}catch(e){apiError(r,e);} });
 
   app.get('/api/profiles', (_q,r) => r.json(workspaces.listProfiles()));
   app.get('/api/profiles/:id', (q,r) => { const p=workspaces.getProfile(q.params.id); if(!p) return r.status(404).json({error:'Profile not found.'}); r.json(p); });
-  app.post('/api/profiles', (q,r) => { try { r.json(workspaces.saveProfile(q.body||{})); } catch(e) { r.status(400).json({error:e.message}); } });
-  app.post('/api/profiles/from-device/:slave', (q,r) => { try { r.json(workspaces.createProfileFromDevice(active().id,q.params.slave,q.body||{})); } catch(e) { r.status(400).json({error:e.message}); } });
-  app.post('/api/profiles/:id/apply/:slave', (q,r) => { try { const out=workspaces.applyProfile(active().id,q.params.slave,q.params.id); broadcast('workspace',{project:active()}); r.json(out); } catch(e) { r.status(400).json({error:e.message}); } });
+  app.post('/api/profiles', (q,r) => { try { r.json(workspaces.saveProfile(q.body||{})); } catch(e) { apiError(r,e); } });
+  app.post('/api/profiles/from-device/:ref', (q,r) => { try { syncRuntimeChannels(); const key=resolveObserved(decodeURIComponent(q.params.ref),q.body?.channelId||null); r.json(workspaces.createProfileFromDevice(active().id,key,q.body||{})); } catch(e) { apiError(r,e); } });
+  app.post('/api/profiles/:id/apply/:ref', (q,r) => { try { syncRuntimeChannels(); const ref=decodeURIComponent(q.params.ref); let key; if(parseDeviceKey(ref))key=ref; else if(q.body?.channelId)key=makeDeviceKey(q.body.channelId,Number(ref)); else key=resolveObserved(ref); const out=workspaces.applyProfile(active().id,key,q.params.id); broadcast('workspace',{project:active()}); r.json(out); } catch(e) { apiError(r,e); } });
   app.delete('/api/profiles/:id', (q,r) => r.json({ok:workspaces.deleteProfile(q.params.id)}));
 
   app.get('/api/history', (q,r) => r.json(history.query(active().id,{limit:q.query.limit,since:q.query.since})));
   app.delete('/api/history', (_q,r) => r.json({ok:history.clear(active().id)}));
   app.get('/api/workspace/export.json', (_q,r) => { r.setHeader('Content-Disposition','attachment; filename="modbus-workspaces.json"'); r.json(workspaces.exportAll()); });
-  app.post('/api/workspace/import', (q,r) => { try { const out=workspaces.importAll(q.body); broadcast('workspace',{project:active()}); r.json(out); } catch(e) { r.status(400).json({error:e.message}); } });
+  app.post('/api/workspace/import', (q,r) => { try { const out=workspaces.importAll(q.body); syncRuntimeChannels(); broadcast('workspace',{project:active()}); r.json(out); } catch(e) { apiError(r,e); } });
 
   app.get('/api/tcp/status', (_q,r) => r.json(tcpProxy.status()));
-  app.post('/api/tcp/start', async (q,r) => { try { r.json(await tcpProxy.start(validateTcp(q.body||{}))); } catch(e) { r.status(400).json({error:e.message}); } });
+  app.post('/api/tcp/start', async (q,r) => { try { const status=await tcpProxy.start(validateTcp(q.body||{})); if(status.channel)workspaces.upsertChannel(active().id,status.channel); r.json(status); } catch(e) { r.status(400).json({error:e.message}); } });
   app.post('/api/tcp/stop', async (_q,r) => { try { r.json(await tcpProxy.stop()); } catch(e) { r.status(500).json({error:e.message}); } });
 
-  app.get('/api/report.html', (_q,r) => { const diagnostics=analyzeDeep({state,config:state.config}); r.type('html').send(reportHtml({project:active(),state,diagnostics,mappings:engineering()})); });
+  app.get('/api/report.html', (_q,r) => { const diagnostics=analyzeDeep({state,config:state.config}); r.type('html').send(reportHtml({project:syncRuntimeChannels(),state,diagnostics,mappings:engineering()})); });
 
   app.get('/api/export/results.xlsx', async (_q,r) => { try { const model=exportModel(); const buf=await buildWorkbook(model); const name=safeName(model.project?.name); r.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); r.setHeader('Content-Disposition',`attachment; filename="${name}-modbus-results.xlsx"`); r.send(buf); } catch(e) { r.status(500).json({error:e.message}); } });
   app.get('/api/export/report.pdf', async (_q,r) => { try { const model=exportModel(); const buf=await buildPdf(model); const name=safeName(model.project?.name); r.setHeader('Content-Type','application/pdf'); r.setHeader('Content-Disposition',`attachment; filename="${name}-modbus-report.pdf"`); r.send(buf); } catch(e) { r.status(500).json({error:e.message}); } });
   app.get('/api/export/project.zip', async (_q,r) => { try { const model=exportModel(); const html=reportHtml({project:model.project,state,diagnostics:model.diagnostics,mappings:model.mappings}); await streamProjectZip(r,model,html); } catch(e) { if(!r.headersSent) r.status(500).json({error:e.message}); else r.destroy(e); } });
-  app.get('/api/export/manifest', (_q,r) => r.json({version:'6.1.0',exports:[
+  app.get('/api/export/manifest', (_q,r) => r.json({version:'6.2.0-dev',exports:[
     {id:'xlsx',label:'Excel Workbook',href:'/api/export/results.xlsx',extension:'.xlsx'},
     {id:'pdf',label:'Engineering Report',href:'/api/export/report.pdf',extension:'.pdf'},
     {id:'capture',label:'Raw Capture',href:'/api/capture/export.mbcap',extension:'.mbcap'},
@@ -157,19 +182,19 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   ]}));
 
   app.get('/api/export/transactions.csv', (_q,r) => sendCsv(r,'modbus-transactions.csv',state.getTransactions({limit:20000}),[
-    {label:'id',value:x=>x.id},{label:'timestamp',value:x=>new Date(x.timestamp).toISOString()},{label:'transport',value:x=>x.transport||'RTU'},{label:'direction',value:x=>x.direction},{label:'slave',value:x=>x.slaveId},{label:'function',value:x=>x.functionCode},{label:'functionName',value:x=>x.functionName},{label:'rttMs',value:x=>x.rttMs},{label:'timeoutMs',value:x=>x.timeoutMs},{label:'exception',value:x=>x.exceptionName||''},{label:'rawHex',value:x=>x.rawHex}
+    {label:'id',value:x=>x.id},{label:'timestamp',value:x=>new Date(x.timestamp).toISOString()},{label:'transport',value:x=>x.transport||'RTU'},{label:'channelId',value:x=>x.channelId},{label:'deviceKey',value:x=>x.deviceKey},{label:'unitId',value:x=>x.unitId??x.slaveId},{label:'direction',value:x=>x.direction},{label:'function',value:x=>x.functionCode},{label:'functionName',value:x=>x.functionName},{label:'rttMs',value:x=>x.rttMs},{label:'timeoutMs',value:x=>x.timeoutMs},{label:'exception',value:x=>x.exceptionName||''},{label:'rawHex',value:x=>x.rawHex}
   ]));
   app.get('/api/export/registers.csv', (_q,r) => sendCsv(r,'modbus-registers.csv',state.getRegisters({limit:20000}),[
-    {label:'slave',value:x=>x.slaveId},{label:'function',value:x=>x.functionCode},{label:'address',value:x=>x.address},{label:'lastValue',value:x=>x.lastValue},{label:'lastHex',value:x=>x.lastHex},{label:'min',value:x=>x.min},{label:'max',value:x=>x.max},{label:'reads',value:x=>x.reads},{label:'writes',value:x=>x.writes},{label:'changes',value:x=>x.changes},{label:'pollIntervalMs',value:x=>x.pollIntervalMs}
+    {label:'transport',value:x=>x.transport},{label:'channelId',value:x=>x.channelId},{label:'deviceKey',value:x=>x.deviceKey},{label:'unitId',value:x=>x.unitId??x.slaveId},{label:'function',value:x=>x.functionCode},{label:'address',value:x=>x.address},{label:'lastValue',value:x=>x.lastValue},{label:'lastHex',value:x=>x.lastHex},{label:'min',value:x=>x.min},{label:'max',value:x=>x.max},{label:'reads',value:x=>x.reads},{label:'writes',value:x=>x.writes},{label:'changes',value:x=>x.changes},{label:'pollIntervalMs',value:x=>x.pollIntervalMs}
   ]));
   app.get('/api/export/polls.csv', (_q,r) => sendCsv(r,'modbus-polling-groups.csv',state.getPollGroups(),[
-    {label:'slave',value:x=>x.slaveId},{label:'function',value:x=>x.functionCode},{label:'operation',value:x=>x.operation},{label:'startAddress',value:x=>x.startAddress},{label:'quantity',value:x=>x.quantity},{label:'requests',value:x=>x.requests},{label:'responses',value:x=>x.responses},{label:'timeouts',value:x=>x.timeouts},{label:'medianIntervalMs',value:x=>x.medianIntervalMs},{label:'jitterPct',value:x=>x.jitterPct},{label:'avgRttMs',value:x=>x.avgRttMs}
+    {label:'transport',value:x=>x.transport},{label:'channelId',value:x=>x.channelId},{label:'deviceKey',value:x=>x.deviceKey},{label:'unitId',value:x=>x.unitId??x.slaveId},{label:'function',value:x=>x.functionCode},{label:'operation',value:x=>x.operation},{label:'startAddress',value:x=>x.startAddress},{label:'quantity',value:x=>x.quantity},{label:'requests',value:x=>x.requests},{label:'responses',value:x=>x.responses},{label:'timeouts',value:x=>x.timeouts},{label:'medianIntervalMs',value:x=>x.medianIntervalMs},{label:'jitterPct',value:x=>x.jitterPct},{label:'avgRttMs',value:x=>x.avgRttMs}
   ]));
   app.get('/api/export/devices.csv', (_q,r) => sendCsv(r,'modbus-devices.csv',state.getDevices(),[
-    {label:'slave',value:x=>x.slaveId},{label:'status',value:x=>x.status},{label:'healthScore',value:x=>x.healthScore},{label:'requests',value:x=>x.requests},{label:'responses',value:x=>x.responses},{label:'timeouts',value:x=>x.timeouts},{label:'registerCount',value:x=>x.registerCount},{label:'pollGroupCount',value:x=>x.pollGroupCount},{label:'avgRttMs',value:x=>x.avgRttMs}
+    {label:'transport',value:x=>x.transport},{label:'channelId',value:x=>x.channelId},{label:'deviceKey',value:x=>x.deviceKey},{label:'unitId',value:x=>x.unitId??x.slaveId},{label:'status',value:x=>x.status},{label:'healthScore',value:x=>x.healthScore},{label:'requests',value:x=>x.requests},{label:'responses',value:x=>x.responses},{label:'timeouts',value:x=>x.timeouts},{label:'registerCount',value:x=>x.registerCount},{label:'pollGroupCount',value:x=>x.pollGroupCount},{label:'avgRttMs',value:x=>x.avgRttMs}
   ]));
   app.get('/api/export/engineering.csv', (_q,r) => sendCsv(r,'modbus-engineering-map.csv',engineering(),[
-    {label:'slave',value:x=>x.slaveId},{label:'function',value:x=>x.functionCode},{label:'address',value:x=>x.address},{label:'name',value:x=>x.name},{label:'type',value:x=>x.type},{label:'byteOrder',value:x=>x.byteOrder},{label:'scale',value:x=>x.scale},{label:'offset',value:x=>x.offset},{label:'unit',value:x=>x.unit},{label:'engineeringValue',value:x=>x.engineeringValue},{label:'available',value:x=>x.available}
+    {label:'channelId',value:x=>x.channelId},{label:'deviceKey',value:x=>x.deviceKey},{label:'unitId',value:x=>x.unitId??x.slaveId},{label:'function',value:x=>x.functionCode},{label:'address',value:x=>x.address},{label:'name',value:x=>x.name},{label:'type',value:x=>x.type},{label:'byteOrder',value:x=>x.byteOrder},{label:'scale',value:x=>x.scale},{label:'offset',value:x=>x.offset},{label:'unit',value:x=>x.unit},{label:'engineeringValue',value:x=>x.engineeringValue},{label:'available',value:x=>x.available}
   ]));
 
   app.get('/', (_q,r) => r.type('html').send(workbench));
@@ -182,7 +207,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   for (const [ev,fn] of Object.entries(handlers)) state.on(ev,fn);
   tcpProxy.on('status', p=>broadcast('tcp-status',p));
   wss.on('connection', ws => {
-    ws.send(JSON.stringify({type:'hello',payload:{status:state.getStatus(),analysis:state.getAnalysis(),devices:state.getDevices(),replay:replay.status(),project:active(),tcp:tcpProxy.status()}}));
+    ws.send(JSON.stringify({type:'hello',payload:{status:state.getStatus(),analysis:state.getAnalysis(),devices:state.getDevices(),replay:replay.status(),project:syncRuntimeChannels(),tcp:tcpProxy.status()}}));
     ws.on('error',()=>{});
   });
 
