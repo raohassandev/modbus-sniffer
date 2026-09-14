@@ -92,7 +92,7 @@ test('Modbus TCP listen host is a PC adapter selector, not a free-text device IP
   await page.locator('[data-page="tcp"]').click();
   const listen=page.locator('#tcpListenHost');
   await expect(listen).toBeVisible();
-  await expect(listen).toHaveJSProperty('tagName','SELECT');
+  expect(await listen.evaluate(el=>el.tagName)).toBe('SELECT');
   await expect(listen.locator('option[value="127.0.0.1"]')).toHaveCount(1);
   await expect(listen.locator('option[value="0.0.0.0"]')).toHaveCount(1);
   await expect(page.locator('#tcpRefreshInterfaces')).toBeVisible();
@@ -103,4 +103,18 @@ test('Modbus TCP listen host is a PC adapter selector, not a free-text device IP
   const json=await status.json();
   expect(Array.isArray(json.localInterfaces)).toBeTruthy();
   expect(json.localInterfaces.some(x=>x.address==='127.0.0.1')).toBeTruthy();
+});
+
+test('Passive Discovery forms RTU topology without exposing a transmit control', async ({ page }) => {
+  await expect(page.locator('[data-page="discovery"]')).toBeVisible();
+  await page.locator('[data-page="discovery"]').click();
+  await expect(page.locator('#page-discovery')).toBeVisible();
+  await expect(page.locator('#page-discovery')).toContainText('Passive Discovery');
+  await expect(page.locator('#page-discovery')).toContainText('RX ONLY');
+  await expect(page.locator('#discoveryChannels .discovery-channel').first()).toBeVisible();
+  await expect(page.locator('#discoveryChannels')).toContainText('RTU');
+  await expect(page.locator('#discoveryChannels .discovery-device').first()).toContainText('Slave');
+  await expect(page.locator('#discoveryRefresh')).toBeVisible();
+  await expect(page.locator('#discoveryExport')).toBeVisible();
+  await expect(page.locator('#page-discovery button')).not.toContainText('Active scan');
 });
