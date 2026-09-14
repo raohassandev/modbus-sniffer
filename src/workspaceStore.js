@@ -10,6 +10,8 @@ function clone(v) { return JSON.parse(JSON.stringify(v)); }
 function id(prefix) { return `${prefix}-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`; }
 function finite(v, fallback = null) { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
 function safeStamp() { return new Date().toISOString().replace(/[:.]/g,'-'); }
+function ignorableSyncError(error) { return ['EPERM','EINVAL','ENOTSUP','ENOSYS'].includes(error?.code); }
+function replaceRetryError(error) { return ['EPERM','EEXIST','ENOTEMPTY','EACCES'].includes(error?.code); }
 
 class WorkspaceCorruptionError extends Error {
   constructor(message, details = {}) { super(message); this.name='WorkspaceCorruptionError'; this.code='WORKSPACE_CORRUPT'; Object.assign(this,details); }
@@ -44,7 +46,17 @@ class WorkspaceStore {
   }
 
   _load() {
-    if (!fs.existsSync(this.file)) return {db:this._empty(),migrationReport:null};
+    if (!fs.existsSync(this.file)) {
+      if (fs.existsSync(this.backupFile)) {
+        const restored=this._readJson(this.backupFile);
+        const version=Number(restored?.version||1);
+        if(version!==2)throw new WorkspaceCorruptionError('Primary workspace is missing and the recovery backup is not schema v2.',{file:this.file,backupFile:this.backupFile});
+        this._validateDb(restored);
+        fs.copyFileSync(this.backupFile,this.file);
+        return {db:this._normalizeV2(restored),migrationReport:{recoveredAt:now(),reason:'Primary workspace was missing; restored the last known-good backup.',backupFile:this.backupFile}};
+      }
+      return {db:this._empty(),migrationReport:null};
+    }
     const parsed=this._readJson(this.file);
     const version=Number(parsed?.version||1);
     if (version===2) { this._validateDb(parsed); return {db:this._normalizeV2(parsed),migrationReport:null}; }
@@ -53,7 +65,7 @@ class WorkspaceStore {
       fs.copyFileSync(this.file,backup);
       const {db,report}=this._migrateV1(parsed,backup);
       this._validateDb(db);
-      this._atomicWrite(db,{backupExisting:false});
+      this._atomicWrite(db,{backupExisting:true});
       const reportFile=`${this.file}.migration-${safeStamp()}.json`;
       fs.writeFileSync(reportFile,JSON.stringify(report,null,2));
       return {db,migrationReport:{...report,reportFile}};
@@ -111,11 +123,30 @@ class WorkspaceStore {
 
   _atomicWrite(db,{backupExisting=true}={}) {
     const tmp=`${this.file}.tmp-${process.pid}-${Date.now()}`;
+    const existed=fs.existsSync(this.file);
     fs.writeFileSync(tmp,JSON.stringify(db,null,2));
-    const fd=fs.openSync(tmp,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
-    if(backupExisting&&fs.existsSync(this.file))fs.copyFileSync(this.file,this.backupFile);
+    let fd=null;
+    try {
+      fd=fs.openSync(tmp,'r');
+      try { fs.fsyncSync(fd); } catch(error) { if(!ignorableSyncError(error))throw error; }
+    } finally { if(fd!==null)fs.closeSync(fd); }
+
+    // A recovery copy is mandatory before any replacement attempt. This also makes
+    // Windows' remove-then-rename fallback recoverable if the process is interrupted.
+    if(existed&&(backupExisting||!fs.existsSync(this.backupFile)))fs.copyFileSync(this.file,this.backupFile);
+
     try { fs.renameSync(tmp,this.file); }
-    catch(error){try{fs.unlinkSync(tmp);}catch{}throw error;}
+    catch(error) {
+      if(!(existed&&replaceRetryError(error))){try{fs.unlinkSync(tmp);}catch{}throw error;}
+      try {
+        fs.unlinkSync(this.file);
+        fs.renameSync(tmp,this.file);
+      } catch(second) {
+        try { if(!fs.existsSync(this.file)&&fs.existsSync(this.backupFile))fs.copyFileSync(this.backupFile,this.file); } catch {}
+        try { if(fs.existsSync(tmp))fs.unlinkSync(tmp); } catch {}
+        throw second;
+      }
+    }
   }
 
   _save() { this._validateDb(this.db); this._atomicWrite(this.db,{backupExisting:true}); }
