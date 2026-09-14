@@ -13,6 +13,7 @@
     "acceptance": "node scripts/acceptance.js",
     "soak": "node scripts/soak.js",
     "field-check": "node scripts/field-check.js",
+    "discover": "node scripts/discover.js",
     "e2e": "playwright test",
     "desktop:install": "npm --prefix desktop install",
     "desktop": "npm --prefix desktop start",
