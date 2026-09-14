@@ -39,6 +39,7 @@ jobs:
       - run: node --check public/platform-v6-main.js
       - run: node --check public/platform-v62-main.js
       - run: node --check public/platform-v62-ui.js
+      - run: node --check public/tcp-interface-v62.js
       - run: node --check public/export-v6.js
       - run: node --check desktop/main.js
       - run: node --check desktop/storage.js
