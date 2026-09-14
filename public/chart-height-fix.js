@@ -22,39 +22,53 @@
     forceStyle('height','100%');
     forceStyle('min-height','0');
     forceStyle('max-height','none');
+    forceStyle('padding','0');
   };
 
-  // The frame owns layout. Canvas width/height are backing-store pixels only.
+  // The wrapper is the single source of truth for layout height.
+  // Do not let the legacy renderer reintroduce an intrinsic 220px height.
   canvas.removeAttribute('height');
   forceLayout();
 
-  let raf=0,lastW=0,lastH=0,lastDpr=0;
-  const enforce=()=>{
+  // Override the legacy helper used by drawLine(). The old implementation used the
+  // HTML height attribute (220px) and rewrote canvas.style.height on every refresh,
+  // while the v6.2 wrapper is 260px. That caused the backing bitmap to oscillate
+  // between two heights once per live update and could leave Chromium showing a
+  // blank/white canvas. Use the actual rendered wrapper size instead.
+  window.setupCanvas=function setupCanvasV62(target){
+    if(!target)return null;
+    const rect=target.getBoundingClientRect();
+    const w=Math.max(1,Math.round(rect.width));
+    const h=Math.max(1,Math.round(rect.height));
+    const ratio=Math.min(window.devicePixelRatio||1,2);
+    const pixelW=Math.max(1,Math.round(w*ratio));
+    const pixelH=Math.max(1,Math.round(h*ratio));
+
+    if(target.width!==pixelW)target.width=pixelW;
+    if(target.height!==pixelH)target.height=pixelH;
+
+    const ctx=target.getContext('2d');
+    if(!ctx)return null;
+    // Reset the transform every draw so resize operations cannot accumulate scale.
+    ctx.setTransform(ratio,0,0,ratio,0,0);
+    return{ctx,w,h};
+  };
+
+  let raf=0,lastW=0,lastH=0;
+  const redraw=()=>{
     raf=0;
     forceLayout();
     const rect=frame.getBoundingClientRect();
-    const cssW=Math.max(1,Math.round(rect.width));
-    const cssH=Math.max(1,Math.round(rect.height));
-    const dpr=Math.min(window.devicePixelRatio||1,2);
-    const pixelW=Math.max(1,Math.round(cssW*dpr));
-    const pixelH=Math.max(1,Math.round(cssH*dpr));
-
-    // Only touch the backing bitmap when the actual frame size/DPI changed.
-    if(cssW!==lastW||cssH!==lastH||dpr!==lastDpr){
-      if(canvas.width!==pixelW)canvas.width=pixelW;
-      if(canvas.height!==pixelH)canvas.height=pixelH;
-      lastW=cssW;lastH=cssH;lastDpr=dpr;
-      try{renderStatus();}catch{}
-    }
+    const w=Math.round(rect.width),h=Math.round(rect.height);
+    if(w===lastW&&h===lastH)return;
+    lastW=w;lastH=h;
+    try{renderStatus();}catch{}
   };
-  const schedule=()=>{if(!raf)raf=requestAnimationFrame(enforce);};
+  const schedule=()=>{if(!raf)raf=requestAnimationFrame(redraw);};
 
   new ResizeObserver(schedule).observe(frame);
   window.addEventListener('resize',schedule,{passive:true});
 
-  // Guard against legacy renderers writing canvas.style.height on each live refresh.
-  // Re-applying identical !important values is avoided so this observer cannot self-loop.
-  new MutationObserver(schedule).observe(canvas,{attributes:true,attributeFilter:['style','width','height']});
-
-  schedule();
+  // Initial render after the wrapper is established.
+  requestAnimationFrame(()=>{try{renderStatus();}catch{}});
 })();
