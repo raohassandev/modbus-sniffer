@@ -1,6 +1,6 @@
 {
   "name":"modbus-engineering-analyzer-desktop",
-  "version":"6.1.0",
+  "version":"6.2.0",
   "private":true,
   "main":"main.js",
   "scripts":{"start":"electron .","dist:win":"electron-builder --win nsis"},
