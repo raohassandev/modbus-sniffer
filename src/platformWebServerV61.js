@@ -41,17 +41,29 @@ function validateSerialConfig(body) {
   return { port, baudRate, dataBits, stopBits, parity, reconnectMs, requestTimeoutMs };
 }
 
+function isLoopbackHost(host){
+  const h=String(host||'').trim().toLowerCase();
+  return h==='127.0.0.1'||h==='localhost'||h==='::1'||h==='[::1]';
+}
+
 function validateTcp(body) {
   const cfg = {
     listenHost: String(body.listenHost || '127.0.0.1').trim(),
     listenPort: Number(body.listenPort || 1502),
     targetHost: String(body.targetHost || '').trim(),
     targetPort: Number(body.targetPort || 502),
-    requestTimeoutMs: Number(body.requestTimeoutMs || 5000)
+    requestTimeoutMs: Number(body.requestTimeoutMs || 5000),
+    maxClientSessions: Number(body.maxClientSessions || 8)
   };
+  if (!cfg.listenHost) throw new Error('TCP listen host is required.');
   if (!cfg.targetHost) throw new Error('TCP target host is required.');
   for (const k of ['listenPort','targetPort']) if (!Number.isInteger(cfg[k]) || cfg[k] < 1 || cfg[k] > 65535) throw new Error(`${k} must be 1..65535.`);
   if (cfg.requestTimeoutMs < 50 || cfg.requestTimeoutMs > 60000) throw new Error('TCP request timeout must be 50..60000 ms.');
+  if (!Number.isInteger(cfg.maxClientSessions) || cfg.maxClientSessions < 1 || cfg.maxClientSessions > 128) throw new Error('TCP maximum client sessions must be 1..128.');
+  if(!isLoopbackHost(cfg.listenHost)&&body.confirmExternalBind!==true){
+    const e=new Error(`Binding the Modbus TCP proxy to ${cfg.listenHost} exposes it beyond this computer. Confirm the external bind explicitly before starting.`);
+    e.code='EXTERNAL_BIND_CONFIRMATION_REQUIRED';throw e;
+  }
   return cfg;
 }
 
@@ -62,8 +74,8 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   const publicDir = path.join(__dirname, '..', 'public');
   const baseHtml = fs.readFileSync(path.join(publicDir, 'v4.html'), 'utf8');
   const workbench = baseHtml
-    .replace('UI v4.0', 'UI v6.1')
-    .replace('</body>', '<link rel="stylesheet" href="/platform-v6.css?v=20260912"><script src="/platform-v6.js?v=20260912-2"></script></body>');
+    .replace('UI v4.0', 'UI v6.2')
+    .replace('</body>', '<link rel="stylesheet" href="/platform-v6.css?v=20260914"><script src="/platform-v6.js?v=20260914-2"></script></body>');
 
   app.disable('x-powered-by');
   app.use(express.json({ limit: '25mb' }));
@@ -123,7 +135,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.get('/api/devices', (q,r) => { try{r.json(state.getDevices(q.query));}catch(e){apiError(r,e);} });
   app.get('/api/devices/:ref', (q,r) => { try{const d=state.getDevice(decodeURIComponent(q.params.ref),{channelId:q.query.channelId||null});if(!d)return r.status(404).json({error:`Device ${q.params.ref} has not been observed.`});r.json(d);}catch(e){apiError(r,e);} });
   app.get('/api/decode', (q,r) => r.json(state.getDataTypeAnalysis(q.query)));
-  app.get('/api/config', (_q,r) => r.json({ ...state.config, demo, version:'6.2.0-dev' }));
+  app.get('/api/config', (_q,r) => r.json({ ...state.config, demo, version:'6.2.0' }));
   app.get('/api/replay/status', (_q,r) => r.json(replay.status()));
   app.get('/api/diagnostics/deep', (_q,r) => r.json(analyzeDeep({ state, config:state.config })));
   app.get('/api/engineering', (_q,r) => { try{r.json(engineering());}catch(e){apiError(r,e);} });
@@ -160,13 +172,13 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.post('/api/profiles/:id/apply/:ref', (q,r) => { try { syncRuntimeChannels(); const ref=decodeURIComponent(q.params.ref); let key; if(parseDeviceKey(ref))key=ref; else if(q.body?.channelId)key=makeDeviceKey(q.body.channelId,Number(ref)); else key=resolveObserved(ref); const out=workspaces.applyProfile(active().id,key,q.params.id); broadcast('workspace',{project:active()}); r.json(out); } catch(e) { apiError(r,e); } });
   app.delete('/api/profiles/:id', (q,r) => r.json({ok:workspaces.deleteProfile(q.params.id)}));
 
-  app.get('/api/history', (q,r) => r.json(history.query(active().id,{limit:q.query.limit,since:q.query.since})));
+  app.get('/api/history', (q,r) => r.json(history.query(active().id,{limit:q.query.limit,since:q.query.since,channelId:q.query.channelId||null,deviceKey:q.query.deviceKey||null})));
   app.delete('/api/history', (_q,r) => r.json({ok:history.clear(active().id)}));
   app.get('/api/workspace/export.json', (_q,r) => { r.setHeader('Content-Disposition','attachment; filename="modbus-workspaces.json"'); r.json(workspaces.exportAll()); });
   app.post('/api/workspace/import', (q,r) => { try { const out=workspaces.importAll(q.body); syncRuntimeChannels(); broadcast('workspace',{project:active()}); r.json(out); } catch(e) { apiError(r,e); } });
 
   app.get('/api/tcp/status', (_q,r) => r.json(tcpProxy.status()));
-  app.post('/api/tcp/start', async (q,r) => { try { const status=await tcpProxy.start(validateTcp(q.body||{})); if(status.channel)workspaces.upsertChannel(active().id,status.channel); r.json(status); } catch(e) { r.status(400).json({error:e.message}); } });
+  app.post('/api/tcp/start', async (q,r) => { try { const status=await tcpProxy.start(validateTcp(q.body||{})); if(status.channel)workspaces.upsertChannel(active().id,status.channel); r.json(status); } catch(e) { apiError(r,e); } });
   app.post('/api/tcp/stop', async (_q,r) => { try { r.json(await tcpProxy.stop()); } catch(e) { r.status(500).json({error:e.message}); } });
 
   app.get('/api/report.html', (_q,r) => { const diagnostics=analyzeDeep({state,config:state.config}); r.type('html').send(reportHtml({project:syncRuntimeChannels(),state,diagnostics,mappings:engineering()})); });
@@ -174,7 +186,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.get('/api/export/results.xlsx', async (_q,r) => { try { const model=exportModel(); const buf=await buildWorkbook(model); const name=safeName(model.project?.name); r.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); r.setHeader('Content-Disposition',`attachment; filename="${name}-modbus-results.xlsx"`); r.send(buf); } catch(e) { r.status(500).json({error:e.message}); } });
   app.get('/api/export/report.pdf', async (_q,r) => { try { const model=exportModel(); const buf=await buildPdf(model); const name=safeName(model.project?.name); r.setHeader('Content-Type','application/pdf'); r.setHeader('Content-Disposition',`attachment; filename="${name}-modbus-report.pdf"`); r.send(buf); } catch(e) { r.status(500).json({error:e.message}); } });
   app.get('/api/export/project.zip', async (_q,r) => { try { const model=exportModel(); const html=reportHtml({project:model.project,state,diagnostics:model.diagnostics,mappings:model.mappings}); await streamProjectZip(r,model,html); } catch(e) { if(!r.headersSent) r.status(500).json({error:e.message}); else r.destroy(e); } });
-  app.get('/api/export/manifest', (_q,r) => r.json({version:'6.2.0-dev',exports:[
+  app.get('/api/export/manifest', (_q,r) => r.json({version:'6.2.0',exports:[
     {id:'xlsx',label:'Excel Workbook',href:'/api/export/results.xlsx',extension:'.xlsx'},
     {id:'pdf',label:'Engineering Report',href:'/api/export/report.pdf',extension:'.pdf'},
     {id:'capture',label:'Raw Capture',href:'/api/capture/export.mbcap',extension:'.mbcap'},
@@ -202,7 +214,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.use((q,r,n) => { if(q.method==='GET' && !q.path.startsWith('/api/')) return r.type('html').send(workbench); n(); });
 
   const handlers = {
-    transaction:p=>broadcast('transaction',p), port:p=>broadcast('port',p), noise:p=>broadcast('noise',p), clear:()=>broadcast('clear',{}), config:p=>broadcast('config',p), timeout:p=>broadcast('timeout',p), 'capture-loaded':p=>broadcast('capture-loaded',p)
+    transaction:p=>broadcast('transaction',p), port:p=>broadcast('port',p), noise:p=>broadcast('noise',p), clear:()=>broadcast('clear',{}), config:p=>broadcast('config',p), timeout:p=>broadcast('timeout',p), 'capture-loaded':p=>broadcast('capture-loaded',p), 'tcp-diagnostic':p=>broadcast('tcp-diagnostic',p)
   };
   for (const [ev,fn] of Object.entries(handlers)) state.on(ev,fn);
   tcpProxy.on('status', p=>broadcast('tcp-status',p));
@@ -218,4 +230,4 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   };
 }
 
-module.exports = { startPlatformWebServer, validateSerialConfig, validateTcp };
+module.exports = { startPlatformWebServer, validateSerialConfig, validateTcp, isLoopbackHost };
