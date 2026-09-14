@@ -116,7 +116,7 @@ test('Passive Discovery forms RTU topology without exposing a transmit control',
   await expect(page.locator('#discoveryChannels .discovery-device').first()).toContainText('Slave');
   await expect(page.locator('#discoveryRefresh')).toBeVisible();
   await expect(page.locator('#discoveryExport')).toBeVisible();
-  await expect(page.locator('#page-discovery button')).not.toContainText('Active scan');
+  await expect(page.locator('#page-discovery button').filter({hasText:'Active scan'})).toHaveCount(0);
 });
 
 test('Intelligence workspace renders v7 reverse-engineering results', async ({ page }) => {
