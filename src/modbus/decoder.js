@@ -5,13 +5,18 @@ const FC_NAMES = {
   5: 'Write Single Coil', 6: 'Write Single Register', 7: 'Read Exception Status', 8: 'Diagnostics',
   11: 'Get Comm Event Counter', 12: 'Get Comm Event Log', 15: 'Write Multiple Coils',
   16: 'Write Multiple Registers', 17: 'Report Server ID', 22: 'Mask Write Register',
-  23: 'Read/Write Multiple Registers'
+  23: 'Read/Write Multiple Registers', 43: 'Encapsulated Interface Transport'
 };
 
 const EXCEPTION_NAMES = {
   1: 'Illegal Function', 2: 'Illegal Data Address', 3: 'Illegal Data Value', 4: 'Slave Device Failure',
   5: 'Acknowledge', 6: 'Slave Device Busy', 8: 'Memory Parity Error', 10: 'Gateway Path Unavailable',
   11: 'Gateway Target Failed to Respond'
+};
+
+const DEVICE_ID_OBJECT_NAMES = {
+  0: 'VendorName', 1: 'ProductCode', 2: 'MajorMinorRevision', 3: 'VendorUrl',
+  4: 'ProductName', 5: 'ModelName', 6: 'UserApplicationName'
 };
 
 function u16(buf, i) { return buf.readUInt16BE(i); }
@@ -25,6 +30,43 @@ function bitsFromData(data) {
   const bits = [];
   for (const b of data) for (let bit = 0; bit < 8; bit++) bits.push(Boolean(b & (1 << bit)));
   return bits;
+}
+
+function cleanDeviceIdText(buf){
+  return Buffer.from(buf||[]).toString('utf8').replace(/\0+$/g,'').trim();
+}
+
+function decodeDeviceIdResponse(frame,out){
+  out.kind='response';
+  out.meiType=frame[2];
+  out.readDeviceIdCode=frame[3];
+  out.conformityLevel=frame[4];
+  out.moreFollows=frame[5]!==0;
+  out.nextObjectId=frame[6];
+  out.numberOfObjects=frame[7]||0;
+  out.objects=[];
+  out.objectMap={};
+  let pos=8;
+  const end=Math.max(pos,frame.length-2);
+  for(let i=0;i<out.numberOfObjects;i++){
+    if(pos+2>end){out.payloadValid=false;out.protocolWarning='Truncated Read Device Identification object header.';break;}
+    const objectId=frame[pos++],length=frame[pos++];
+    if(pos+length>end){out.payloadValid=false;out.protocolWarning=`Truncated Read Device Identification object ${objectId}.`;break;}
+    const raw=Buffer.from(frame.subarray(pos,pos+length));pos+=length;
+    const value=cleanDeviceIdText(raw),name=DEVICE_ID_OBJECT_NAMES[objectId]||`Object${objectId}`;
+    const object={objectId,name,length,value,rawHex:raw.toString('hex').toUpperCase()};
+    out.objects.push(object);out.objectMap[objectId]=value;
+  }
+  if(out.payloadValid!==false){out.payloadValid=pos===end;if(pos!==end)out.protocolWarning=`Read Device Identification payload has ${end-pos} trailing byte(s).`;}
+  out.identification={
+    vendorName:out.objectMap[0]??null,
+    productCode:out.objectMap[1]??null,
+    revision:out.objectMap[2]??null,
+    vendorUrl:out.objectMap[3]??null,
+    productName:out.objectMap[4]??null,
+    modelName:out.objectMap[5]??null,
+    userApplicationName:out.objectMap[6]??null
+  };
 }
 
 function decodeFrame(frame) {
@@ -43,10 +85,6 @@ function decodeFrame(frame) {
 
   switch (fc) {
     case 1: case 2: {
-      // FC01/02 have one unavoidable wire-level ambiguity: a response with byteCount=3
-      // is also 8 bytes long, exactly like a normal read request. Preserve both
-      // interpretations and let the transaction tracker resolve it using pending-request
-      // context and the expected response byte count.
       if (frame.length === 8 && frame[2] === 3) {
         out.kind = 'ambiguous-read';
         out.startAddress = u16(frame, 2);
@@ -113,6 +151,22 @@ function decodeFrame(frame) {
         out.kind = 'response'; out.byteCount = frame[2]; out.data = frame.subarray(3, 3 + out.byteCount); out.words = wordsFromData(out.data);
       }
       break;
+    case 43: {
+      out.meiType=frame[2];
+      if(out.meiType!==0x0E){
+        out.kind=frame.length===7?'request':'response';
+        out.payload=frame.subarray(2,-2);
+        break;
+      }
+      if(frame.length===7){
+        out.kind='request';out.readDeviceIdCode=frame[3];out.objectId=frame[4];out.matchToken=`14:${out.readDeviceIdCode}:${out.objectId}`;
+      }else if(frame.length>=10){
+        decodeDeviceIdResponse(frame,out);
+      }else{
+        out.kind='unknown';out.payloadValid=false;out.protocolWarning='Truncated Read Device Identification frame.';
+      }
+      break;
+    }
     default:
       out.kind = 'unknown'; out.payload = frame.subarray(2, -2);
   }
@@ -120,4 +174,4 @@ function decodeFrame(frame) {
   return out;
 }
 
-module.exports = { decodeFrame, FC_NAMES, EXCEPTION_NAMES };
+module.exports = { decodeFrame, FC_NAMES, EXCEPTION_NAMES, DEVICE_ID_OBJECT_NAMES };
