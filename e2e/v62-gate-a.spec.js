@@ -8,8 +8,8 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('.theme-control')).toBeVisible();
 });
 
-test('UI identifies v6.2 and uses transport-correct RTU labels in demo mode', async ({ page }) => {
-  await expect(page.locator('body')).toContainText('UI v6.2');
+test('UI identifies v7.0 and uses transport-correct RTU labels in demo mode', async ({ page }) => {
+  await expect(page.locator('body')).toContainText('UI v7.0');
   await expect(page.locator('.transport-badge')).toContainText('RTU');
   await page.locator('[data-page="devices"]').click();
   const first=page.locator('#deviceList .device-list-item').first();
@@ -117,4 +117,21 @@ test('Passive Discovery forms RTU topology without exposing a transmit control',
   await expect(page.locator('#discoveryRefresh')).toBeVisible();
   await expect(page.locator('#discoveryExport')).toBeVisible();
   await expect(page.locator('#page-discovery button')).not.toContainText('Active scan');
+});
+
+test('Intelligence workspace renders v7 reverse-engineering results', async ({ page }) => {
+  await expect(page.locator('[data-page="intelligence"]')).toBeVisible();
+  await page.locator('[data-page="intelligence"]').click();
+  await expect(page.locator('#page-intelligence')).toBeVisible();
+  await expect(page.locator('#page-intelligence')).toContainText('Intelligent Modbus Reverse Engineering');
+  await expect(page.locator('#v7Kpis .v7-kpi')).toHaveCount(5);
+  await expect(page.locator('#v7RegisterBody tr').first()).toBeVisible();
+  await expect(page.locator('#v7Cycles')).not.toBeEmpty();
+  await expect(page.locator('#v7Anomalies')).not.toBeEmpty();
+  const analysis=await page.request.get('/api/analysis');
+  expect(analysis.ok()).toBeTruthy();
+  const json=await analysis.json();
+  expect(json.intelligence?.version).toBe('7.0.0');
+  expect(json.intelligence?.registerIntelligence).toBeTruthy();
+  expect(json.intelligence?.pollingCycles).toBeTruthy();
 });
