@@ -2,7 +2,7 @@
 
 const {ActiveDiscoveryManager}=require('./activeDiscoveryManager');
 
-const LIVE_SERIAL_STATES=new Set(['open','connecting','detecting','reconnecting']);
+const SAFE_RTU_DISCOVERY_STATES=new Set(['idle','closed','capture']);
 function httpStatus(error){return ['DISCOVERY_BUSY','RTU_DISCOVERY_PASSIVE_CAPTURE_ACTIVE'].includes(error?.code)?409:400;}
 function bool(v){return v===true;}
 function n(v,d){const x=Number(v);return Number.isFinite(x)?x:d;}
@@ -21,12 +21,15 @@ function installActiveDiscoveryRoutes({app,state,demo=false,broadcast=()=>{}}={}
       let config;
       if(transport==='RTU'){
         const connection=String(state?.connection?.status||'').toLowerCase();
-        if(LIVE_SERIAL_STATES.has(connection)){
+        if(!SAFE_RTU_DISCOVERY_STATES.has(connection)){
           const e=new Error('Disconnect passive RTU capture before starting active RTU discovery. The scanner requires exclusive access to the serial adapter and bus.');e.code='RTU_DISCOVERY_PASSIVE_CAPTURE_ACTIVE';throw e;
+        }
+        if(!bool(body.maintenanceConfirmed)||!bool(body.exclusiveBusConfirmed)){
+          const e=new Error('RTU active discovery is blocked until maintenance mode and exclusive-bus control are both explicitly confirmed.');e.code='RTU_DISCOVERY_CONFIRMATION_REQUIRED';throw e;
         }
         const current=state?.config||{},port=String(body.port||current.port||'').trim();
         if(!port)throw new Error('Select an RTU serial port for active discovery.');
-        config={transport:'RTU',port,baudRate:n(body.baudRate,n(current.baudRate,9600)),dataBits:n(body.dataBits,n(current.dataBits,8)),parity:String(body.parity||current.parity||'none').toLowerCase(),stopBits:n(body.stopBits,n(current.stopBits,1)),unitStart:n(body.unitStart,1),unitEnd:n(body.unitEnd,247),timeoutMs:n(body.timeoutMs,500),interRequestMs:n(body.interRequestMs,100),readDeviceIdCode:n(body.readDeviceIdCode,1),maxSegments:n(body.maxSegments,8),maintenanceConfirmed:bool(body.maintenanceConfirmed),exclusiveBusConfirmed:bool(body.exclusiveBusConfirmed)};
+        config={transport:'RTU',port,baudRate:n(body.baudRate,n(current.baudRate,9600)),dataBits:n(body.dataBits,n(current.dataBits,8)),parity:String(body.parity||current.parity||'none').toLowerCase(),stopBits:n(body.stopBits,n(current.stopBits,1)),unitStart:n(body.unitStart,1),unitEnd:n(body.unitEnd,247),timeoutMs:n(body.timeoutMs,500),interRequestMs:n(body.interRequestMs,100),readDeviceIdCode:n(body.readDeviceIdCode,1),maxSegments:n(body.maxSegments,8),maintenanceConfirmed:true,exclusiveBusConfirmed:true};
       }else if(transport==='TCP'){
         const host=String(body.host||'').trim();if(!host)throw new Error('TCP target host is required for active discovery.');
         config={transport:'TCP',host,port:n(body.port,502),unitStart:n(body.unitStart,1),unitEnd:n(body.unitEnd,247),timeoutMs:n(body.timeoutMs,750),interRequestMs:n(body.interRequestMs,75),readDeviceIdCode:n(body.readDeviceIdCode,1),maxSegments:n(body.maxSegments,8)};
@@ -41,4 +44,4 @@ function installActiveDiscoveryRoutes({app,state,demo=false,broadcast=()=>{}}={}
   return manager;
 }
 
-module.exports={installActiveDiscoveryRoutes,LIVE_SERIAL_STATES,httpStatus};
+module.exports={installActiveDiscoveryRoutes,SAFE_RTU_DISCOVERY_STATES,httpStatus};
