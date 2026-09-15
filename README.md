@@ -4,6 +4,14 @@ A field-oriented **Modbus RTU / RS485 and Modbus TCP engineering analyzer and re
 
 v7 automatically forms devices from observed Unit/Slave IDs, reconstructs register groups and polling intervals, detects missing replies, analyzes RTT/jitter/exceptions, infers register data types and byte orders, reconstructs the master polling cycle, fingerprints similar devices, detects register relationships and communication anomalies, compares captures, maintains persistent engineering projects, and generates handover reports.
 
+## Release and development status
+
+**Stable/default product:** v7.0.0. `npm start` and the Windows desktop launcher intentionally start `src/index-v7.js`.
+
+**v8 development:** the all-in-one Modbus Workbench foundation is being built under `src/v8/` on `main`. WP-01 through WP-05 are present with shared protocol/ownership foundations, virtual/TCP/serial transports, Master/Slave runtime foundations, scheduler, write safety/audit and address notation. These modules are **not yet the default product UI/runtime**, so the repository must not be described as a released v8 application yet.
+
+For the audited implementation state and closed inconsistencies, see `docs/V8_IMPLEMENTATION_STATUS.md`. `docs/V8_MASTER_TODO.md` remains the complete target-scope roadmap rather than the live release-status document.
+
 ## Safety model
 
 **Passive Modbus RTU capture is receive-only.** The normal analyzer does not transmit production Modbus RTU requests. Use a separate high-impedance / isolated USB-RS485 adapter connected in parallel with the live A/B bus.
@@ -11,6 +19,8 @@ v7 automatically forms devices from observed Unit/Slave IDs, reconstructs regist
 The optional **Modbus TCP analyzer is an inline forwarding proxy**, not a passive Ethernet tap. It forwards existing client/server bytes unchanged and analyzes the MBAP request/response traffic.
 
 The separate active device-identification scanner is intentionally guarded. RTU active discovery requires explicit maintenance-mode and exclusive-bus confirmation before it can transmit read-only identification requests.
+
+The in-development v8 active Master/Test foundation has a separate safety boundary: writes are connection-scoped, off by default, may only be armed while a live connection is open, return to locked on reopen/close, and write/raw/test transmissions retain broker-level raw evidence. These v8 active-mode capabilities are not exposed through the stable v7 analyzer UI.
 
 ## Requirements
 
@@ -46,7 +56,7 @@ npm start
 
 ## Demo mode
 
-Run the complete analyzer without hardware:
+Run the complete stable analyzer without hardware:
 
 ```powershell
 npm run demo
@@ -248,6 +258,7 @@ Use an isolated adapter where practical. Do not add a new 120-ohm termination re
 ## Validation
 
 ```powershell
+npm run quality
 npm test
 npm run smoke
 npm run acceptance
@@ -255,7 +266,9 @@ npm run e2e
 npm run soak
 ```
 
-CI runs syntax, unit, smoke and acceptance checks on Windows and Linux across supported Node versions, plus a browser E2E gate.
+`npm run quality` now includes release-version consistency, linting and a recursive syntax check of every JavaScript module under `src/v8/`.
+
+CI runs syntax, unit, smoke and acceptance checks on Windows and Linux across supported Node versions, plus a browser E2E gate. v8 runtime modules are exercised by dedicated protocol, broker, transport, Master/Slave and safety tests even though v7 remains the default launcher.
 
 For a real site with ten expected devices:
 
@@ -273,10 +286,15 @@ npm run desktop:install
 npm run desktop:win
 ```
 
-Installer output is created under `desktop/dist/`.
+Installer output is created under `desktop/dist/`. The current installer intentionally launches the stable v7 backend until the v8 release gate is reached.
 
 ## Documentation
 
+- `docs/V8_IMPLEMENTATION_STATUS.md` — current v8 implementation/audit status and release boundary
+- `docs/V8_MASTER_TODO.md` — complete v8 target-scope roadmap
+- `docs/V8_ALL_IN_ONE_MODBUS_WORKBENCH_PLAN.md` — v8 product/architecture plan
+- `docs/V8_EXECUTION_ARCHITECTURE.md` — v8 execution architecture contract
+- `docs/V8_PROFESSIONAL_UI_UX_PLAN.md` — professional v8 UI/UX target
 - `docs/V7_INTELLIGENCE.md` — v7 reverse-engineering layer
 - `docs/V6_PLATFORM.md` — persistent platform / TCP / projects foundation
 - `docs/SITE_ACCEPTANCE.md` — real-hardware acceptance procedure
