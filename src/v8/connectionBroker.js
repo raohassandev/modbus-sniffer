@@ -70,6 +70,7 @@ class ConnectionBroker extends EventEmitter {
       resourceKey,
       transportKind,
       transport,
+      transportState: transport?.state || 'unknown',
       metadata: { ...metadata },
       exclusive: Boolean(exclusive),
       state: 'defined',
@@ -79,8 +80,10 @@ class ConnectionBroker extends EventEmitter {
       faultInjectionEnabled: false,
       openedAt: null,
       lastError: null,
+      transportListeners: null,
     };
     this.connections.set(connectionId, entry);
+    this._bindTransport(entry);
     this._emitState('connection.defined', entry);
     return this.getConnection(connectionId);
   }
@@ -90,6 +93,7 @@ class ConnectionBroker extends EventEmitter {
     if (entry.owner || entry.state === 'open' || entry.state === 'opening' || entry.state === 'closing') {
       throw new ConnectionBrokerError('CONNECTION_BUSY', 'Connection must be released and closed before removal', { connectionId });
     }
+    this._unbindTransport(entry);
     this.connections.delete(connectionId);
     this._emitState('connection.removed', entry);
   }
@@ -165,8 +169,8 @@ class ConnectionBroker extends EventEmitter {
       throw new ConnectionBrokerError('OWNER_MISMATCH', 'Open request does not match the active owner', { connectionId });
     }
 
-    if (entry.state === 'open') return this.getConnection(connectionId);
-    if (entry.state !== 'defined' && entry.state !== 'closed' && entry.state !== 'error') {
+    if (entry.state === 'open' && this._transportReady(entry)) return this.getConnection(connectionId);
+    if (entry.state !== 'defined' && entry.state !== 'closed' && entry.state !== 'error' && entry.state !== 'open') {
       throw new ConnectionBrokerError('INVALID_STATE', `Cannot open connection from state ${entry.state}`, { connectionId, state: entry.state });
     }
 
@@ -175,6 +179,7 @@ class ConnectionBroker extends EventEmitter {
     this._emitState('connection.opening', entry);
     try {
       if (typeof entry.transport?.open === 'function') await entry.transport.open();
+      entry.transportState = entry.transport?.state || 'open';
       entry.state = 'open';
       entry.openedAt = Date.now();
       this._emitState('connection.opened', entry);
@@ -205,6 +210,7 @@ class ConnectionBroker extends EventEmitter {
     try {
       if (typeof entry.transport?.close === 'function') await entry.transport.close();
     } finally {
+      entry.transportState = entry.transport?.state || 'closed';
       entry.state = 'closed';
       entry.openedAt = null;
       entry.writeLock = 'LOCKED';
@@ -228,7 +234,7 @@ class ConnectionBroker extends EventEmitter {
     return this.getConnection(connectionId);
   }
 
-  async transmit(connectionId, { ownerId, bytes, intent }) {
+  async transmit(connectionId, { ownerId, bytes, intent, route = null }) {
     const entry = this._get(connectionId);
     this._assertReady(entry, ownerId);
     intent = ensureNonEmptyString(intent, 'intent');
@@ -248,17 +254,21 @@ class ConnectionBroker extends EventEmitter {
     }
     const payload = Buffer.from(bytes ?? []);
     if (!payload.length) throw new ConnectionBrokerError('EMPTY_PAYLOAD', 'Cannot transmit an empty payload', { connectionId });
-    await entry.transport.send(payload);
+    await entry.transport.send(payload, { route, intent });
     return payload.length;
   }
 
-  async receive(connectionId, { ownerId, timeoutMs = 1000, signal = null } = {}) {
+  async receive(connectionId, { ownerId, timeoutMs = 1000, signal = null, match = null, withMeta = false } = {}) {
     const entry = this._get(connectionId);
     this._assertReady(entry, ownerId);
     if (typeof entry.transport?.receive !== 'function') {
       throw new ConnectionBrokerError('TRANSPORT_RECEIVE_UNAVAILABLE', 'Connection transport does not implement receive()', { connectionId });
     }
-    return Buffer.from(await entry.transport.receive({ timeoutMs, signal }));
+    const value = await entry.transport.receive({ timeoutMs, signal, match, withMeta });
+    if (!withMeta) return Buffer.from(value?.bytes ?? value);
+    const bytes = Buffer.from(value?.bytes ?? value);
+    const meta = value && !Buffer.isBuffer(value) && value.meta && typeof value.meta === 'object' ? { ...value.meta } : null;
+    return Object.freeze({ bytes, meta: meta ? Object.freeze(meta) : null });
   }
 
   getConnection(connectionId) {
@@ -267,6 +277,8 @@ class ConnectionBroker extends EventEmitter {
       connectionId: entry.connectionId,
       resourceKey: entry.resourceKey,
       transportKind: entry.transportKind,
+      transportState: entry.transportState,
+      transportCapabilities: entry.transport?.capabilities ? Object.freeze({ ...entry.transport.capabilities }) : null,
       metadata: Object.freeze({ ...entry.metadata }),
       exclusive: entry.exclusive,
       state: entry.state,
@@ -296,12 +308,39 @@ class ConnectionBroker extends EventEmitter {
 
   _assertReady(entry, ownerId) {
     this._assertOwner(entry, ownerId);
-    if (entry.state !== 'open') {
-      throw new ConnectionBrokerError('CONNECTION_NOT_OPEN', 'Connection must be open for transport I/O', {
+    if (entry.state !== 'open' || !this._transportReady(entry)) {
+      throw new ConnectionBrokerError('CONNECTION_NOT_OPEN', 'Connection transport must be open for I/O', {
         connectionId: entry.connectionId,
         state: entry.state,
+        transportState: entry.transportState,
       });
     }
+  }
+
+  _transportReady(entry) {
+    return entry.transportState === 'unknown' || entry.transportState == null || entry.transportState === 'open';
+  }
+
+  _bindTransport(entry) {
+    if (typeof entry.transport?.on !== 'function') return;
+    const onState = (status = {}) => {
+      if (status && typeof status.state === 'string') entry.transportState = status.state;
+      this._emitState('connection.transport-state', entry, { transportState: entry.transportState, ...status });
+    };
+    const onError = (error) => {
+      entry.lastError = String(error?.message || error);
+      this._emitState('connection.transport-error', entry, { error: entry.lastError, errorCode: error?.code || null });
+    };
+    entry.transport.on('state', onState);
+    entry.transport.on('transport-error', onError);
+    entry.transportListeners = { onState, onError };
+  }
+
+  _unbindTransport(entry) {
+    if (!entry.transportListeners || typeof entry.transport?.off !== 'function') return;
+    entry.transport.off('state', entry.transportListeners.onState);
+    entry.transport.off('transport-error', entry.transportListeners.onError);
+    entry.transportListeners = null;
   }
 
   _get(connectionId) {
@@ -321,6 +360,7 @@ class ConnectionBroker extends EventEmitter {
         resourceKey: entry.resourceKey,
         transportKind: entry.transportKind,
         state: entry.state,
+        transportState: entry.transportState,
         transmitCapability: entry.transmitCapability,
         writeLock: entry.writeLock,
         ...details,

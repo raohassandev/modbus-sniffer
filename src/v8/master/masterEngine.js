@@ -3,6 +3,7 @@
 const { EventEmitter } = require('node:events');
 const protocol = require('../protocol');
 const { createWorkbenchEvent } = require('../events');
+const { AsyncSemaphore } = require('./asyncSemaphore');
 
 const WRITE_FUNCTIONS = new Set([
   protocol.FC.WRITE_SINGLE_COIL,
@@ -23,11 +24,20 @@ class MasterRequestError extends Error {
 }
 
 class MasterEngine extends EventEmitter {
-  constructor({ broker, connectionId, ownerId = 'v8-master', framing = 'rtu', timeoutMs = 1000 }) {
+  constructor({
+    broker,
+    connectionId,
+    ownerId = 'v8-master',
+    framing = 'rtu',
+    timeoutMs = 1000,
+    maxTcpConcurrency = 8,
+  }) {
     super();
     if (!broker) throw new TypeError('broker is required');
     if (!connectionId) throw new TypeError('connectionId is required');
     if (!['rtu', 'ascii', 'tcp'].includes(framing)) throw new TypeError('framing must be rtu, ascii or tcp');
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new TypeError('timeoutMs must be > 0');
+    if (!Number.isInteger(maxTcpConcurrency) || maxTcpConcurrency < 1 || maxTcpConcurrency > 256) throw new TypeError('maxTcpConcurrency must be 1..256');
     this.broker = broker;
     this.connectionId = connectionId;
     this.ownerId = ownerId;
@@ -35,22 +45,21 @@ class MasterEngine extends EventEmitter {
     this.timeoutMs = timeoutMs;
     this.nextTransactionId = 1;
     this.serialQueue = Promise.resolve();
+    this.tcpConcurrency = new AsyncSemaphore(maxTcpConcurrency);
   }
 
   async open() {
     const status = this.broker.getConnection(this.connectionId);
-    if (status.state === 'open') {
-      if (status.owner?.ownerMode !== 'master' || status.owner?.ownerId !== this.ownerId) {
-        throw new MasterRequestError('OWNER_MISMATCH', 'Connection is open under a different owner', { connectionId: this.connectionId });
-      }
-      return status;
+    if (status.owner && (status.owner.ownerMode !== 'master' || status.owner.ownerId !== this.ownerId)) {
+      throw new MasterRequestError('OWNER_MISMATCH', 'Connection is owned by a different runtime', { connectionId: this.connectionId });
     }
+    if (status.state === 'open' && (status.transportState === 'open' || status.transportState === 'unknown')) return status;
     return this.broker.open(this.connectionId, { ownerMode: 'master', ownerId: this.ownerId });
   }
 
   async close({ release = true } = {}) {
     const status = this.broker.getConnection(this.connectionId);
-    if (status.state === 'open') await this.broker.close(this.connectionId, { ownerId: this.ownerId });
+    if (status.state === 'open' || status.state === 'error') await this.broker.close(this.connectionId, { ownerId: this.ownerId });
     const after = this.broker.getConnection(this.connectionId);
     if (release && after.owner?.ownerId === this.ownerId) this.broker.release(this.connectionId, { ownerId: this.ownerId });
   }
@@ -60,10 +69,23 @@ class MasterEngine extends EventEmitter {
   }
 
   request(options) {
-    if (this.framing === 'tcp') return this._request(options);
+    if (this.framing === 'tcp') {
+      return this.tcpConcurrency.run(() => this._request(options), { signal: options?.signal || null });
+    }
     const run = this.serialQueue.then(() => this._request(options));
     this.serialQueue = run.catch(() => undefined);
     return run;
+  }
+
+  status() {
+    return Object.freeze({
+      connectionId: this.connectionId,
+      ownerId: this.ownerId,
+      framing: this.framing,
+      timeoutMs: this.timeoutMs,
+      tcpConcurrency: this.tcpConcurrency.snapshot(),
+      nextTransactionId: this.nextTransactionId,
+    });
   }
 
   async _request({ unitId, pdu, timeoutMs = this.timeoutMs, signal = null }) {
@@ -101,10 +123,18 @@ class MasterEngine extends EventEmitter {
 
     let responseRaw;
     try {
-      responseRaw = await this.broker.receive(this.connectionId, { ownerId: this.ownerId, timeoutMs, signal });
+      const match = this.framing === 'tcp'
+        ? (raw) => Buffer.isBuffer(raw) && raw.length >= 2 && raw.readUInt16BE(0) === txContext.transactionId
+        : null;
+      responseRaw = await this.broker.receive(this.connectionId, { ownerId: this.ownerId, timeoutMs, signal, match });
     } catch (error) {
-      this._emit('master.timeout', unitId, functionCode, txContext.raw, { errorCode: error?.code || null, error: error.message });
-      if (error?.code === 'TIMEOUT') throw new MasterRequestError('TIMEOUT', `No Modbus response within ${timeoutMs} ms`, { timeoutMs, unitId, functionCode });
+      const isTimeout = error?.code === 'TIMEOUT';
+      this._emit(isTimeout ? 'master.timeout' : 'master.receive-error', unitId, functionCode, txContext.raw, {
+        errorCode: error?.code || null,
+        error: error.message,
+        transactionId: txContext.transactionId ?? null,
+      });
+      if (isTimeout) throw new MasterRequestError('TIMEOUT', `No Modbus response within ${timeoutMs} ms`, { timeoutMs, unitId, functionCode, transactionId: txContext.transactionId ?? null });
       throw error;
     }
 
@@ -125,6 +155,7 @@ class MasterEngine extends EventEmitter {
         ...exception,
         responseRaw: Buffer.from(responseRaw),
         rttMs: elapsed,
+        transactionId: response.transactionId ?? null,
       });
     }
 

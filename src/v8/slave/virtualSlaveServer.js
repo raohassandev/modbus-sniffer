@@ -40,6 +40,7 @@ class VirtualSlaveServer extends EventEmitter {
       silentUnknownUnits: 0,
       exceptions: 0,
       malformed: 0,
+      runtimeErrors: 0,
     };
   }
 
@@ -61,7 +62,7 @@ class VirtualSlaveServer extends EventEmitter {
   async start() {
     if (this.running) return;
     const status = this.broker.getConnection(this.connectionId);
-    if (status.state !== 'open') {
+    if (status.state !== 'open' || (status.transportState !== 'open' && status.transportState !== 'unknown')) {
       await this.broker.open(this.connectionId, { ownerMode: 'slave', ownerId: this.ownerId });
     } else if (status.owner?.ownerMode !== 'slave' || status.owner?.ownerId !== this.ownerId) {
       throw new Error(`Connection ${this.connectionId} is not owned by this Slave server`);
@@ -76,7 +77,7 @@ class VirtualSlaveServer extends EventEmitter {
     this.loopPromise = null;
     if (closeConnection) {
       const status = this.broker.getConnection(this.connectionId);
-      if (status.state === 'open') await this.broker.close(this.connectionId, { ownerId: this.ownerId });
+      if (status.state === 'open' || status.state === 'error') await this.broker.close(this.connectionId, { ownerId: this.ownerId });
       const afterClose = this.broker.getConnection(this.connectionId);
       if (afterClose.owner?.ownerId === this.ownerId) this.broker.release(this.connectionId, { ownerId: this.ownerId });
     }
@@ -95,22 +96,26 @@ class VirtualSlaveServer extends EventEmitter {
   async _loop() {
     while (this.running) {
       let raw;
+      let route = null;
       try {
-        raw = await this.broker.receive(this.connectionId, {
+        const received = await this.broker.receive(this.connectionId, {
           ownerId: this.ownerId,
           timeoutMs: this.receivePollMs,
+          withMeta: true,
         });
+        raw = received.bytes;
+        route = received.meta;
       } catch (error) {
         if (error?.code === 'TIMEOUT') continue;
-        if (!this.running && ['NOT_OPEN', 'CONNECTION_NOT_OPEN', 'ABORTED'].includes(error?.code)) break;
-        this.emit('error', error);
+        if (!this.running && ['NOT_OPEN', 'CONNECTION_NOT_OPEN', 'ABORTED', 'CLOSED'].includes(error?.code)) break;
+        this._emitRuntimeError(error, 'receive');
         continue;
       }
 
       try {
-        await this._handleAdu(raw);
+        await this._handleAdu(raw, route);
       } catch (error) {
-        this.emit('error', error);
+        this._emitRuntimeError(error, 'handle');
       }
     }
   }
@@ -132,19 +137,24 @@ class VirtualSlaveServer extends EventEmitter {
     });
   }
 
-  async _handleAdu(raw) {
+  async _handleAdu(raw, route = null) {
     let request;
     try {
       request = this._decodeAdu(raw);
     } catch (error) {
       this.stats.malformed++;
-      this._emitTraffic('slave.malformed', null, raw, { errorCode: error?.code || null, error: error.message });
+      this._emitTraffic('slave.malformed', null, raw, { errorCode: error?.code || null, error: error.message, clientId: route?.clientId || null });
       return;
     }
 
     this.stats.requests++;
     const functionCode = request.pdu[0];
-    this._emitTraffic('traffic.rx', request.unitId, raw, { functionCode, framing: this.framing });
+    this._emitTraffic('traffic.rx', request.unitId, raw, {
+      functionCode,
+      framing: this.framing,
+      clientId: route?.clientId || null,
+      transactionId: request.transactionId ?? null,
+    });
 
     if (this.framing === 'rtu' && request.unitId === 0) {
       this.stats.broadcasts++;
@@ -158,7 +168,7 @@ class VirtualSlaveServer extends EventEmitter {
     const device = this.devices.get(request.unitId);
     if (!device) {
       this.stats.silentUnknownUnits++;
-      this._emitTraffic('slave.unknown-unit', request.unitId, raw, { functionCode });
+      this._emitTraffic('slave.unknown-unit', request.unitId, raw, { functionCode, clientId: route?.clientId || null });
       return;
     }
 
@@ -171,12 +181,15 @@ class VirtualSlaveServer extends EventEmitter {
       ownerId: this.ownerId,
       bytes: response,
       intent: 'response',
+      route,
     });
     this.stats.responses++;
     this._emitTraffic('traffic.tx', request.unitId, response, {
       functionCode: responsePdu[0],
       framing: this.framing,
       exception: Boolean(responsePdu[0] & 0x80),
+      clientId: route?.clientId || null,
+      transactionId: request.transactionId ?? null,
     });
   }
 
@@ -255,7 +268,7 @@ class VirtualSlaveServer extends EventEmitter {
       if (broadcast) return null;
       if (error instanceof VirtualDeviceError) return this._exception(functionCode, error.exceptionCode || 4);
       if (error instanceof protocol.ProtocolValidationError) return this._exception(functionCode, 3);
-      this.emit('error', error);
+      this._emitRuntimeError(error, 'process-pdu');
       return this._exception(functionCode, 4);
     }
   }
@@ -291,6 +304,19 @@ class VirtualSlaveServer extends EventEmitter {
 
   _exception(functionCode, exceptionCode) {
     return Buffer.from([(functionCode & 0x7F) | 0x80, exceptionCode]);
+  }
+
+  _emitRuntimeError(error, phase) {
+    this.stats.runtimeErrors++;
+    const diagnostic = Object.freeze({ phase, code: error?.code || null, message: String(error?.message || error) });
+    this.emit('server-error', diagnostic);
+    this.emit('event', createWorkbenchEvent({
+      type: 'slave.runtime-error',
+      source: 'virtual-slave',
+      connectionId: this.connectionId,
+      ownerMode: 'slave',
+      details: diagnostic,
+    }));
   }
 
   _emitTraffic(type, unitId, raw, details) {
