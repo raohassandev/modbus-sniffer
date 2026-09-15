@@ -13,6 +13,16 @@ const OWNER_CAPABILITIES = Object.freeze({
   test: 'active',
 });
 
+const INTENT_POLICY = Object.freeze({
+  analyzer: new Set(),
+  replay: new Set(),
+  discovery: new Set(['read']),
+  proxy: new Set(['forward']),
+  master: new Set(['read', 'write']),
+  slave: new Set(['response']),
+  test: new Set(['read', 'write', 'raw']),
+});
+
 class ConnectionBrokerError extends Error {
   constructor(code, message, details = {}) {
     super(message);
@@ -218,6 +228,39 @@ class ConnectionBroker extends EventEmitter {
     return this.getConnection(connectionId);
   }
 
+  async transmit(connectionId, { ownerId, bytes, intent }) {
+    const entry = this._get(connectionId);
+    this._assertReady(entry, ownerId);
+    intent = ensureNonEmptyString(intent, 'intent');
+    const allowed = INTENT_POLICY[entry.owner.ownerMode];
+    if (!allowed?.has(intent)) {
+      throw new ConnectionBrokerError('TRANSMIT_NOT_ALLOWED', `Owner mode ${entry.owner.ownerMode} cannot transmit with intent ${intent}`, {
+        connectionId,
+        ownerMode: entry.owner.ownerMode,
+        intent,
+      });
+    }
+    if (intent === 'write' && entry.writeLock !== 'ENABLED') {
+      throw new ConnectionBrokerError('WRITE_LOCKED', 'Write transmission is locked for this connection', { connectionId });
+    }
+    if (typeof entry.transport?.send !== 'function') {
+      throw new ConnectionBrokerError('TRANSPORT_SEND_UNAVAILABLE', 'Connection transport does not implement send()', { connectionId });
+    }
+    const payload = Buffer.from(bytes ?? []);
+    if (!payload.length) throw new ConnectionBrokerError('EMPTY_PAYLOAD', 'Cannot transmit an empty payload', { connectionId });
+    await entry.transport.send(payload);
+    return payload.length;
+  }
+
+  async receive(connectionId, { ownerId, timeoutMs = 1000, signal = null } = {}) {
+    const entry = this._get(connectionId);
+    this._assertReady(entry, ownerId);
+    if (typeof entry.transport?.receive !== 'function') {
+      throw new ConnectionBrokerError('TRANSPORT_RECEIVE_UNAVAILABLE', 'Connection transport does not implement receive()', { connectionId });
+    }
+    return Buffer.from(await entry.transport.receive({ timeoutMs, signal }));
+  }
+
   getConnection(connectionId) {
     const entry = this._get(connectionId);
     return Object.freeze({
@@ -251,6 +294,16 @@ class ConnectionBroker extends EventEmitter {
     }
   }
 
+  _assertReady(entry, ownerId) {
+    this._assertOwner(entry, ownerId);
+    if (entry.state !== 'open') {
+      throw new ConnectionBrokerError('CONNECTION_NOT_OPEN', 'Connection must be open for transport I/O', {
+        connectionId: entry.connectionId,
+        state: entry.state,
+      });
+    }
+  }
+
   _get(connectionId) {
     connectionId = ensureNonEmptyString(connectionId, 'connectionId');
     const entry = this.connections.get(connectionId);
@@ -278,6 +331,7 @@ class ConnectionBroker extends EventEmitter {
 
 module.exports = {
   OWNER_CAPABILITIES,
+  INTENT_POLICY,
   ConnectionBroker,
   ConnectionBrokerError,
 };
