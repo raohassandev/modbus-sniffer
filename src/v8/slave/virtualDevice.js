@@ -52,40 +52,50 @@ class MemoryArea {
     }
   }
 
-  read(address, quantity) {
-    this.validateRange(address, quantity);
-    return Array.from(this.values.subarray(address, address + quantity), (value) => this.bit ? Boolean(value) : value);
+  _normalizeValue(value, address) {
+    if (this.bit) {
+      if (value !== true && value !== false && value !== 0 && value !== 1) {
+        throw new VirtualDeviceError('ILLEGAL_VALUE', `${this.name} bit value must be boolean, 0 or 1`, 3, {
+          area: this.name,
+          address,
+          value,
+        });
+      }
+      return value ? 1 : 0;
+    }
+    if (!Number.isInteger(value) || value < 0 || value > 0xFFFF) {
+      throw new VirtualDeviceError('ILLEGAL_VALUE', `${this.name} register value must be 0..65535`, 3, {
+        area: this.name,
+        address,
+        value,
+      });
+    }
+    return value;
   }
 
-  write(address, values) {
-    if (!this.writable) {
+  _set(address, values, { enforceWritable }) {
+    if (enforceWritable && !this.writable) {
       throw new VirtualDeviceError('READ_ONLY_AREA', `${this.name} is read-only`, 2, { area: this.name, address });
     }
     if (!Array.isArray(values) || values.length < 1) {
       throw new VirtualDeviceError('ILLEGAL_VALUE', `${this.name} write values must be a non-empty array`, 3, { area: this.name });
     }
     this.validateRange(address, values.length);
-    values.forEach((value, index) => {
-      if (this.bit) {
-        if (value !== true && value !== false && value !== 0 && value !== 1) {
-          throw new VirtualDeviceError('ILLEGAL_VALUE', `${this.name} bit value must be boolean, 0 or 1`, 3, {
-            area: this.name,
-            address: address + index,
-            value,
-          });
-        }
-        this.values[address + index] = value ? 1 : 0;
-        return;
-      }
-      if (!Number.isInteger(value) || value < 0 || value > 0xFFFF) {
-        throw new VirtualDeviceError('ILLEGAL_VALUE', `${this.name} register value must be 0..65535`, 3, {
-          area: this.name,
-          address: address + index,
-          value,
-        });
-      }
-      this.values[address + index] = value;
-    });
+    const normalized = values.map((value, index) => this._normalizeValue(value, address + index));
+    normalized.forEach((value, index) => { this.values[address + index] = value; });
+  }
+
+  read(address, quantity) {
+    this.validateRange(address, quantity);
+    return Array.from(this.values.subarray(address, address + quantity), (value) => this.bit ? Boolean(value) : value);
+  }
+
+  write(address, values) {
+    this._set(address, values, { enforceWritable: true });
+  }
+
+  seed(address, values) {
+    this._set(address, values, { enforceWritable: false });
   }
 }
 
@@ -160,15 +170,7 @@ class VirtualDevice {
   }
 
   seed(area, address, values) {
-    const memory = this._area(area);
-    if (!Array.isArray(values) || values.length < 1) {
-      throw new VirtualDeviceError('ILLEGAL_VALUE', 'seed values must be a non-empty array', 3, { area });
-    }
-    memory.validateRange(address, values.length);
-    values.forEach((value, index) => {
-      if (memory.bit) memory.values[address + index] = value ? 1 : 0;
-      else memory.values[address + index] = value;
-    });
+    return this._area(area).seed(address, values);
   }
 
   _area(name) {
