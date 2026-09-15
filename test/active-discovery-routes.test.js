@@ -9,6 +9,7 @@ const express=require('express');
 const {installActiveDiscoveryRoutes}=require('../src/activeDiscoveryRoutes');
 const {ActiveDiscoveryManager}=require('../src/activeDiscoveryManager');
 const {WorkspaceStore}=require('../src/workspaceStore');
+const {buildTcpChannel,makeDeviceKey}=require('../src/transportIdentity');
 
 async function withServer({demo=false,state={connection:{status:'idle'},config:{}},workspaces=null,manager=null},fn){
   const app=express();app.use(express.json());const installed=installActiveDiscoveryRoutes({app,state,demo,broadcast:()=>{},workspaces,getActiveProjectId:workspaces?()=>workspaces.getActiveProject().id:null,manager});const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
@@ -64,5 +65,16 @@ test('discovery evidence API lists, fetches, exports and deletes only the active
     const full=await (await fetch(`${base}/api/discovery/runs/${run.id}`)).json();assert.equal(full.target.host,'10.0.0.5');
     const exported=await fetch(`${base}/api/discovery/runs/${run.id}/export.json`);assert.equal(exported.status,200);assert.match(exported.headers.get('content-disposition')||'',/modbus-discovery-/);
     const deleted=await fetch(`${base}/api/discovery/runs/${run.id}`,{method:'DELETE'});assert.equal(deleted.status,200);assert.equal((await deleted.json()).ok,true);assert.equal(workspaces.listDiscoveryRuns(p.id).length,0);
+  });
+});
+
+test('adoption API previews exact target and requires explicit overwrite for conflicting identification',async()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'mbdisc-adopt-route-')),workspaces=new WorkspaceStore({dataDir:dir}),p=workspaces.getActiveProject(),channel=buildTcpChannel({targetHost:'10.20.30.40',targetPort:502});workspaces.upsertChannel(p.id,channel);const key=makeDeviceKey(channel.channelId,4);workspaces.setDevice(p.id,key,{name:'Line 4 Drive',manufacturer:'Existing',model:'M-OLD',notes:'preserve'});
+  const run=workspaces.saveDiscoveryRun(p.id,{transport:'TCP',result:{transport:'TCP',host:'10.20.30.40',port:502,unitStart:4,unitEnd:4,results:[{unitId:4,responded:true,identificationSupported:true,objects:[{objectId:0,value:'ACME'}],identification:{vendorName:'ACME',productCode:'P4',modelName:'M-NEW',revision:'R3'}}]}});
+  await withServer({workspaces},async base=>{
+    const endpoint=`${base}/api/discovery/runs/${run.id}/adopt`,headers={'content-type':'application/json'};
+    const preview=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify({preview:true,unitId:4,channelId:channel.channelId})});assert.equal(preview.status,200);const pvw=await preview.json();assert.equal(pvw.deviceKey,key);assert.equal(pvw.requiresOverwrite,true);assert.deepEqual(pvw.conflicts.map(x=>x.key).sort(),['manufacturer','model']);
+    const blocked=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify({unitId:4,channelId:channel.channelId})});assert.equal(blocked.status,409);assert.equal((await blocked.json()).code,'DISCOVERY_ADOPTION_CONFLICT');assert.equal(workspaces.getDevice(p.id,key).manufacturer,'Existing');
+    const applied=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify({unitId:4,channelId:channel.channelId,overwriteExisting:true})});assert.equal(applied.status,200);const body=await applied.json();assert.equal(body.device.manufacturer,'ACME');assert.equal(body.device.model,'M-NEW');assert.equal(body.device.name,'Line 4 Drive');assert.equal(body.device.notes,'preserve');assert.equal(body.device.revision,'R3');
   });
 });
