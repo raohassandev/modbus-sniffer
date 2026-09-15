@@ -1,33 +1,35 @@
-# Modbus Sniffer v4.1 — Site Acceptance Procedure
+# Modbus Engineering Analyzer v7 — Site Acceptance Procedure
 
-This procedure is the final sign-off step after automated software acceptance passes. It requires a real passive USB-RS485 tap connected to the live bus.
+This procedure is the final hardware/network sign-off after software CI passes. Software tests cannot prove RS485 electrical behavior, real gateway timing, plant network policy or long-duration site stability.
 
-## 1. Update and run software validation
+## 1. Update and validate the workstation
 
 ```powershell
 git pull origin main
-npm install
+npm ci
+npm run version:check
 npm test
+npm run smoke
 npm run acceptance
-npm run soak
+node scripts/benchmark-v7.js
 ```
 
-All commands must finish with PASS before field validation.
+All commands must pass before field acceptance. Node 22 is recommended for new deployments.
 
-## 2. Connect the passive tap
+## 2. RTU passive-tap wiring
 
-Connect the second USB-RS485 adapter in parallel with the existing bus:
+Use a second isolated/high-impedance USB-RS485 adapter in parallel with the live bus:
 
 ```text
 Master A+ ----+---------------- Device A+
               +---- Sniffer A+
 Master B- ----+---------------- Device B-
               +---- Sniffer B-
-GND ----------+---------------- Device GND
-              +---- Sniffer GND
+GND ----------+---------------- Device GND/reference
+              +---- Sniffer GND/reference
 ```
 
-Use an isolated adapter where possible. Do not add another 120-ohm terminator only for the sniffer. The application does not transmit Modbus frames.
+Do not add a new 120-ohm terminator only for the sniffer. Normal RTU capture is software RX-only, but that does not guarantee the electrical behavior of a USB adapter; use appropriate isolated hardware for production tapping.
 
 ## 3. Start the analyzer
 
@@ -35,109 +37,133 @@ Use an isolated adapter where possible. Do not add another 120-ohm terminator on
 npm start
 ```
 
-Open:
+Open `http://127.0.0.1:8080`, select the adapter and known serial settings, or use passive Quick Detect / Full Detect. Confirm the Dashboard mode badge says RTU passive capture and not an active/transmitting mode.
 
-```text
-http://127.0.0.1:8080
-```
+## 4. Capture enough normal traffic
 
-Select the COM port. Either enter the known serial format or run Quick Detect / Full Detect.
+Capture at least 60 seconds for fast polling. For 5 s / 10 s / 60 s groups, capture long enough to observe at least ten repetitions of the slowest expected group. Keep the analyzer attached while the process experiences normal load/state changes so engineering values and polling behavior can be compared against known equipment values.
 
-## 4. Minimum capture period
+## 5. Device and channel identity
 
-Allow at least 60 seconds of normal master polling before judging polling intervals. For slow 5 s / 10 s / 60 s groups, capture long enough to obtain at least 10 repetitions of the slowest group.
+On **Devices** and **Discovery**, verify:
 
-## 5. Automatic device validation
+- every expected RTU Slave ID appears under the correct RTU channel;
+- duplicate Slave IDs on different physical buses remain separate devices;
+- TCP Unit IDs are shown under the correct endpoint/channel;
+- the same Unit ID behind two TCP gateways does not share registers, history, names or health;
+- channel endpoint/serial configuration is correct.
 
-On **Devices**, verify that every expected Slave ID forms automatically.
-
-For a ten-device bus, run:
+For a ten-device RTU bus:
 
 ```powershell
 npm run field-check -- --min-devices 10 --min-frames 500
 ```
 
-Expected result:
+If the site has an accepted amount of communication loss/noise, set documented thresholds rather than silently ignoring it.
 
-```text
-FIELD ACCEPTANCE CHECK: PASS
-```
+## 6. Register and engineering-value validation
 
-If the site intentionally has occasional timeouts or line noise, thresholds can be adjusted:
+Spot-check at least two devices that use identical register addresses and verify their values remain isolated. For mapped engineering values, compare known voltage/current/power/energy or another trusted value against the equipment/HMI. Verify datatype, word/byte order, scale, offset and unit.
 
-```powershell
-npm run field-check -- --min-devices 10 --max-timeout-pct 2 --max-noise-pct 0.5
-```
+Multiword mappings must not overlap another mapping on the same device/function unless the engineering design intentionally changes the mapping first.
 
-## 6. Register isolation validation
+## 7. Polling and missing-response behavior
 
-Where two slaves expose the same Modbus register addresses, verify their values remain separate under their own Slave IDs. The automated software suite tests this behavior, but a real-site spot check should still be made against one known value from at least two devices.
+Compare at least three known polling groups with PLC/HMI settings. Use median interval and jitter rather than one sample. For a stable wired RTU bus, ±10% of the configured interval is a practical initial acceptance target unless the master intentionally schedules/bursts requests.
 
-## 7. Poll interval validation
+If safe and permitted, disconnect one non-critical slave during maintenance and confirm a missing reply becomes a `TIMEOUT` after the configured timeout. Do not interrupt production-critical equipment merely to create a test fault.
 
-Choose at least three known polling groups and compare the analyzer median interval to the PLC/HMI configured interval.
+## 8. Passive Discovery and FC43 identity
 
-Recommended acceptance tolerance:
+Passive Discovery must not transmit. Where devices naturally answer FC43 / MEI 0x0E, confirm Vendor/Product/Model/Revision evidence is tied to the exact channel/device.
 
-- stable wired RTU bus: within ±10% of configured poll interval
-- intentionally scheduled or burst polling: judge the median plus jitter, not one sample
+If an identity is adopted into the project, use Preview first and verify the exact target channel/device. Overwriting existing identification requires an explicit decision and must remain visible in the adoption audit.
 
-## 8. Missing-response validation
+## 9. Active Discovery safety
 
-If safe and permitted, temporarily disconnect one non-critical slave or use a controlled maintenance condition. Confirm that requests to that slave become explicit `TIMEOUT` events after the configured request timeout.
+Active Discovery is intentionally separate from passive analysis.
 
-Do not interrupt a production-critical control device only to perform this test. If no safe interruption is possible, mark this item as laboratory-validated; the automated acceptance suite already verifies the timeout engine.
+For RTU, use it only during a maintenance window with exclusive-bus permission. Confirm both safety acknowledgements before scanning. For TCP, enter the exact intended target endpoint. Active Discovery sends only read-only FC43 / MEI 0x0E Device Identification requests; it must not be used as a general register scanner or write tool.
 
-## 9. Exception validation
+Stop the scan immediately if the site/equipment behavior is unexpected.
 
-If a real exception reply naturally occurs, verify the exception code/name is shown under Live Traffic and the device. Do not intentionally send invalid Modbus requests from this passive application; it has no transmit path.
+## 10. Modbus TCP inline-proxy acceptance
 
-## 10. Capture/replay validation
+The TCP analyzer is an inline forwarding proxy, not a passive Ethernet tap.
 
-Save a `.mbcap` file from **Sessions**, stop live capture, reload the file, and replay it at 2×. Confirm devices, polling groups, registers and values rebuild from the saved session.
+1. Start with loopback binding where possible.
+2. Configure the exact target host/port.
+3. Point the existing Modbus TCP master/client at the analyzer listen endpoint.
+4. Verify normal plant/client operation while the analyzer runs.
+5. Confirm transaction IDs, Unit IDs, requests/responses, RTT and exceptions appear correctly.
+6. Verify a controlled client disconnect is reported separately from a silent request timeout.
+7. Confirm endpoint/channel identity remains stable across reconnects.
 
-## 11. Long-run validation
+A non-loopback proxy bind requires explicit confirmation and should only be used on a trusted engineering/control network.
 
-For production sign-off, leave the analyzer running for at least 2 hours while the master performs normal polling. Then run:
+## 11. Capture, replay and handover
 
-```powershell
-npm run field-check -- --min-devices <expected-device-count> --min-frames 1000
-```
+Save a `.mbcap`, stop live capture, reload it, and replay it at 2× or another accelerated speed. Polling intervals/RTT analysis must remain based on source timestamps rather than compressed replay wall-clock time.
 
-Confirm:
+From **Reports**, export the XLSX, PDF and complete ZIP. Verify the ZIP includes channel/device identity, Discovery evidence, Adoption Audit and the raw capture needed for later engineering review.
 
-- no application crash
-- expected device count remains stable
-- no unexplained rise in noise bytes
-- timeout rate is appropriate for the site
-- register values continue updating
-- polling intervals remain stable
-- browser remains responsive
+## 12. Desktop installer acceptance
+
+On the intended Windows class of workstation:
+
+- install the generated NSIS package;
+- launch without requiring the source checkout;
+- verify the UI and v7 backend start locally;
+- connect the real USB-RS485 adapter and confirm the serial module opens it;
+- restart the PC/app and verify project/history persistence;
+- perform an upgrade install and confirm data is retained;
+- uninstall and confirm project data retention/removal behavior follows the site policy.
+
+Compare the installer/file checksum with `SHA256SUMS.txt` from the same CI artifact and retain `BUILD-PROVENANCE.txt` with the handover record.
+
+## 13. Long-duration sign-off
+
+A short 2-hour run is useful for commissioning, but final production sign-off should include a representative long-duration soak; 24 hours is the default target where site operations permit it.
+
+During the soak confirm:
+
+- no application/backend crash or restart;
+- expected devices/channels remain stable;
+- no unexplained rise in RTU noise or TCP parser errors;
+- timeout/exception rates remain within the site threshold;
+- register values and history continue updating;
+- no unbounded memory growth or UI slowdown;
+- exports still complete successfully near the end of the run.
 
 ## Acceptance record
-
-Record these values when signing off:
 
 ```text
 Site:
 Date/time:
-USB-RS485 adapter:
-COM port:
-Baud / data / parity / stop:
-Expected slaves:
-Detected slaves:
+Analyzer commit/version:
+Windows/Node version:
+RTU adapter + serial number:
+RTU COM / baud / data / parity / stop:
+TCP listen endpoint (if used):
+TCP target endpoint (if used):
+Expected RTU slaves:
+Expected TCP units/endpoints:
+Detected devices/channels:
 Capture duration:
-Frames:
-Requests:
-Responses:
+Frames / requests / responses:
 Timeout rate:
-Noise ratio:
+RTU noise ratio:
+TCP MBAP/parser errors:
 Unmatched response rate:
-Average RTT:
-P95 RTT:
+Average / P95 RTT:
 Field-check result:
+Discovery evidence run ID(s):
 Capture filename:
+Export ZIP filename:
+Installer SHA-256:
 Engineer:
+Result: PASS / FAIL
+Notes:
 ```
 
-When the automated software acceptance, field-check, and the real-bus checks above all pass, the Modbus Sniffer v4.1 release can be marked production accepted for that hardware/site combination.
+Production acceptance is valid for the tested hardware/site/network combination. A major wiring, adapter, gateway, firmware, master-program or network-topology change should trigger a focused re-validation.
