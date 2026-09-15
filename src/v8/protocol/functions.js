@@ -12,6 +12,7 @@ const FC = Object.freeze({
   WRITE_SINGLE_REGISTER: 0x06,
   WRITE_MULTIPLE_COILS: 0x0F,
   WRITE_MULTIPLE_REGISTERS: 0x10,
+  MASK_WRITE_REGISTER: 0x16,
   READ_WRITE_MULTIPLE_REGISTERS: 0x17,
   ENCAPSULATED_INTERFACE: 0x2B,
 });
@@ -288,6 +289,30 @@ function decodeWriteMultipleResponse(pdu) {
   return { functionCode: raw[0], address, quantity: writtenQuantity };
 }
 
+function encodeMaskWriteRegisterRequest({ address, andMask, orMask }) {
+  uint16(address, 'address');
+  uint16(andMask, 'andMask');
+  uint16(orMask, 'orMask');
+  const pdu = Buffer.alloc(7);
+  pdu[0] = FC.MASK_WRITE_REGISTER;
+  pdu.writeUInt16BE(address, 1);
+  pdu.writeUInt16BE(andMask, 3);
+  pdu.writeUInt16BE(orMask, 5);
+  return pdu;
+}
+
+function decodeMaskWriteRegisterRequest(pdu) {
+  const raw = validatePdu(pdu);
+  if (raw[0] !== FC.MASK_WRITE_REGISTER) fail('INVALID_FUNCTION_CODE', 'Not an FC22 Mask Write Register request/response', { functionCode: raw[0] });
+  exactLength(raw, 7);
+  return {
+    functionCode: raw[0],
+    address: raw.readUInt16BE(1),
+    andMask: raw.readUInt16BE(3),
+    orMask: raw.readUInt16BE(5),
+  };
+}
+
 function encodeReadWriteMultipleRegistersRequest({ readAddress, readQuantity, writeAddress, values }) {
   uint16(readAddress, 'readAddress');
   quantity(readQuantity, 1, 125, 'readQuantity');
@@ -426,6 +451,8 @@ function decodeRequestPdu(pdu) {
     case FC.WRITE_MULTIPLE_COILS:
     case FC.WRITE_MULTIPLE_REGISTERS:
       return decodeWriteMultipleRequest(raw);
+    case FC.MASK_WRITE_REGISTER:
+      return decodeMaskWriteRegisterRequest(raw);
     case FC.READ_WRITE_MULTIPLE_REGISTERS:
       return decodeReadWriteMultipleRegistersRequest(raw);
     case FC.ENCAPSULATED_INTERFACE:
@@ -454,6 +481,8 @@ module.exports = {
   decodeWriteMultipleRequest,
   encodeWriteMultipleResponse,
   decodeWriteMultipleResponse,
+  encodeMaskWriteRegisterRequest,
+  decodeMaskWriteRegisterRequest,
   encodeReadWriteMultipleRegistersRequest,
   decodeReadWriteMultipleRegistersRequest,
   encodeDeviceIdRequest,
