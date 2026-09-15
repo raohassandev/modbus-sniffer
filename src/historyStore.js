@@ -17,7 +17,7 @@ class HistoryStore {
     readChunkBytes = 64 * 1024
   } = {}) {
     this.dataDir=dataDir;
-    this.maxFileBytes=Math.max(64*1024,finite(maxFileBytes,25*1024*1024));
+    this.maxFileBytes=Math.max(1024,finite(maxFileBytes,25*1024*1024));
     this.maxTotalBytes=Math.max(this.maxFileBytes,finite(maxTotalBytes,100*1024*1024));
     this.retentionMs=Math.max(0,finite(retentionMs,30*24*60*60*1000));
     this.maxSegments=Math.max(1,Math.min(32,Math.trunc(finite(maxSegments,4))));
@@ -60,11 +60,12 @@ class HistoryStore {
 
   _rotate(file){
     try{
-      if(!fs.existsSync(file)||fs.statSync(file).size<this.maxFileBytes)return;
+      if(!fs.existsSync(file)||fs.statSync(file).size<this.maxFileBytes)return false;
       const oldest=this._segment(file,this.maxSegments);try{fs.unlinkSync(oldest);}catch{}
       for(let i=this.maxSegments-1;i>=1;i--){const from=this._segment(file,i),to=this._segment(file,i+1);if(fs.existsSync(from)){try{fs.renameSync(from,to);}catch{try{fs.copyFileSync(from,to);fs.unlinkSync(from);}catch{}}}}
       try{fs.renameSync(file,this._segment(file,1));}catch{fs.copyFileSync(file,this._segment(file,1));fs.truncateSync(file,0);}
-    }catch{}
+      return true;
+    }catch{return false;}
   }
 
   _enforceRetention(file){
@@ -85,13 +86,14 @@ class HistoryStore {
       if(p===file)continue;
       try{const n=fs.statSync(p).size;fs.unlinkSync(p);total-=n;}catch{}
     }
+    return total;
   }
 
   append(projectId, snapshot) {
     const file=this._file(projectId);
     this._repairPartialTail(file);
-    this._rotate(file);
     fs.appendFileSync(file,`${JSON.stringify({...snapshot,recordedAt:snapshot.recordedAt||Date.now()})}\n`);
+    this._rotate(file);
     this._enforceRetention(file);
     return true;
   }
