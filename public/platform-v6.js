@@ -1,7 +1,7 @@
 'use strict';
 
 window.addEventListener('DOMContentLoaded',()=>{
-  for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1','/device-inventory-v62.css?v=20260914-1','/discovery-v63.css?v=20260914-1','/intelligence-v7.css?v=20260914-1']){
+  for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1','/device-inventory-v62.css?v=20260914-1','/discovery-v63.css?v=20260915-1','/active-discovery-v7.css?v=20260915-1','/intelligence-v7.css?v=20260914-1']){
     if(document.querySelector(`link[href="${href}"]`))continue;
     const link=document.createElement('link');link.rel='stylesheet';link.href=href;document.head.appendChild(link);
   }
@@ -27,11 +27,16 @@ window.addEventListener('DOMContentLoaded',()=>{
             tcpInterfaces.src='/tcp-interface-v62.js?v=20260914-1';
             tcpInterfaces.onload=()=>{
               const discovery=document.createElement('script');
-              discovery.src='/discovery-v63.js?v=20260914-1';
+              discovery.src='/discovery-v63.js?v=20260915-1';
               discovery.onload=()=>{
-                const intelligence=document.createElement('script');
-                intelligence.src='/intelligence-v7.js?v=20260914-1';
-                document.body.appendChild(intelligence);
+                const activeDiscovery=document.createElement('script');
+                activeDiscovery.src='/active-discovery-v7.js?v=20260915-1';
+                activeDiscovery.onload=()=>{
+                  const intelligence=document.createElement('script');
+                  intelligence.src='/intelligence-v7.js?v=20260914-1';
+                  document.body.appendChild(intelligence);
+                };
+                document.body.appendChild(activeDiscovery);
               };
               document.body.appendChild(discovery);
             };
