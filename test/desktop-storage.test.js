@@ -41,3 +41,12 @@ test('desktop storage never merges legacy data into an existing user workspace',
   assert.equal(out.migrated,false);
   assert.equal(fs.readFileSync(path.join(dest,'workspaces.json'),'utf8'),'current');
 });
+
+test('desktop launcher starts the v7 backend and never falls back to v6',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','desktop','main.js'),'utf8');
+  assert.match(source,/src['"],\s*['"]index-v7\.js/);
+  assert.doesNotMatch(source,/src['"],\s*['"]index-v6\.js/);
+  assert.match(source,/--data-dir/);
+  assert.match(source,/requestSingleInstanceLock/);
+  assert.match(source,/listen\(0,\s*['"]127\.0\.0\.1['"]/);
+});
