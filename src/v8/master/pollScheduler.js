@@ -1,7 +1,16 @@
 'use strict';
 
 const { EventEmitter } = require('node:events');
+const protocol = require('../protocol');
 const { createWorkbenchEvent } = require('../events');
+
+const SAFE_POLL_FUNCTIONS = new Set([
+  protocol.FC.READ_COILS,
+  protocol.FC.READ_DISCRETE_INPUTS,
+  protocol.FC.READ_HOLDING_REGISTERS,
+  protocol.FC.READ_INPUT_REGISTERS,
+  protocol.FC.ENCAPSULATED_INTERFACE,
+]);
 
 class PollSchedulerError extends Error {
   constructor(code, message, details = {}) {
@@ -21,9 +30,15 @@ function positiveNumber(value, field, { allowZero = false } = {}) {
 function normalizeJob(input, now = Date.now()) {
   if (!input || typeof input !== 'object') throw new PollSchedulerError('INVALID_JOB', 'job must be an object');
   if (typeof input.jobId !== 'string' || !input.jobId.trim()) throw new PollSchedulerError('INVALID_JOB', 'jobId is required');
-  if (!Number.isInteger(input.unitId) || input.unitId < 0 || input.unitId > 247) throw new PollSchedulerError('INVALID_JOB', 'unitId must be 0..247');
+  if (!Number.isInteger(input.unitId) || input.unitId < 0 || input.unitId > 255) throw new PollSchedulerError('INVALID_JOB', 'unitId must be 0..255');
   const pdu = Buffer.from(input.pdu ?? []);
   if (!pdu.length) throw new PollSchedulerError('INVALID_JOB', 'pdu is required');
+  protocol.validatePdu(pdu);
+  if (!SAFE_POLL_FUNCTIONS.has(pdu[0])) {
+    throw new PollSchedulerError('UNSAFE_POLL_FUNCTION', 'Cyclic poll jobs are read-only and only support FC01/02/03/04/43. Use the guarded write/Test workflow for active writes or custom frames.', {
+      functionCode: pdu[0],
+    });
+  }
   const intervalMs = positiveNumber(input.intervalMs ?? 1000, 'intervalMs');
   const timeoutMs = positiveNumber(input.timeoutMs ?? 1000, 'timeoutMs');
   const retries = input.retries ?? 0;
@@ -113,6 +128,7 @@ class PollScheduler extends EventEmitter {
 
   addJob(options) {
     const job = normalizeJob(options, this.clock());
+    this._validateTransportJob(job);
     if (this.jobs.has(job.jobId)) throw new PollSchedulerError('JOB_EXISTS', `Poll job ${job.jobId} already exists`, { jobId: job.jobId });
     job.sequence = this.sequence++;
     this.jobs.set(job.jobId, job);
@@ -131,6 +147,7 @@ class PollScheduler extends EventEmitter {
       pdu: patch.pdu ?? current.pdu,
       metadata: patch.metadata ?? current.metadata,
     }, this.clock());
+    this._validateTransportJob(merged);
     merged.stats = current.stats;
     merged.sequence = current.sequence;
     merged.lastStartedAt = current.lastStartedAt;
@@ -302,6 +319,17 @@ class PollScheduler extends EventEmitter {
     }
   }
 
+  _validateTransportJob(job) {
+    if (['rtu', 'ascii'].includes(this.master.framing)) {
+      if (job.unitId < 1 || job.unitId > 247) {
+        throw new PollSchedulerError('INVALID_SERIAL_POLL_UNIT', 'Cyclic RTU/ASCII poll jobs require a unicast Unit/Slave ID from 1..247', {
+          unitId: job.unitId,
+          framing: this.master.framing,
+        });
+      }
+    }
+  }
+
   _get(jobId) {
     const job = this.jobs.get(jobId);
     if (!job) throw new PollSchedulerError('JOB_NOT_FOUND', `Unknown poll job ${jobId}`, { jobId });
@@ -337,6 +365,7 @@ class PollScheduler extends EventEmitter {
 }
 
 module.exports = {
+  SAFE_POLL_FUNCTIONS,
   PollScheduler,
   PollSchedulerError,
   normalizeJob,
