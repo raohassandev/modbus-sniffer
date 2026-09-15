@@ -10,6 +10,8 @@ on:
       - 'public/**'
       - 'config/**'
       - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/version-sync.js'
       - '.github/workflows/desktop-windows.yml'
 
 jobs:
@@ -20,10 +22,72 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
-      - run: npm --prefix desktop install
-      - run: npm --prefix desktop run dist:win
+          cache: npm
+      - name: Verify release versions
+        run: node scripts/version-sync.js
+      - name: Install backend runtime dependencies only
+        run: npm ci --omit=dev
+      - name: Audit backend runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Install desktop build dependencies
+        run: npm --prefix desktop ci
+      - name: Build NSIS installer
+        run: npm --prefix desktop run dist:win
+      - name: Smoke launch packaged application and v7 backend
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "desktop/dist/win-unpacked" -Filter "*.exe" -File |
+            Where-Object { $_.Name -notmatch '^Uninstall' } |
+            Select-Object -First 1
+          if (-not $exe) { throw "Packaged application executable was not found." }
+
+          $env:MODBUS_DESKTOP_PORT = "18787"
+          $env:ELECTRON_DISABLE_SECURITY_WARNINGS = "true"
+          $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--disable-gpu" -PassThru
+          $ready = $false
+          try {
+            for ($i = 0; $i -lt 45; $i++) {
+              Start-Sleep -Milliseconds 500
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:18787/api/status" -UseBasicParsing -TimeoutSec 2
+                if ($response.StatusCode -eq 200) { $ready = $true; break }
+              } catch {}
+            }
+            if (-not $ready) { throw "Packaged desktop app did not expose the v7 backend health endpoint." }
+          } finally {
+            if ($proc -and -not $proc.HasExited) {
+              & taskkill /PID $proc.Id /T /F | Out-Null
+            }
+          }
+      - name: Write release provenance and SHA-256 checksums
+        shell: pwsh
+        run: |
+          $rootVersion = node -p "require('./package.json').version"
+          $desktopVersion = node -p "require('./desktop/package.json').version"
+          @(
+            "product=Modbus Engineering Analyzer",
+            "root_version=$rootVersion",
+            "desktop_version=$desktopVersion",
+            "commit=$env:GITHUB_SHA",
+            "workflow=$env:GITHUB_WORKFLOW",
+            "run_id=$env:GITHUB_RUN_ID",
+            "run_number=$env:GITHUB_RUN_NUMBER",
+            "runner_os=$env:RUNNER_OS",
+            "node=$(node --version)",
+            "npm=$(npm --version)",
+            "generated_utc=$([DateTime]::UtcNow.ToString('o'))"
+          ) | Set-Content "desktop/dist/BUILD-PROVENANCE.txt" -Encoding utf8
+
+          $lines = Get-ChildItem "desktop/dist" -File |
+            Where-Object { $_.Name -ne 'SHA256SUMS.txt' } |
+            Sort-Object Name |
+            ForEach-Object {
+              $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              "$hash  $($_.Name)"
+            }
+          $lines | Set-Content "desktop/dist/SHA256SUMS.txt" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
           name: modbus-engineering-analyzer-windows
           path: desktop/dist/*
+          if-no-files-found: error
