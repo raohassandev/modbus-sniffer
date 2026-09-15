@@ -50,7 +50,7 @@ test('XLSX export contains transport-aware channel discovery and adoption sheets
   const devices=wb.getWorksheet('Devices');
   assert.deepEqual(devices.getRow(1).values.slice(1,6),['Transport','Channel','Endpoint','Device Key','Unit/Slave ID']);
   assert.equal(devices.getRow(2).getCell(1).value,'TCP');assert.equal(devices.getRow(2).getCell(2).value,'tcp:proxy:b');assert.equal(devices.getRow(2).getCell(4).value,'tcp:proxy:b|1');
-  const discovery=wb.getWorksheet('Discovery');assert.equal(discovery.getRow(2).getCell(9).value,'ACME');
+  const discovery=wb.getWorksheet('Discovery');assert.equal(discovery.getRow(2).getCell(10).value,'ACME');
   const audit=wb.getWorksheet('Adoption Audit');assert.equal(audit.getRow(2).getCell(5).value,'tcp:proxy:b');
 });
 
