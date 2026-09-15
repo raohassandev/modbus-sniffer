@@ -37,6 +37,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node --check src/index-v7.js
+      - run: node --check src/index-v8-dev.js
       - run: node --check src/intelligenceV7.js
       - run: node --check src/platformRuntimeStateV7.js
       - run: node --check src/index-v6.js
@@ -71,6 +72,7 @@ jobs:
       - run: node --check public/active-discovery-v7.js
       - run: node --check public/intelligence-v7.js
       - run: node --check public/export-v6.js
+      - run: node --check public/v8/app.js
       - run: node --check desktop/main.js
       - run: node --check desktop/storage.js
       - run: node --check scripts/smoke.js
