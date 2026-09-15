@@ -6,8 +6,23 @@ on:
   pull_request:
 
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run version:check
+      - run: npm run lint
+      - name: Runtime dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         node: [20, 22, 24]
@@ -17,7 +32,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: npm install
+          cache: npm
+      - run: npm ci
       - run: node --check src/index-v7.js
       - run: node --check src/intelligenceV7.js
       - run: node --check src/platformRuntimeStateV7.js
@@ -56,6 +72,7 @@ jobs:
       - run: node --check desktop/storage.js
       - run: node --check scripts/smoke.js
       - run: node --check scripts/discover.js
+      - run: node --check scripts/version-sync.js
       - run: node --check playwright.config.js
       - run: npm test
       - run: npm run smoke
@@ -68,6 +85,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+          cache: npm
+      - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
