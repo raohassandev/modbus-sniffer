@@ -1,9 +1,15 @@
 'use strict';
 
 const {ActiveDiscoveryManager}=require('./activeDiscoveryManager');
+const {previewDiscoveryAdoption,adoptDiscoveryIdentification}=require('./discoveryAdoption');
 
 const SAFE_RTU_DISCOVERY_STATES=new Set(['idle','closed','capture']);
 function httpStatus(error){return ['DISCOVERY_BUSY','RTU_DISCOVERY_PASSIVE_CAPTURE_ACTIVE'].includes(error?.code)?409:400;}
+function adoptionStatus(error){
+  if(['DISCOVERY_RUN_NOT_FOUND','DISCOVERY_RESULT_NOT_FOUND','DISCOVERY_PROJECT_NOT_FOUND','DISCOVERY_CHANNEL_NOT_FOUND'].includes(error?.code))return 404;
+  if(['DISCOVERY_ADOPTION_CONFLICT','DISCOVERY_TRANSPORT_MISMATCH'].includes(error?.code))return 409;
+  return 400;
+}
 function bool(v){return v===true;}
 function n(v,d){const x=Number(v);return Number.isFinite(x)?x:d;}
 
@@ -52,9 +58,19 @@ function installActiveDiscoveryRoutes({app,state,demo=false,broadcast=()=>{},wor
   app.get('/api/discovery/runs',(_q,r)=>{try{if(!workspaces)return r.json([]);const projectId=activeProjectId();r.json(projectId?workspaces.listDiscoveryRuns(projectId):[]);}catch(e){r.status(400).json({error:e.message,code:e.code||null});}});
   app.get('/api/discovery/runs/:id',(q,r)=>{try{if(!workspaces)return r.status(404).json({error:'Discovery evidence storage is unavailable.'});const projectId=activeProjectId(),run=projectId?workspaces.getDiscoveryRun(projectId,q.params.id):null;if(!run)return r.status(404).json({error:'Discovery run not found.'});r.json(run);}catch(e){r.status(400).json({error:e.message,code:e.code||null});}});
   app.get('/api/discovery/runs/:id/export.json',(q,r)=>{try{if(!workspaces)return r.status(404).json({error:'Discovery evidence storage is unavailable.'});const projectId=activeProjectId(),run=projectId?workspaces.getDiscoveryRun(projectId,q.params.id):null;if(!run)return r.status(404).json({error:'Discovery run not found.'});r.setHeader('Content-Disposition',`attachment; filename="modbus-discovery-${String(run.id).replace(/[^a-z0-9._-]/gi,'_')}.json"`);r.json(run);}catch(e){r.status(400).json({error:e.message,code:e.code||null});}});
+  app.post('/api/discovery/runs/:id/adopt',(q,r)=>{
+    try{
+      if(!workspaces)return r.status(404).json({error:'Project workspace is unavailable.',code:'DISCOVERY_WORKSPACE_UNAVAILABLE'});
+      const projectId=activeProjectId();if(!projectId)return r.status(404).json({error:'No active project.',code:'DISCOVERY_PROJECT_NOT_FOUND'});
+      const body=q.body||{},args={workspaces,projectId,runId:q.params.id,unitId:body.unitId,channelId:body.channelId};
+      if(body.preview===true)return r.json(previewDiscoveryAdoption(args));
+      const out=adoptDiscoveryIdentification({...args,overwriteExisting:body.overwriteExisting===true});
+      broadcast('workspace',{project:workspaces.getActiveProject()});broadcast('discovery-adoption',{projectId,runId:q.params.id,deviceKey:out.device.deviceKey,adoption:out.adoption});r.json(out);
+    }catch(e){r.status(adoptionStatus(e)).json({error:e.message,code:e.code||null,conflicts:e.conflicts||undefined,preview:e.preview||undefined});}
+  });
   app.delete('/api/discovery/runs/:id',(q,r)=>{try{if(!workspaces)return r.status(404).json({error:'Discovery evidence storage is unavailable.'});const projectId=activeProjectId(),ok=projectId?workspaces.deleteDiscoveryRun(projectId,q.params.id):false;r.json({ok});}catch(e){r.status(400).json({error:e.message,code:e.code||null});}});
 
   return manager;
 }
 
-module.exports={installActiveDiscoveryRoutes,SAFE_RTU_DISCOVERY_STATES,httpStatus};
+module.exports={installActiveDiscoveryRoutes,SAFE_RTU_DISCOVERY_STATES,httpStatus,adoptionStatus};
