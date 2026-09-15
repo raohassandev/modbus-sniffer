@@ -12,7 +12,11 @@ class FrameExtractor extends EventEmitter {
     const parityBits = parity === 'none' ? 0 : 1;
     const bitsPerChar = 1 + dataBits + parityBits + stopBits;
     this.charTimeMs = (bitsPerChar * 1000) / baudRate;
-    this.gapMs = Math.max(1, Math.ceil(this.charTimeMs * 3.5));
+    // JavaScript timers cannot reliably schedule the sub-millisecond 3.5-char gap used
+    // at high baud rates. Keep the exact calculated value for diagnostics while using
+    // the smallest practical host timer for framing fallback.
+    this.protocolGapMs = this.charTimeMs * 3.5;
+    this.gapMs = Math.max(1, Math.ceil(this.protocolGapMs));
   }
 
   push(chunk, timestamp = Date.now()) {
@@ -59,26 +63,40 @@ class FrameExtractor extends EventEmitter {
           if (byteCount <= 250 && (fc <= 2 || byteCount % 2 === 0)) lengths.add(5 + byteCount);
         }
         break;
-      case 5: case 6: case 8: lengths.add(8); break;
+      case 5: case 6: lengths.add(8); break;
       case 7: lengths.add(4); lengths.add(5); break;
+      case 8:
+        lengths.add(8);
+        // Most diagnostics are 8-byte RTU frames, but Return Query Data and vendor
+        // diagnostic subfunctions may carry additional data. Wait until the observed
+        // silent gap instead of discarding a valid longer FC08 frame as noise.
+        if(buf.length>=8&&buf.length<256)lengths.add(buf.length+1);
+        break;
       case 11: lengths.add(4); lengths.add(8); break;
       case 12: case 17:
         lengths.add(4); if (buf.length >= 3 && buf[2] <= 250) lengths.add(5 + buf[2]); break;
       case 15: case 16:
         lengths.add(8); if (buf.length >= 7 && buf[6] <= 246) lengths.add(9 + buf[6]); break;
+      case 20: case 21:
+        if(buf.length>=3&&buf[2]>=3&&buf[2]<=251)lengths.add(5+buf[2]);
+        break;
       case 22: lengths.add(10); break;
       case 23:
         if (buf.length >= 3 && buf[2] <= 250) lengths.add(5 + buf[2]);
         if (buf.length >= 11 && buf[10] <= 242) lengths.add(13 + buf[10]);
+        break;
+      case 24:
+        lengths.add(6); // request: FIFO pointer address
+        if(buf.length>=4){
+          const byteCount=buf.readUInt16BE(2);
+          if(byteCount>=2&&byteCount<=64&&byteCount%2===0)lengths.add(6+byteCount);
+        }
         break;
       case 43: {
         if(buf.length>=3&&buf[2]===0x0E){
           lengths.add(7); // request length
           const responseLength=this._fc43ResponseLength(buf);
           if(responseLength&&responseLength<=256)lengths.add(responseLength);
-          // A response is variable-length. Until all declared TLV objects are present,
-          // keep one future candidate so streaming extraction waits instead of treating
-          // the first response byte as noise merely because the 7-byte request CRC fails.
           else if(buf.length>=8&&buf.length<256)lengths.add(buf.length+1);
         }
         break;
