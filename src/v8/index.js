@@ -23,4 +23,5 @@ module.exports = Object.freeze({
   ...require('./slave/virtualDevice'),
   ...require('./slave/virtualSlaveServer'),
   ...require('./project'),
+  ...require('./app'),
 });
