@@ -10,7 +10,15 @@ const WRITE_FUNCTIONS = new Set([
   protocol.FC.WRITE_SINGLE_REGISTER,
   protocol.FC.WRITE_MULTIPLE_COILS,
   protocol.FC.WRITE_MULTIPLE_REGISTERS,
+  protocol.FC.MASK_WRITE_REGISTER,
   protocol.FC.READ_WRITE_MULTIPLE_REGISTERS,
+]);
+
+const SERIAL_BROADCAST_WRITE_FUNCTIONS = new Set([
+  protocol.FC.WRITE_SINGLE_COIL,
+  protocol.FC.WRITE_SINGLE_REGISTER,
+  protocol.FC.WRITE_MULTIPLE_COILS,
+  protocol.FC.WRITE_MULTIPLE_REGISTERS,
 ]);
 
 class MasterRequestError extends Error {
@@ -91,11 +99,20 @@ class MasterEngine extends EventEmitter {
   async _request({ unitId, pdu, timeoutMs = this.timeoutMs, signal = null }) {
     const normalizedPdu = protocol.validatePdu(pdu);
     protocol.validateUnitId(unitId);
+    if ((this.framing === 'rtu' || this.framing === 'ascii') && unitId > 247) {
+      throw new MasterRequestError('INVALID_SERIAL_UNIT_ID', 'Serial Modbus Unit/Slave ID must be 0..247', {
+        unitId,
+        framing: this.framing,
+      });
+    }
+
     const functionCode = normalizedPdu[0];
     const isWrite = WRITE_FUNCTIONS.has(functionCode);
     const isSerialBroadcast = (this.framing === 'rtu' || this.framing === 'ascii') && unitId === 0;
-    if (isSerialBroadcast && !isWrite) {
-      throw new MasterRequestError('INVALID_BROADCAST', 'Serial Unit 0 broadcast is only valid for supported write requests', { functionCode });
+    if (isSerialBroadcast && !SERIAL_BROADCAST_WRITE_FUNCTIONS.has(functionCode)) {
+      throw new MasterRequestError('INVALID_BROADCAST', 'Serial Unit 0 broadcast is only supported for FC05, FC06, FC15 and FC16 write requests', {
+        functionCode,
+      });
     }
 
     const txContext = this._encodeRequest(unitId, normalizedPdu);
@@ -124,7 +141,7 @@ class MasterEngine extends EventEmitter {
     let responseRaw;
     try {
       const match = this.framing === 'tcp'
-        ? (raw) => Buffer.isBuffer(raw) && raw.length >= 2 && raw.readUInt16BE(0) === txContext.transactionId
+        ? (raw) => Buffer.isBuffer(raw) && raw.length >= 7 && raw.readUInt16BE(0) === txContext.transactionId && raw[6] === unitId
         : null;
       responseRaw = await this.broker.receive(this.connectionId, { ownerId: this.ownerId, timeoutMs, signal, match });
     } catch (error) {
@@ -134,14 +151,45 @@ class MasterEngine extends EventEmitter {
         error: error.message,
         transactionId: txContext.transactionId ?? null,
       });
-      if (isTimeout) throw new MasterRequestError('TIMEOUT', `No Modbus response within ${timeoutMs} ms`, { timeoutMs, unitId, functionCode, transactionId: txContext.transactionId ?? null });
+      if (isTimeout) {
+        throw new MasterRequestError('TIMEOUT', `No Modbus response within ${timeoutMs} ms`, {
+          timeoutMs,
+          unitId,
+          functionCode,
+          transactionId: txContext.transactionId ?? null,
+          requestRaw: Buffer.from(txContext.raw),
+        });
+      }
+      if (error && typeof error === 'object') {
+        error.details = { ...(error.details || {}), requestRaw: Buffer.from(txContext.raw) };
+      }
       throw error;
     }
 
     const elapsed = Number(process.hrtime.bigint() - started) / 1e6;
-    const response = this._decodeResponse(responseRaw);
-    this._verifyResponse({ requestUnitId: unitId, requestFunctionCode: functionCode, txContext, response });
-    const decoded = this._decodeResponsePdu(normalizedPdu, response.pdu);
+    let response;
+    let decoded;
+    try {
+      response = this._decodeResponse(responseRaw);
+      this._verifyResponse({ requestUnitId: unitId, requestFunctionCode: functionCode, txContext, response });
+      decoded = this._decodeResponsePdu(normalizedPdu, response.pdu);
+    } catch (error) {
+      const evidence = {
+        requestRaw: Buffer.from(txContext.raw),
+        responseRaw: Buffer.from(responseRaw),
+        rttMs: elapsed,
+        transactionId: txContext.transactionId ?? null,
+      };
+      if (error instanceof MasterRequestError) {
+        error.details = { ...error.details, ...evidence };
+        throw error;
+      }
+      throw new MasterRequestError('INVALID_RESPONSE', String(error?.message || error), {
+        causeCode: error?.code || null,
+        ...evidence,
+      });
+    }
+
     this._emit('traffic.rx', response.unitId, response.pdu[0], responseRaw, {
       framing: this.framing,
       transactionId: response.transactionId ?? null,
@@ -153,6 +201,7 @@ class MasterEngine extends EventEmitter {
       const exception = protocol.decodeExceptionPdu(response.pdu);
       throw new MasterRequestError('MODBUS_EXCEPTION', `Modbus exception ${exception.exceptionCode}`, {
         ...exception,
+        requestRaw: Buffer.from(txContext.raw),
         responseRaw: Buffer.from(responseRaw),
         rttMs: elapsed,
         transactionId: response.transactionId ?? null,
@@ -232,6 +281,8 @@ class MasterEngine extends EventEmitter {
       case protocol.FC.WRITE_MULTIPLE_COILS:
       case protocol.FC.WRITE_MULTIPLE_REGISTERS:
         return protocol.decodeWriteMultipleResponse(responsePdu);
+      case protocol.FC.MASK_WRITE_REGISTER:
+        return protocol.decodeMaskWriteRegisterRequest(responsePdu);
       case protocol.FC.READ_WRITE_MULTIPLE_REGISTERS: {
         const request = protocol.decodeReadWriteMultipleRegistersRequest(requestPdu);
         return protocol.decodeReadRegistersResponse(responsePdu, { expectedQuantity: request.readQuantity });
@@ -260,6 +311,7 @@ class MasterEngine extends EventEmitter {
 
 module.exports = {
   WRITE_FUNCTIONS,
+  SERIAL_BROADCAST_WRITE_FUNCTIONS,
   MasterEngine,
   MasterRequestError,
 };

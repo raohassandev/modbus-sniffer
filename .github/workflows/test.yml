@@ -17,6 +17,7 @@ jobs:
       - run: npm ci
       - run: npm run version:check
       - run: npm run lint
+      - run: npm run check:v8
       - run: node scripts/benchmark-v7.js --cycles 25000 --min-fps 500 --max-heap-mb 384
       - name: Runtime dependency audit
         run: npm audit --omit=dev --audit-level=high
@@ -59,6 +60,7 @@ jobs:
       - run: node --check src/modbus/tcpTransactionTracker.js
       - run: node --check src/deepDiagnostics.js
       - run: node --check src/reportGenerator.js
+      - run: npm run check:v8
       - run: node --check public/app-v4.js
       - run: node --check public/platform-v6.js
       - run: node --check public/platform-v6-main.js
@@ -74,6 +76,7 @@ jobs:
       - run: node --check scripts/smoke.js
       - run: node --check scripts/discover.js
       - run: node --check scripts/version-sync.js
+      - run: node --check scripts/check-v8-syntax.js
       - run: node --check scripts/benchmark-v7.js
       - run: node --check playwright.config.js
       - run: npm test

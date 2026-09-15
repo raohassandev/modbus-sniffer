@@ -69,6 +69,20 @@ function describeWritePdu(pdu) {
       const decoded = protocol.decodeWriteMultipleRequest(raw);
       return { functionCode: raw[0], area: 'holdingRegisters', address: decoded.address, quantity: decoded.quantity, values: [...decoded.values], bulk: true };
     }
+    case protocol.FC.MASK_WRITE_REGISTER: {
+      const decoded = protocol.decodeMaskWriteRegisterRequest(raw);
+      return {
+        functionCode: raw[0],
+        area: 'holdingRegisters',
+        address: decoded.address,
+        quantity: 1,
+        values: null,
+        bulk: false,
+        maskWrite: true,
+        andMask: decoded.andMask,
+        orMask: decoded.orMask,
+      };
+    }
     case protocol.FC.READ_WRITE_MULTIPLE_REGISTERS: {
       const decoded = protocol.decodeReadWriteMultipleRegistersRequest(raw);
       return {
@@ -93,6 +107,16 @@ function readPduForDescriptor(descriptor) {
     address: descriptor.address,
     quantity: descriptor.quantity,
   });
+}
+
+function maskWriteResult(current, andMask, orMask) {
+  return ((current & andMask) | (orMask & (~andMask & 0xFFFF))) & 0xFFFF;
+}
+
+function expectedWriteValues(descriptor, oldValues) {
+  if (!descriptor.maskWrite) return [...descriptor.values];
+  if (!Array.isArray(oldValues) || oldValues.length !== 1) return null;
+  return [maskWriteResult(Number(oldValues[0]), descriptor.andMask, descriptor.orMask)];
 }
 
 function valuesEqual(expected, actual) {
@@ -154,31 +178,37 @@ class WriteSafetyController extends EventEmitter {
     this._validateConfirmation({ unitId, descriptor, confirmation });
     const startedAt = Date.now();
     let oldValues = null;
+    let expectedValues = descriptor.values ? [...descriptor.values] : null;
     let writeResult = null;
     let verification = null;
     let failure = null;
 
     try {
-      if (captureOldValue && unitId !== 0) {
+      const needsOldValue = unitId !== 0 && (captureOldValue || (descriptor.maskWrite && readBack));
+      if (needsOldValue) {
         const oldResult = await this.master.request({ unitId, pdu: readPduForDescriptor(descriptor) });
         oldValues = [...(oldResult.decoded?.values || [])];
+        expectedValues = expectedWriteValues(descriptor, oldValues);
       }
 
       writeResult = await this.master.request({ unitId, pdu });
 
       if (readBack && unitId !== 0) {
+        if (!expectedValues) {
+          throw new WriteSafetyError('READBACK_EXPECTATION_UNAVAILABLE', 'Read-back verification requires the pre-write value for this write operation');
+        }
         const verifyResult = await this.master.request({ unitId, pdu: readPduForDescriptor(descriptor) });
         const actualValues = [...(verifyResult.decoded?.values || [])];
         verification = {
           requested: true,
-          matched: valuesEqual(descriptor.values, actualValues),
-          expectedValues: [...descriptor.values],
+          matched: valuesEqual(expectedValues, actualValues),
+          expectedValues: [...expectedValues],
           actualValues,
           responseRawHex: verifyResult.responseRaw?.toString('hex').toUpperCase() || null,
         };
         if (!verification.matched) {
           throw new WriteSafetyError('READBACK_MISMATCH', 'Read-back verification does not match the requested write', {
-            expectedValues: descriptor.values,
+            expectedValues,
             actualValues,
           });
         }
@@ -199,11 +229,16 @@ class WriteSafetyController extends EventEmitter {
         area: descriptor.area,
         address: descriptor.address,
         quantity: descriptor.quantity,
-        requestedValues: [...descriptor.values],
+        requestedValues: expectedValues ? [...expectedValues] : null,
+        maskWrite: descriptor.maskWrite ? { andMask: descriptor.andMask, orMask: descriptor.orMask } : null,
         oldValues,
         pduHex: Buffer.from(pdu).toString('hex').toUpperCase(),
-        requestRawHex: writeResult?.requestRaw?.toString('hex').toUpperCase() || null,
-        responseRawHex: writeResult?.responseRaw?.toString('hex').toUpperCase() || failure?.details?.responseRaw?.toString?.('hex')?.toUpperCase?.() || null,
+        requestRawHex: writeResult?.requestRaw?.toString('hex').toUpperCase()
+          || failure?.details?.requestRaw?.toString?.('hex')?.toUpperCase?.()
+          || null,
+        responseRawHex: writeResult?.responseRaw?.toString('hex').toUpperCase()
+          || failure?.details?.responseRaw?.toString?.('hex')?.toUpperCase?.()
+          || null,
         verification,
         result: failure ? 'failed' : 'success',
         error: failure ? { code: failure.code || null, message: String(failure.message || failure) } : null,
@@ -247,4 +282,6 @@ module.exports = {
   WriteSafetyError,
   describeWritePdu,
   readPduForDescriptor,
+  maskWriteResult,
+  expectedWriteValues,
 };

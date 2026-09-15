@@ -40,11 +40,26 @@ function ensureNonEmptyString(value, field) {
   return value.trim();
 }
 
+function sanitizeAuditRoute(route) {
+  if (!route || typeof route !== 'object' || Array.isArray(route)) return null;
+  const safe = {};
+  for (const [key, value] of Object.entries(route)) {
+    if (value == null || ['string', 'number', 'boolean'].includes(typeof value)) safe[key] = value;
+  }
+  return Object.keys(safe).length ? Object.freeze(safe) : null;
+}
+
 class ConnectionBroker extends EventEmitter {
-  constructor() {
+  constructor({ maxTransmissionAuditEntries = 10000 } = {}) {
     super();
+    if (!Number.isInteger(maxTransmissionAuditEntries) || maxTransmissionAuditEntries < 1) {
+      throw new TypeError('maxTransmissionAuditEntries must be a positive integer');
+    }
     this.connections = new Map();
     this.resourceClaims = new Map();
+    this.maxTransmissionAuditEntries = maxTransmissionAuditEntries;
+    this.transmissionAudit = [];
+    this.transmissionAuditSequence = 0;
   }
 
   defineConnection({
@@ -174,6 +189,9 @@ class ConnectionBroker extends EventEmitter {
       throw new ConnectionBrokerError('INVALID_STATE', `Cannot open connection from state ${entry.state}`, { connectionId, state: entry.state });
     }
 
+    // A live/reopened connection always starts disarmed, even when ownership was acquired earlier.
+    entry.writeLock = 'LOCKED';
+    entry.faultInjectionEnabled = false;
     entry.state = 'opening';
     entry.lastError = null;
     this._emitState('connection.opening', entry);
@@ -186,6 +204,8 @@ class ConnectionBroker extends EventEmitter {
       return this.getConnection(connectionId);
     } catch (error) {
       entry.state = 'error';
+      entry.writeLock = 'LOCKED';
+      entry.faultInjectionEnabled = false;
       entry.lastError = String(error?.message || error);
       this._emitState('connection.error', entry, { error: entry.lastError });
       throw error;
@@ -199,6 +219,8 @@ class ConnectionBroker extends EventEmitter {
     }
     if (entry.state === 'defined' || entry.state === 'closed') {
       entry.state = 'closed';
+      entry.writeLock = 'LOCKED';
+      entry.faultInjectionEnabled = false;
       return this.getConnection(connectionId);
     }
     if (entry.state !== 'open' && entry.state !== 'error') {
@@ -206,6 +228,8 @@ class ConnectionBroker extends EventEmitter {
     }
 
     entry.state = 'closing';
+    entry.writeLock = 'LOCKED';
+    entry.faultInjectionEnabled = false;
     this._emitState('connection.closing', entry);
     try {
       if (typeof entry.transport?.close === 'function') await entry.transport.close();
@@ -227,6 +251,13 @@ class ConnectionBroker extends EventEmitter {
       throw new ConnectionBrokerError('WRITE_NOT_ALLOWED', `Owner mode ${entry.owner.ownerMode} cannot arm writes`, {
         connectionId,
         ownerMode: entry.owner.ownerMode,
+      });
+    }
+    if (enabled && (entry.state !== 'open' || !this._transportReady(entry))) {
+      throw new ConnectionBrokerError('CONNECTION_NOT_OPEN', 'Writes can only be enabled while the live connection is open', {
+        connectionId,
+        state: entry.state,
+        transportState: entry.transportState,
       });
     }
     entry.writeLock = enabled ? 'ENABLED' : 'LOCKED';
@@ -255,6 +286,9 @@ class ConnectionBroker extends EventEmitter {
     const payload = Buffer.from(bytes ?? []);
     if (!payload.length) throw new ConnectionBrokerError('EMPTY_PAYLOAD', 'Cannot transmit an empty payload', { connectionId });
     await entry.transport.send(payload, { route, intent });
+    if (intent === 'write' || intent === 'raw' || entry.owner.ownerMode === 'test') {
+      this._appendTransmissionAudit(entry, { payload, intent, route });
+    }
     return payload.length;
   }
 
@@ -293,6 +327,50 @@ class ConnectionBroker extends EventEmitter {
 
   listConnections() {
     return [...this.connections.keys()].map((id) => this.getConnection(id));
+  }
+
+  getTransmissionAudit({ limit = this.maxTransmissionAuditEntries, connectionId = null } = {}) {
+    const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, this.maxTransmissionAuditEntries) : this.maxTransmissionAuditEntries;
+    const filtered = connectionId == null
+      ? this.transmissionAudit
+      : this.transmissionAudit.filter((entry) => entry.connectionId === connectionId);
+    return Object.freeze(filtered.slice(-safeLimit));
+  }
+
+  _appendTransmissionAudit(entry, { payload, intent, route }) {
+    const record = Object.freeze({
+      auditId: `tx-${++this.transmissionAuditSequence}`,
+      timestamp: Date.now(),
+      connectionId: entry.connectionId,
+      resourceKey: entry.resourceKey,
+      transportKind: entry.transportKind,
+      ownerMode: entry.owner?.ownerMode || null,
+      ownerId: entry.owner?.ownerId || null,
+      intent,
+      byteLength: payload.length,
+      rawHex: payload.toString('hex').toUpperCase(),
+      route: sanitizeAuditRoute(route),
+    });
+    this.transmissionAudit.push(record);
+    if (this.transmissionAudit.length > this.maxTransmissionAuditEntries) {
+      this.transmissionAudit.splice(0, this.transmissionAudit.length - this.maxTransmissionAuditEntries);
+    }
+    this.emit('transmission-audit', record);
+    this.emit('event', createWorkbenchEvent({
+      type: 'connection.transmit-audit',
+      source: 'connection-broker',
+      connectionId: entry.connectionId,
+      ownerMode: entry.owner?.ownerMode ?? null,
+      direction: 'tx',
+      raw: payload,
+      details: {
+        auditId: record.auditId,
+        intent,
+        ownerId: record.ownerId,
+        transportKind: entry.transportKind,
+      },
+    }));
+    return record;
   }
 
   _assertOwner(entry, ownerId) {

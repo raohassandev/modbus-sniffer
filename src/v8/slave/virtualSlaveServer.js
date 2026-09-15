@@ -10,7 +10,15 @@ const WRITE_FUNCTIONS = new Set([
   protocol.FC.WRITE_SINGLE_REGISTER,
   protocol.FC.WRITE_MULTIPLE_COILS,
   protocol.FC.WRITE_MULTIPLE_REGISTERS,
+  protocol.FC.MASK_WRITE_REGISTER,
   protocol.FC.READ_WRITE_MULTIPLE_REGISTERS,
+]);
+
+const SERIAL_BROADCAST_WRITE_FUNCTIONS = new Set([
+  protocol.FC.WRITE_SINGLE_COIL,
+  protocol.FC.WRITE_SINGLE_REGISTER,
+  protocol.FC.WRITE_MULTIPLE_COILS,
+  protocol.FC.WRITE_MULTIPLE_REGISTERS,
 ]);
 
 class VirtualSlaveServer extends EventEmitter {
@@ -46,6 +54,12 @@ class VirtualSlaveServer extends EventEmitter {
 
   addDevice(deviceOrOptions) {
     const device = deviceOrOptions instanceof VirtualDevice ? deviceOrOptions : new VirtualDevice(deviceOrOptions);
+    if (['rtu', 'ascii'].includes(this.framing) && device.unitId > 247) {
+      throw new VirtualDeviceError('INVALID_SERIAL_UNIT_ID', 'RTU/ASCII virtual Slave Unit ID must be 1..247', 3, {
+        unitId: device.unitId,
+        framing: this.framing,
+      });
+    }
     if (this.devices.has(device.unitId)) throw new Error(`Virtual Unit ${device.unitId} already exists`);
     this.devices.set(device.unitId, device);
     return device;
@@ -156,12 +170,14 @@ class VirtualSlaveServer extends EventEmitter {
       transactionId: request.transactionId ?? null,
     });
 
-    if (this.framing === 'rtu' && request.unitId === 0) {
+    const isSerialBroadcast = (this.framing === 'rtu' || this.framing === 'ascii') && request.unitId === 0;
+    if (isSerialBroadcast) {
       this.stats.broadcasts++;
-      if (WRITE_FUNCTIONS.has(functionCode)) {
+      const supported = SERIAL_BROADCAST_WRITE_FUNCTIONS.has(functionCode);
+      if (supported) {
         for (const device of this.devices.values()) this._processPdu(device, request.pdu, { broadcast: true });
       }
-      this._emitTraffic('slave.broadcast', 0, raw, { functionCode, applied: WRITE_FUNCTIONS.has(functionCode) });
+      this._emitTraffic('slave.broadcast', 0, raw, { functionCode, applied: supported });
       return;
     }
 
@@ -248,6 +264,14 @@ class VirtualSlaveServer extends EventEmitter {
             address: request.address,
             quantity: request.quantity,
           });
+        }
+        case protocol.FC.MASK_WRITE_REGISTER: {
+          if (broadcast) return null;
+          const request = protocol.decodeMaskWriteRegisterRequest(pdu);
+          const current = device.read('holdingRegisters', request.address, 1)[0];
+          const result = ((current & request.andMask) | (request.orMask & (~request.andMask & 0xFFFF))) & 0xFFFF;
+          device.write('holdingRegisters', request.address, [result]);
+          return Buffer.from(pdu);
         }
         case protocol.FC.READ_WRITE_MULTIPLE_REGISTERS: {
           if (broadcast) return null;
@@ -337,5 +361,6 @@ class VirtualSlaveServer extends EventEmitter {
 
 module.exports = {
   WRITE_FUNCTIONS,
+  SERIAL_BROADCAST_WRITE_FUNCTIONS,
   VirtualSlaveServer,
 };
