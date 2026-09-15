@@ -1,6 +1,6 @@
-# Export Results — v6.1
+# Export Results — v7 transport-aware handover
 
-The **Reports** page now has one **Export Results** control with four primary outputs.
+The **Reports** page exposes one **Export Results** control with four primary outputs. Exports are transport-aware: protocol rows carry Transport, Channel, Endpoint, Device Key and Unit/Slave identity where relevant so same-numbered devices on different RTU/TCP channels remain distinguishable in the handover package.
 
 ## Excel Workbook (.xlsx)
 
@@ -9,6 +9,7 @@ The **Reports** page now has one **Export Results** control with four primary ou
 The workbook contains these sheets:
 
 - Summary
+- Channels
 - Devices
 - Polling Groups
 - Registers
@@ -16,27 +17,37 @@ The workbook contains these sheets:
 - Timeouts
 - Exceptions
 - Traffic
+- Discovery
+- Adoption Audit
 - Project History
 
-Each data sheet has a frozen header row and filters. Device names come from the active project, while raw protocol values come from the current capture/runtime state.
+Each data sheet has a frozen header row and filters.
+
+**Channels** records transport, channel ID, mode, endpoint, state and available per-channel health/traffic values.
+
+**Discovery** records saved active-identification evidence including run/job ID, target, Unit/Slave ID, response state, FC43 support, Vendor/Product/Model/Revision, RTT and whether the evidence was adopted.
+
+**Adoption Audit** records the explicit evidence-to-project binding: source discovery run, exact channel, device key, Unit/Slave ID, adoption time, whether existing identification was overwritten, and which fields were overwritten.
+
+Device names and adopted identification come from the active project; raw protocol values come from the current capture/runtime state.
 
 ## Engineering Report (.pdf)
 
 `GET /api/export/report.pdf`
 
-The generated PDF contains project/site/bus information, health summary, diagnostic findings, device statistics, polling groups and engineering values. Very large tables are intentionally truncated in the PDF; the full datasets remain available in Excel and ZIP exports.
+The generated PDF is independent of the browser light/dark theme and contains project/site/bus information, global summary, diagnostic findings, **per-channel transport health**, device statistics, polling groups, engineering values, Discovery evidence and identification-adoption audit records. Very large tables are intentionally truncated in the PDF; the complete datasets remain in Excel/ZIP.
 
 ## Raw Capture (.mbcap)
 
 `GET /api/capture/export.mbcap`
 
-This is the replayable Modbus capture already supported by the analyzer. It includes current project metadata.
+This is the replayable Modbus capture. It includes current project metadata and the transport-aware capture schema used by the runtime.
 
 ## Complete Project Backup (.zip)
 
 `GET /api/export/project.zip`
 
-The ZIP is the recommended handover/archive format. It contains:
+The ZIP is the recommended engineering handover/archive format. Its manifest is version 2 and it contains:
 
 ```text
 manifest.json
@@ -51,28 +62,29 @@ project/
   project.json
   all-workspaces-and-profiles.json
   history.json
+  discovery-evidence.json
+  discovery-adoptions.json
 csv/
+  channels.csv
   devices.csv
   polling-groups.csv
   registers.csv
   engineering-values.csv
   traffic.csv
+  discovery.csv
+  discovery-adoptions.csv
 ```
 
-The archive therefore contains both human-readable results and the data needed to reproduce/review the engineering analysis later.
+The archive therefore contains both human-readable results and the evidence required to review how an FC43 identity was discovered and, when approved by an operator, adopted into an exact project channel/device.
 
 ## Individual exports
 
-The Reports page also keeps individual CSV/JSON exports under **Individual CSV / JSON exports** for quick use:
+The Reports page also retains the individual CSV/JSON exports for quick use. The unified XLSX/PDF/ZIP outputs should be preferred for project handover because they preserve the channel/device identity context.
 
-- Devices CSV
-- Polling Groups CSV
-- Registers CSV
-- Engineering CSV
-- Traffic CSV
-- Workspace JSON
-- Printable HTML report
+## Filename safety
+
+Generated project filenames are normalized for Windows-invalid separators/control characters, Windows reserved names such as `CON`, and excessive length while retaining valid Unicode project text.
 
 ## Validation
 
-The v6.1 smoke test downloads the XLSX, PDF and ZIP endpoints, checks their file signatures and content types, and opens the generated XLSX to verify all expected worksheet names. The normal Windows/Linux CI matrix runs this smoke test automatically.
+Smoke tests download XLSX, PDF and ZIP outputs, verify signatures/content types, open the XLSX with ExcelJS, require all worksheet names above, and verify the leading transport identity columns. Unit tests separately verify Discovery/adoption flattening and filename edge cases. The Windows/Linux CI matrix runs the validation automatically.
