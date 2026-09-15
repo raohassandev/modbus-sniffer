@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { scaleBigIntExact } = require('./engineering');
 
 function wordsToBuffer(words) {
   const b = Buffer.alloc(words.length * 2);
@@ -48,10 +49,12 @@ function decodeMapped(words, type, byteOrder) {
     return b.readFloatBE(0);
   }
 
-  if (type === 'uint64' || type === 'int64') {
+  if (type === 'uint64' || type === 'int64' || type === 'float64') {
     if (words.length < 4) return null;
     const b = reorder(wordsToBuffer(words.slice(0, 4)), byteOrder || 'ABCDEFGH');
-    return type === 'uint64' ? b.readBigUInt64BE(0) : b.readBigInt64BE(0);
+    if(type === 'uint64')return b.readBigUInt64BE(0);
+    if(type === 'int64')return b.readBigInt64BE(0);
+    return b.readDoubleBE(0);
   }
 
   return null;
@@ -82,19 +85,20 @@ class MeterMap {
       if (offset < 0 || offset >= d.words.length) continue;
 
       const t = String(m.type || 'uint16').toLowerCase();
-      const width = ['uint32', 'int32', 'float32'].includes(t) ? 2 : ['uint64', 'int64'].includes(t) ? 4 : 1;
+      const width = ['uint32', 'int32', 'float32'].includes(t) ? 2 : ['uint64', 'int64','float64'].includes(t) ? 4 : 1;
       if (offset + width > d.words.length) continue;
 
       const raw = decodeMapped(d.words.slice(offset, offset + width), t, m.byteOrder);
       if (raw === null) continue;
 
       let value = raw;
-      const scale = m.scale === undefined ? 1 : Number(m.scale);
-      const add = m.offset === undefined ? 0 : Number(m.offset);
+      const scale = m.scale === undefined ? 1 : m.scale;
+      const add = m.offset === undefined ? 0 : m.offset;
       if (typeof raw === 'bigint') {
-        value = (scale === 1 && add === 0) ? raw.toString() : Number(raw) * scale + add;
+        value = scaleBigIntExact(raw, scale, add);
       } else {
-        value = raw * scale + add;
+        const sn=Number(scale),on=Number(add);
+        value = raw * (Number.isFinite(sn)?sn:1) + (Number.isFinite(on)?on:0);
       }
 
       out.push({ ...m, raw, value });
