@@ -16,9 +16,15 @@ function safeName(value) {
   return Array.from(s).slice(0, 80).join('');
 }
 
+function spreadsheetSafeText(value) {
+  const s = String(value ?? '');
+  return /^[\s]*[=+\-@]/.test(s) ? `'${s}` : s;
+}
+
 function csvEscape(v) {
   if (v == null) return '';
-  const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  const raw = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  const s = spreadsheetSafeText(raw);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -238,8 +244,9 @@ function normalizeRows(model, sheet) {
 
 function excelValue(v) {
   if (v == null) return '';
-  if (typeof v === 'bigint') return v.toString();
-  if (Array.isArray(v) || (typeof v === 'object' && !(v instanceof Date))) return JSON.stringify(v);
+  if (typeof v === 'bigint') return spreadsheetSafeText(v.toString());
+  if (Array.isArray(v) || (typeof v === 'object' && !(v instanceof Date))) return spreadsheetSafeText(JSON.stringify(v));
+  if (typeof v === 'string') return spreadsheetSafeText(v);
   return v;
 }
 
@@ -265,7 +272,7 @@ async function buildWorkbook(model) {
   wb.subject = `${model.project?.name || 'Modbus'} engineering results`;
   const summary = wb.addWorksheet('Summary');
   summary.columns = [{ header: 'Metric', key: 'metric', width: 32 }, { header: 'Value', key: 'value', width: 32 }];
-  for (const [metric, value] of model.summary) summary.addRow({ metric, value:excelValue(value) });
+  for (const [metric, value] of model.summary) summary.addRow({ metric:excelValue(metric), value:excelValue(value) });
   applySheetStyle(summary);
   summary.getColumn(1).font = { bold: true };
 
@@ -390,8 +397,8 @@ async function streamProjectZip(res, model, reportHtml) {
   zip.append(csv(normalizeRows(model,'Traffic'), columns.traffic), { name: files[15] });
   zip.append(csv(model.discovery, columns.discovery), { name: files[16] });
   zip.append(csv(model.adoptions, columns.adoptions), { name: files[17] });
-  zip.append(jsonSafe({ format:'modbus-engineering-analyzer-export', version:2, generatedAt:new Date().toISOString(), project:model.project?.name, channelCount:model.channels.length, discoveryResultCount:model.discovery.length, adoptionCount:model.adoptions.length, files }), { name: 'manifest.json' });
+  zip.append(jsonSafe({ format:'modbus-engineering-analyzer-export', version:2, generatedAt:new Date().toISOString(), analyzerVersion:'7.0.0', project:model.project?.name, channelCount:model.channels.length, discoveryResultCount:model.discovery.length, adoptionCount:model.adoptions.length, formulaInjectionProtection:true, files }), { name: 'manifest.json' });
   await zip.finalize();
 }
 
-module.exports = { collectExportModel, buildWorkbook, buildPdf, streamProjectZip, safeName, csv, normalizeRows, flattenDiscovery, flattenAdoptions, normalizeChannels, rowIdentity };
+module.exports = { collectExportModel, buildWorkbook, buildPdf, streamProjectZip, safeName, csv, normalizeRows, flattenDiscovery, flattenAdoptions, normalizeChannels, rowIdentity, spreadsheetSafeText, excelValue };
