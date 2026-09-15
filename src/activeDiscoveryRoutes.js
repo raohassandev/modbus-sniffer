@@ -7,9 +7,9 @@ function httpStatus(error){return ['DISCOVERY_BUSY','RTU_DISCOVERY_PASSIVE_CAPTU
 function bool(v){return v===true;}
 function n(v,d){const x=Number(v);return Number.isFinite(x)?x:d;}
 
-function installActiveDiscoveryRoutes({app,state,demo=false,broadcast=()=>{},workspaces=null,getActiveProjectId=null}={}){
+function installActiveDiscoveryRoutes({app,state,demo=false,broadcast=()=>{},workspaces=null,getActiveProjectId=null,manager:providedManager=null}={}){
   if(!app)throw new Error('Express app is required for active discovery routes.');
-  const manager=new ActiveDiscoveryManager(),jobProjects=new Map(),savedJobs=new Map();
+  const manager=providedManager||new ActiveDiscoveryManager(),jobProjects=new Map(),savedJobs=new Map();
   const activeProjectId=()=>typeof getActiveProjectId==='function'?getActiveProjectId():workspaces?.getActiveProject?.()?.id||null;
   const persist=s=>{
     if(!workspaces||s?.state!=='completed'||!s?.jobId||!s?.result||savedJobs.has(s.jobId))return null;
@@ -20,7 +20,7 @@ function installActiveDiscoveryRoutes({app,state,demo=false,broadcast=()=>{},wor
   const publish=s=>{let saved=null;try{saved=persist(s);}catch(error){broadcast('discovery-evidence-error',{jobId:s?.jobId||null,error:error.message,code:error.code||null});}broadcast('discovery-active',{...s,savedEvidenceId:saved?.id||savedJobs.get(s?.jobId)||null});};
   manager.on('status',publish);
 
-  app.get('/api/discovery/active/status',(_q,r)=>r.json({...manager.status(),savedEvidenceId:savedJobs.get(manager.status().jobId)||null}));
+  app.get('/api/discovery/active/status',(_q,r)=>{const status=manager.status();r.json({...status,savedEvidenceId:savedJobs.get(status.jobId)||null});});
   app.post('/api/discovery/active/start',(q,r)=>{
     if(demo)return r.status(409).json({error:'Active discovery is disabled in demo mode because it transmits real Modbus FC43 requests.',code:'DISCOVERY_DEMO_DISABLED'});
     try{
