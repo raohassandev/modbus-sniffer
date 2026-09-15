@@ -12,6 +12,26 @@ function finite(v, fallback = null) { const n = Number(v); return Number.isFinit
 function safeStamp() { return new Date().toISOString().replace(/[:.]/g,'-'); }
 function ignorableSyncError(error) { return ['EPERM','EINVAL','ENOTSUP','ENOSYS'].includes(error?.code); }
 function replaceRetryError(error) { return ['EPERM','EEXIST','ENOTEMPTY','EACCES'].includes(error?.code); }
+function discoverySummary(results=[]) {
+  const list=Array.isArray(results)?results:[];
+  return {checked:list.length,responding:list.filter(x=>x?.responded).length,identified:list.filter(x=>x?.identificationSupported&&Array.isArray(x?.objects)&&x.objects.length).length,unsupported:list.filter(x=>x?.responded&&x?.identificationSupported===false).length,silent:list.filter(x=>!x?.responded).length};
+}
+function normalizeDiscoveryRun(input={}) {
+  const transport=String(input.transport||input.result?.transport||'').toUpperCase();
+  if(!['RTU','TCP'].includes(transport))throw new Error('Discovery evidence transport must be RTU or TCP.');
+  const source=input.result&&typeof input.result==='object'?input.result:input;
+  const results=(Array.isArray(source.results)?source.results:[]).slice(0,256).map(r=>clone(r));
+  const target=transport==='TCP'
+    ? {host:String(source.host||input.host||'').trim().slice(0,255),port:finite(source.port??input.port,502)}
+    : {port:String(source.port||input.port||'').trim().slice(0,255),serial:clone(source.serial||input.serial||{})};
+  return {
+    id:String(input.id||id('discovery')).slice(0,180),jobId:input.jobId?String(input.jobId).slice(0,180):null,
+    transport,mode:'active-identification',readOnly:true,transmit:true,
+    startedAt:finite(input.startedAt,null),completedAt:finite(input.completedAt,null),savedAt:input.savedAt||now(),
+    target,unitStart:finite(source.unitStart??input.unitStart,null),unitEnd:finite(source.unitEnd??input.unitEnd,null),
+    summary:{...discoverySummary(results),...(input.summary&&typeof input.summary==='object'?clone(input.summary):{})},results
+  };
+}
 
 class WorkspaceCorruptionError extends Error {
   constructor(message, details = {}) { super(message); this.name='WorkspaceCorruptionError'; this.code='WORKSPACE_CORRUPT'; Object.assign(this,details); }
@@ -80,6 +100,7 @@ class WorkspaceStore {
       channels:p.channels&&typeof p.channels==='object'?p.channels:{},
       devices:p.devices&&typeof p.devices==='object'?p.devices:{},
       registers:p.registers&&typeof p.registers==='object'?p.registers:{},
+      discoveryRuns:Array.isArray(p.discoveryRuns)?p.discoveryRuns.slice(-100):[],
       legacyUnassigned:p.legacyUnassigned&&typeof p.legacyUnassigned==='object'?p.legacyUnassigned:{devices:{},registers:{}},
       updatedAt:p.updatedAt||p.createdAt||now(),createdAt:p.createdAt||now()
     }));
@@ -95,7 +116,7 @@ class WorkspaceStore {
       legacyDevices+=Object.keys(oldDevices).length;legacyRegisters+=Object.keys(oldRegisters).length;
       return {
         id:old.id||id('project'),name:String(old.name||'Untitled Project'),site:String(old.site||''),bus:String(old.bus||''),description:String(old.description||''),
-        createdAt:old.createdAt||now(),updatedAt:now(),channels:{},devices:{},registers:{},
+        createdAt:old.createdAt||now(),updatedAt:now(),channels:{},devices:{},registers:{},discoveryRuns:[],
         legacyUnassigned:{devices:oldDevices,registers:oldRegisters,migratedFromVersion:1,reason:'Original v1 data had no transport/channel identity. Assign it explicitly before use.'}
       };
     });
@@ -113,9 +134,12 @@ class WorkspaceStore {
       if(!p||typeof p!=='object'||!p.id)throw new Error('Workspace project is missing an ID.');
       if(ids.has(p.id))throw new Error(`Duplicate project ID ${p.id}.`);ids.add(p.id);
       for(const field of ['channels','devices','registers'])if(p[field]!=null&&typeof p[field]!=='object')throw new Error(`Project ${p.id} has invalid ${field}.`);
+      if(p.discoveryRuns!=null&&!Array.isArray(p.discoveryRuns))throw new Error(`Project ${p.id} has invalid discoveryRuns.`);
       if(Object.keys(p.channels||{}).length>1000)throw new Error(`Project ${p.id} has too many channels.`);
       if(Object.keys(p.devices||{}).length>100000)throw new Error(`Project ${p.id} has too many devices.`);
       if(Object.keys(p.registers||{}).length>500000)throw new Error(`Project ${p.id} has too many register mappings.`);
+      if((p.discoveryRuns||[]).length>100)throw new Error(`Project ${p.id} has too many discovery runs.`);
+      for(const run of p.discoveryRuns||[]){if(!run||typeof run!=='object'||!run.id)throw new Error(`Project ${p.id} has invalid discovery evidence.`);if(!['RTU','TCP'].includes(String(run.transport||'').toUpperCase()))throw new Error(`Project ${p.id} discovery run ${run.id} has invalid transport.`);if(!Array.isArray(run.results)||run.results.length>256)throw new Error(`Project ${p.id} discovery run ${run.id} has invalid results.`);}
       for(const [key,d] of Object.entries(p.devices||{})){const parsed=parseDeviceKey(key);if(!parsed||d.deviceKey&&d.deviceKey!==key)throw new Error(`Invalid device key ${key} in project ${p.id}.`);}
     }
     return true;
@@ -131,8 +155,6 @@ class WorkspaceStore {
       try { fs.fsyncSync(fd); } catch(error) { if(!ignorableSyncError(error))throw error; }
     } finally { if(fd!==null)fs.closeSync(fd); }
 
-    // A recovery copy is mandatory before any replacement attempt. This also makes
-    // Windows' remove-then-rename fallback recoverable if the process is interrupted.
     if(existed&&(backupExisting||!fs.existsSync(this.backupFile)))fs.copyFileSync(this.file,this.backupFile);
 
     try { fs.renameSync(tmp,this.file); }
@@ -154,7 +176,7 @@ class WorkspaceStore {
   listProjects() {
     return this.db.projects.map(p=>({
       id:p.id,name:p.name,site:p.site,bus:p.bus,description:p.description,createdAt:p.createdAt,updatedAt:p.updatedAt,active:p.id===this.db.activeProjectId,
-      channelCount:Object.keys(p.channels||{}).length,deviceCount:Object.keys(p.devices||{}).length,mappingCount:Object.keys(p.registers||{}).length,
+      channelCount:Object.keys(p.channels||{}).length,deviceCount:Object.keys(p.devices||{}).length,mappingCount:Object.keys(p.registers||{}).length,discoveryRunCount:(p.discoveryRuns||[]).length,
       legacyDeviceCount:Object.keys(p.legacyUnassigned?.devices||{}).length,legacyMappingCount:Object.keys(p.legacyUnassigned?.registers||{}).length
     }));
   }
@@ -162,7 +184,7 @@ class WorkspaceStore {
   getProject(projectId) { const p=this.db.projects.find(x=>x.id===projectId); return p?clone(p):null; }
 
   createProject(input={}) {
-    const stamp=now();const p={id:id('project'),name:String(input.name||'Untitled Project').trim().slice(0,120),site:String(input.site||'').trim().slice(0,200),bus:String(input.bus||'').trim().slice(0,120),description:String(input.description||'').trim().slice(0,2000),createdAt:stamp,updatedAt:stamp,channels:{},devices:{},registers:{},legacyUnassigned:{devices:{},registers:{}}};
+    const stamp=now();const p={id:id('project'),name:String(input.name||'Untitled Project').trim().slice(0,120),site:String(input.site||'').trim().slice(0,200),bus:String(input.bus||'').trim().slice(0,120),description:String(input.description||'').trim().slice(0,2000),createdAt:stamp,updatedAt:stamp,channels:{},devices:{},registers:{},discoveryRuns:[],legacyUnassigned:{devices:{},registers:{}}};
     this.db.projects.push(p);this.db.activeProjectId=p.id;this._save();return clone(p);
   }
   updateProject(projectId,patch={}) {const p=this._project(projectId);for(const k of ['name','site','bus','description'])if(patch[k]!=null)p[k]=String(patch[k]).trim().slice(0,k==='description'?2000:200);p.updatedAt=now();this._save();return clone(p);}
@@ -209,6 +231,16 @@ class WorkspaceStore {
   listRegisters(projectId,ref=null,channelId=null){const p=this._project(projectId);let deviceKey=null;if(ref!=null)deviceKey=this._resolveDeviceKey(p,ref,channelId);return Object.values(p.registers).filter(r=>!deviceKey||r.deviceKey===deviceKey).map(clone).sort((a,b)=>String(a.deviceKey).localeCompare(String(b.deviceKey))||a.functionCode-b.functionCode||a.address-b.address);}
   getLegacyUnassigned(projectId){const p=this._project(projectId);return clone(p.legacyUnassigned||{devices:{},registers:{}});}
 
+  saveDiscoveryRun(projectId,input={}) {
+    const p=this._project(projectId),run=normalizeDiscoveryRun(input),runs=p.discoveryRuns||[];
+    p.discoveryRuns=[...runs.filter(x=>x.id!==run.id),run].slice(-100);p.updatedAt=now();this._save();return clone(run);
+  }
+  listDiscoveryRuns(projectId) {
+    const p=this._project(projectId);return (p.discoveryRuns||[]).slice().reverse().map(run=>({id:run.id,jobId:run.jobId||null,transport:run.transport,mode:run.mode,readOnly:Boolean(run.readOnly),transmit:Boolean(run.transmit),startedAt:run.startedAt??null,completedAt:run.completedAt??null,savedAt:run.savedAt||null,target:clone(run.target||{}),unitStart:run.unitStart??null,unitEnd:run.unitEnd??null,summary:clone(run.summary||discoverySummary(run.results)),resultCount:Array.isArray(run.results)?run.results.length:0}));
+  }
+  getDiscoveryRun(projectId,runId){const p=this._project(projectId),run=(p.discoveryRuns||[]).find(x=>x.id===runId);return run?clone(run):null;}
+  deleteDiscoveryRun(projectId,runId){const p=this._project(projectId),before=(p.discoveryRuns||[]).length;p.discoveryRuns=(p.discoveryRuns||[]).filter(x=>x.id!==runId);if(p.discoveryRuns.length===before)return false;p.updatedAt=now();this._save();return true;}
+
   listProfiles(){return this.db.profiles.map(p=>({id:p.id,name:p.name,manufacturer:p.manufacturer,model:p.model,registerCount:(p.registers||[]).length,createdAt:p.createdAt,updatedAt:p.updatedAt}));}
   getProfile(profileId){const p=this.db.profiles.find(x=>x.id===profileId);return p?clone(p):null;}
   saveProfile(input={}){const stamp=now(),existing=input.id?this.db.profiles.find(x=>x.id===input.id):null,profile=existing||{id:id('profile'),createdAt:stamp};profile.name=String(input.name||profile.name||'Unnamed Profile').trim().slice(0,160);profile.manufacturer=String(input.manufacturer??profile.manufacturer??'').trim().slice(0,120);profile.model=String(input.model??profile.model??'').trim().slice(0,120);profile.notes=String(input.notes??profile.notes??'').trim().slice(0,2000);profile.registers=Array.isArray(input.registers)?clone(input.registers):clone(profile.registers||[]);profile.updatedAt=stamp;if(!existing)this.db.profiles.push(profile);this._save();return clone(profile);}
@@ -222,4 +254,4 @@ class WorkspaceStore {
   _project(projectId){const p=this.db.projects.find(x=>x.id===(projectId||this.db.activeProjectId));if(!p)throw new Error('Project not found.');return p;}
 }
 
-module.exports={WorkspaceStore,WorkspaceCorruptionError};
+module.exports={WorkspaceStore,WorkspaceCorruptionError,normalizeDiscoveryRun,discoverySummary};
