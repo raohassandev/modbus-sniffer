@@ -105,7 +105,7 @@ test('Modbus TCP listen host is a PC adapter selector, not a free-text device IP
   expect(json.localInterfaces.some(x=>x.address==='127.0.0.1')).toBeTruthy();
 });
 
-test('Passive Discovery forms RTU topology without exposing a transmit control', async ({ page }) => {
+test('Discovery keeps passive RX-only topology separate from guarded active FC43 scanning', async ({ page }) => {
   await expect(page.locator('[data-page="discovery"]')).toBeVisible();
   await page.locator('[data-page="discovery"]').click();
   await expect(page.locator('#page-discovery')).toBeVisible();
@@ -116,7 +116,31 @@ test('Passive Discovery forms RTU topology without exposing a transmit control',
   await expect(page.locator('#discoveryChannels .discovery-device').first()).toContainText('Slave');
   await expect(page.locator('#discoveryRefresh')).toBeVisible();
   await expect(page.locator('#discoveryExport')).toBeVisible();
-  await expect(page.locator('#page-discovery button').filter({hasText:'Active scan'})).toHaveCount(0);
+
+  const active=page.locator('#activeDiscoveryPanel');
+  await expect(active).toBeVisible();
+  await expect(active).toContainText('Active Device ID Scan');
+  await expect(active).toContainText('READ-ONLY TX');
+  await expect(page.locator('#activeDiscoveryStart')).toBeVisible();
+  await expect(page.locator('#activeDiscoveryCancel')).toBeDisabled();
+
+  await page.locator('#activeDiscoveryTransport').selectOption('RTU');
+  await expect(page.locator('#activeRtuSafety')).toBeVisible();
+  await expect(page.locator('#activeDiscoveryMaintenance')).not.toBeChecked();
+  await expect(page.locator('#activeDiscoveryExclusive')).not.toBeChecked();
+});
+
+test('active discovery API is idle by default and cannot transmit from demo mode', async ({ page }) => {
+  const status=await page.request.get('/api/discovery/active/status');
+  expect(status.ok()).toBeTruthy();
+  const idle=await status.json();
+  expect(idle.state).toBe('idle');
+  expect(idle.running).toBeFalsy();
+
+  const attempt=await page.request.post('/api/discovery/active/start',{data:{transport:'TCP',host:'127.0.0.1',port:502,unitStart:1,unitEnd:1}});
+  expect(attempt.status()).toBe(409);
+  const body=await attempt.json();
+  expect(body.code).toBe('DISCOVERY_DEMO_DISABLED');
 });
 
 test('Intelligence workspace renders v7 reverse-engineering results', async ({ page }) => {
