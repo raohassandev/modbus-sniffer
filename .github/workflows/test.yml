@@ -30,6 +30,8 @@ jobs:
       - run: node --check src/exportBundle.js
       - run: node --check src/discoveryService.js
       - run: node --check src/activeDiscovery.js
+      - run: node --check src/activeDiscoveryManager.js
+      - run: node --check src/activeDiscoveryRoutes.js
       - run: node --check src/platformWebServer.js
       - run: node --check src/workspaceStore.js
       - run: node --check src/historyStore.js
@@ -46,6 +48,7 @@ jobs:
       - run: node --check public/platform-v62-ui.js
       - run: node --check public/tcp-interface-v62.js
       - run: node --check public/discovery-v63.js
+      - run: node --check public/active-discovery-v7.js
       - run: node --check public/intelligence-v7.js
       - run: node --check public/export-v6.js
       - run: node --check desktop/main.js
