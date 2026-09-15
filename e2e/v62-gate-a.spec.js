@@ -150,6 +150,30 @@ test('active discovery API is idle by default and cannot transmit from demo mode
   expect(body.code).toBe('DISCOVERY_DEMO_DISABLED');
 });
 
+test('Adopt Identification requires explicit saved identity and exact channel selection before project mutation', async ({ page }) => {
+  const exported=await page.request.get('/api/workspace/export.json');
+  expect(exported.ok()).toBeTruthy();
+  const original=await exported.json();
+  const fixture=JSON.parse(JSON.stringify(original)),project=fixture.projects.find(p=>p.id===fixture.activeProjectId);
+  const channelId='tcp:proxy:e2e-adoption',runId='discovery-e2e-adoption',deviceKey=`${channelId}|9`;
+  project.channels[channelId]={channelId,transport:'TCP',mode:'offline',name:'E2E TCP Target',endpoint:'10.10.10.50:502',tcp:{host:'10.10.10.50',port:502},active:false};
+  project.discoveryRuns=[...(project.discoveryRuns||[]),{id:runId,jobId:'e2e-adoption-job',transport:'TCP',mode:'active-identification',readOnly:true,transmit:true,startedAt:100,completedAt:200,savedAt:new Date().toISOString(),target:{host:'10.10.10.50',port:502},unitStart:9,unitEnd:9,summary:{checked:1,responding:1,identified:1,unsupported:0,silent:0},results:[{unitId:9,responded:true,identificationSupported:true,objects:[{objectId:0,name:'VendorName',value:'E2E Vendor'},{objectId:1,name:'ProductCode',value:'E2E-P9'},{objectId:2,name:'MajorMinorRevision',value:'R9'}],identification:{vendorName:'E2E Vendor',productCode:'E2E-P9',productName:'E2E Product',modelName:'E2E Model',revision:'R9'}}]}];
+
+  try{
+    const imported=await page.request.post('/api/workspace/import',{data:fixture});expect(imported.ok()).toBeTruthy();
+    await page.reload();await page.locator('[data-page="discovery"]').click();await page.locator('#activeDiscoveryRefreshEvidence').click();
+    const adopt=page.locator(`[data-adopt-discovery="${runId}"]`);await expect(adopt).toBeVisible();await adopt.click();
+    await expect(page.locator('#activeDiscoveryAdoption')).toBeVisible();await expect(page.locator('#activeAdoptionApply')).toBeDisabled();
+    await expect(page.locator('#activeAdoptionUnit')).toHaveValue('');await expect(page.locator('#activeAdoptionChannel')).toHaveValue('');
+    await page.locator('#activeAdoptionUnit').selectOption('9');await page.locator('#activeAdoptionChannel').selectOption(channelId);
+    await expect(page.locator('#activeAdoptionTarget')).toContainText(deviceKey);await expect(page.locator('#activeAdoptionComparison')).toContainText('E2E Vendor');await expect(page.locator('#activeAdoptionComparison')).toContainText('R9');await expect(page.locator('#activeAdoptionApply')).toBeEnabled();
+    await page.locator('#activeAdoptionApply').click();await expect(page.locator('#activeAdoptionComparison')).toContainText('Identification adopted');
+    const current=await (await page.request.get('/api/project')).json(),device=current.devices[deviceKey];expect(device).toBeTruthy();expect(device.manufacturer).toBe('E2E Vendor');expect(device.productCode).toBe('E2E-P9');expect(device.model).toBe('E2E Model');expect(device.revision).toBe('R9');expect(device.identification.sourceRunId).toBe(runId);
+  }finally{
+    await page.request.post('/api/workspace/import',{data:original});
+  }
+});
+
 test('Intelligence workspace renders v7 reverse-engineering results', async ({ page }) => {
   await expect(page.locator('[data-page="intelligence"]')).toBeVisible();
   await page.locator('[data-page="intelligence"]').click();
