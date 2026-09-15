@@ -22,8 +22,6 @@ function prepareData() {
   const userDataRoot = app.getPath('userData');
   const legacyCandidates = [
     path.join(root, 'data'),
-    // Some older packaged builds could resolve cwd at the resources root rather than
-    // the backend subfolder. Preserve that possibility without ever merging stores.
     app.isPackaged ? path.join(process.resourcesPath, 'data') : null,
     !app.isPackaged ? path.resolve(__dirname, '..', 'data') : null
   ];
@@ -42,9 +40,13 @@ function chooseFreePort() {
   });
 }
 
+function backendEntry(root = backendRoot()) {
+  return path.join(root, 'src', 'index-v7.js');
+}
+
 function startBackend(dataDir, selectedPort) {
   const root = backendRoot();
-  const entry = path.join(root, 'src', 'index-v6.js');
+  const entry = backendEntry(root);
   const args = [
     entry,
     '--web-port', String(selectedPort),
@@ -181,3 +183,5 @@ app.on('before-quit', event => {
     app.quit();
   });
 });
+
+module.exports = { backendEntry };
