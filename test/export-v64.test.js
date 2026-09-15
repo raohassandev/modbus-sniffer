@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const ExcelJS = require('exceljs');
-const { collectExportModel, buildWorkbook, flattenDiscovery, flattenAdoptions, safeName } = require('../src/exportBundle');
+const { collectExportModel, buildWorkbook, flattenDiscovery, flattenAdoptions, safeName, csv, spreadsheetSafeText, excelValue } = require('../src/exportBundle');
 
 function fixtureProject(){
   return {
@@ -59,4 +59,19 @@ test('safe export names handle Windows reserved names, separators, Unicode and l
   assert.equal(safeName('Plant/AUX: Test'),'Plant-AUX- Test');
   assert.equal(safeName('پلانٹ 1'),'پلانٹ 1');
   assert.ok(Array.from(safeName('x'.repeat(200))).length<=80);
+});
+
+test('CSV and XLSX text cells defang spreadsheet formulas without changing numeric values',async()=>{
+  for(const dangerous of ['=1+1','+SUM(A1:A2)','-2+3','@SUM(A1:A2)','  =HYPERLINK("x")']){
+    assert.ok(spreadsheetSafeText(dangerous).startsWith("'"),dangerous);
+  }
+  assert.equal(excelValue(-12),-12);
+  const text=csv([{name:'=cmd|test',note:'safe'}],[{label:'name',value:x=>x.name},{label:'note',value:x=>x.note}]);
+  assert.match(text,/\r\n'=cmd\|test,safe$/);
+
+  const project=fixtureProject();project.devices['tcp:proxy:b|1'].name='=HYPERLINK("https://invalid")';
+  const model=collectExportModel({project,state:fixtureState(),diagnostics:{findings:[]},mappings:[],history:[]});
+  const buf=await buildWorkbook(model),wb=new ExcelJS.Workbook();await wb.xlsx.load(buf);
+  const devices=wb.getWorksheet('Devices');
+  assert.equal(devices.getRow(2).getCell(6).value,'\'=HYPERLINK("https://invalid")');
 });
