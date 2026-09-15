@@ -79,6 +79,7 @@ function adoptionSnapshot(preview,result,overwriteExisting){
 function adoptDiscoveryIdentification({workspaces,projectId,runId,unitId,channelId,overwriteExisting=false}={}){
   const preview=previewDiscoveryAdoption({workspaces,projectId,runId,unitId,channelId});
   if(preview.conflicts.length&&!overwriteExisting)throw error('DISCOVERY_ADOPTION_CONFLICT','Existing device identification differs from the discovery result. Preview the conflicts and explicitly approve overwrite before adopting.',{conflicts:preview.conflicts,preview});
+  if(typeof workspaces._project!=='function'||typeof workspaces._save!=='function')throw error('DISCOVERY_WORKSPACE_UNAVAILABLE','Workspace implementation does not support identification metadata persistence.');
   const run=workspaces.getDiscoveryRun(projectId,preview.runId),result=(run.results||[]).find(x=>Number(x.unitId)===preview.unitId),existing=preview.existingDevice||{};
   const pick=key=>{
     const discovered=text(preview.identity[key]);if(!discovered)return existing[key];
@@ -86,7 +87,6 @@ function adoptDiscoveryIdentification({workspaces,projectId,runId,unitId,channel
   };
 
   workspaces.setDevice(projectId,preview.deviceKey,{manufacturer:pick('manufacturer'),model:pick('model')});
-  if(typeof workspaces._project!=='function'||typeof workspaces._save!=='function')throw error('DISCOVERY_WORKSPACE_UNAVAILABLE','Workspace implementation does not support identification metadata persistence.');
   const liveProject=workspaces._project(projectId),device=liveProject.devices[preview.deviceKey];
   for(const key of ['productCode','productName','revision','vendorUrl','userApplicationName']){
     const value=pick(key);if(value!==undefined)device[key]=text(value,key==='vendorUrl'?300:160);
