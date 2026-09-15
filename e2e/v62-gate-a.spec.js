@@ -123,6 +123,13 @@ test('Discovery keeps passive RX-only topology separate from guarded active FC43
   await expect(active).toContainText('READ-ONLY TX');
   await expect(page.locator('#activeDiscoveryStart')).toBeVisible();
   await expect(page.locator('#activeDiscoveryCancel')).toBeDisabled();
+  await expect(page.locator('#activeDiscoveryEvidence')).toBeVisible();
+  await expect(page.locator('#activeDiscoveryEvidence')).toContainText('No saved discovery evidence');
+  await expect(page.locator('#activeDiscoveryRefreshEvidence')).toBeVisible();
+
+  const evidence=await page.request.get('/api/discovery/runs');
+  expect(evidence.ok()).toBeTruthy();
+  expect(Array.isArray(await evidence.json())).toBeTruthy();
 
   await page.locator('#activeDiscoveryTransport').selectOption('RTU');
   await expect(page.locator('#activeRtuSafety')).toBeVisible();
