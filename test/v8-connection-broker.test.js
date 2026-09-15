@@ -27,13 +27,20 @@ test('v8 Connection Broker prevents two owners from claiming the same exclusive 
   assert.equal(active.writeLock, 'LOCKED');
 });
 
-test('v8 write lock is limited to Master/Test ownership and always resets on release', () => {
+test('v8 write lock is limited to open Master/Test ownership and always resets on close/release', async () => {
   const broker = new ConnectionBroker();
   broker.defineConnection({ connectionId: 'master-1', resourceKey: 'tcp-client:10.0.0.10:502', transportKind: 'tcp-client' });
   broker.acquire('master-1', { ownerMode: 'master', ownerId: 'master' });
+  assert.throws(
+    () => broker.setWriteLock('master-1', { ownerId: 'master', enabled: true }),
+    (error) => error.code === 'CONNECTION_NOT_OPEN',
+  );
+  await broker.open('master-1', { ownerMode: 'master', ownerId: 'master' });
   assert.equal(broker.setWriteLock('master-1', { ownerId: 'master', enabled: true }).writeLock, 'ENABLED');
+  await broker.close('master-1', { ownerId: 'master' });
   broker.release('master-1', { ownerId: 'master' });
   assert.equal(broker.acquire('master-1', { ownerMode: 'master', ownerId: 'master' }).writeLock, 'LOCKED');
+  broker.release('master-1', { ownerId: 'master' });
 
   broker.defineConnection({ connectionId: 'discovery-1', resourceKey: 'tcp-client:10.0.0.11:502', transportKind: 'tcp-client' });
   broker.acquire('discovery-1', { ownerMode: 'discovery', ownerId: 'discovery' });
