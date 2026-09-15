@@ -91,7 +91,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     const msg = JSON.stringify({ type, payload });
     for (const ws of wss.clients) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
   };
-  const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast});
+  const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null});
   const active = () => workspaces.getActiveProject();
   const apiError = (r,e,defaultStatus=400) => r.status(e?.code==='AMBIGUOUS_DEVICE'?409:defaultStatus).json({error:e.message,code:e.code||null,deviceKeys:e.deviceKeys||undefined});
   const syncRuntimeChannels = () => {
