@@ -12,17 +12,21 @@ class VirtualLoopbackError extends Error {
 }
 
 class VirtualLoopbackEndpoint extends EventEmitter {
-  constructor({ name, latencyMs = 0 }) {
+  constructor({ name, latencyMs = 0, maxQueue = 1024 }) {
     super();
     this.name = name;
     this.latencyMs = latencyMs;
+    this.maxQueue = maxQueue;
     this.state = 'closed';
     this.peer = null;
+    this.rxQueue = [];
+    this.waiters = [];
     this.capabilities = Object.freeze({
       transport: 'virtual',
       duplex: true,
       datagram: true,
       supportsAbort: true,
+      bufferedReceive: true,
     });
   }
 
@@ -35,6 +39,8 @@ class VirtualLoopbackEndpoint extends EventEmitter {
   async close() {
     if (this.state === 'closed') return;
     this.state = 'closed';
+    const error = new VirtualLoopbackError('NOT_OPEN', `${this.name} was closed`);
+    for (const waiter of this.waiters.splice(0)) waiter.reject(error);
     this.emit('state', { state: this.state, name: this.name });
   }
 
@@ -44,14 +50,18 @@ class VirtualLoopbackEndpoint extends EventEmitter {
     const payload = Buffer.from(bytes ?? []);
     if (!payload.length) throw new VirtualLoopbackError('EMPTY_PAYLOAD', 'Virtual transport cannot send an empty payload');
 
-    await new Promise((resolve) => {
+    await new Promise((resolve, reject) => {
       const deliver = () => {
-        if (this.state === 'open' && this.peer?.state === 'open') {
+        try {
+          if (this.state !== 'open' || this.peer?.state !== 'open') {
+            throw new VirtualLoopbackError('PEER_NOT_OPEN', `${this.name} peer closed before delivery`);
+          }
           this.emit('tx', Buffer.from(payload));
-          this.peer.emit('data', Buffer.from(payload));
-          this.peer.emit('rx', Buffer.from(payload));
+          this.peer._enqueue(Buffer.from(payload));
+          resolve();
+        } catch (error) {
+          reject(error);
         }
-        resolve();
       };
       if (this.latencyMs > 0) setTimeout(deliver, this.latencyMs);
       else queueMicrotask(deliver);
@@ -61,44 +71,62 @@ class VirtualLoopbackEndpoint extends EventEmitter {
   receive({ timeoutMs = 1000, signal = null } = {}) {
     if (this.state !== 'open') return Promise.reject(new VirtualLoopbackError('NOT_OPEN', `${this.name} is not open`));
     if (!Number.isFinite(timeoutMs) || timeoutMs < 0) return Promise.reject(new VirtualLoopbackError('INVALID_TIMEOUT', 'timeoutMs must be a non-negative finite number'));
+    if (this.rxQueue.length) return Promise.resolve(Buffer.from(this.rxQueue.shift()));
 
     return new Promise((resolve, reject) => {
-      let timer = null;
+      const waiter = { resolve: null, reject: null, timer: null, signal, onAbort: null };
       const cleanup = () => {
-        this.off('data', onData);
-        signal?.removeEventListener?.('abort', onAbort);
-        if (timer) clearTimeout(timer);
+        const index = this.waiters.indexOf(waiter);
+        if (index >= 0) this.waiters.splice(index, 1);
+        signal?.removeEventListener?.('abort', waiter.onAbort);
+        if (waiter.timer) clearTimeout(waiter.timer);
       };
-      const onData = (data) => {
+      waiter.resolve = (data) => {
         cleanup();
         resolve(Buffer.from(data));
       };
-      const onAbort = () => {
+      waiter.reject = (error) => {
         cleanup();
-        reject(new VirtualLoopbackError('ABORTED', 'Virtual receive was aborted'));
+        reject(error);
       };
+      waiter.onAbort = () => waiter.reject(new VirtualLoopbackError('ABORTED', 'Virtual receive was aborted'));
 
-      this.once('data', onData);
+      this.waiters.push(waiter);
       if (signal) {
-        if (signal.aborted) return onAbort();
-        signal.addEventListener('abort', onAbort, { once: true });
+        if (signal.aborted) return waiter.onAbort();
+        signal.addEventListener('abort', waiter.onAbort, { once: true });
       }
       if (timeoutMs > 0) {
-        timer = setTimeout(() => {
-          cleanup();
-          reject(new VirtualLoopbackError('TIMEOUT', `No virtual data received within ${timeoutMs} ms`));
+        waiter.timer = setTimeout(() => {
+          waiter.reject(new VirtualLoopbackError('TIMEOUT', `No virtual data received within ${timeoutMs} ms`));
         }, timeoutMs);
       }
     });
   }
+
+  _enqueue(payload) {
+    if (this.state !== 'open') return;
+    const data = Buffer.from(payload);
+    const waiter = this.waiters[0];
+    if (waiter) waiter.resolve(data);
+    else {
+      if (this.rxQueue.length >= this.maxQueue) {
+        this.emit('overflow', { name: this.name, maxQueue: this.maxQueue });
+        throw new VirtualLoopbackError('RX_QUEUE_FULL', `${this.name} receive queue reached ${this.maxQueue} datagrams`);
+      }
+      this.rxQueue.push(data);
+    }
+    this.emit('data', Buffer.from(data));
+    this.emit('rx', Buffer.from(data));
+  }
 }
 
-function createVirtualLoopbackPair({ latencyMs = 0, names = ['virtual-a', 'virtual-b'] } = {}) {
+function createVirtualLoopbackPair({ latencyMs = 0, maxQueue = 1024, names = ['virtual-a', 'virtual-b'] } = {}) {
   if (!Array.isArray(names) || names.length !== 2 || names.some((name) => typeof name !== 'string' || !name)) {
     throw new TypeError('names must contain exactly two non-empty endpoint names');
   }
-  const a = new VirtualLoopbackEndpoint({ name: names[0], latencyMs });
-  const b = new VirtualLoopbackEndpoint({ name: names[1], latencyMs });
+  const a = new VirtualLoopbackEndpoint({ name: names[0], latencyMs, maxQueue });
+  const b = new VirtualLoopbackEndpoint({ name: names[1], latencyMs, maxQueue });
   a.peer = b;
   b.peer = a;
   return Object.freeze({ a, b });
