@@ -25,6 +25,8 @@ test('active discovery manager rejects concurrent scans',async()=>{
   const manager=new ActiveDiscoveryManager({scanTcp,scanRtu:scanTcp});
   manager.start({transport:'TCP'});
   assert.throws(()=>manager.start({transport:'RTU'}),e=>e.code==='DISCOVERY_BUSY');
+  await Promise.resolve();
+  assert.equal(typeof release,'function');
   release();await manager.promise;assert.equal(manager.status().state,'completed');
 });
 
