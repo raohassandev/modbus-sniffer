@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en" data-theme="system" data-density="comfortable">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Modbus Engineering Workbench v8</title>
+  <link rel="stylesheet" href="/v8/styles.css">
+  <script src="/v8/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-bar">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">M8</div>
+        <div>
+          <div class="brand-title">Modbus Engineering Workbench</div>
+          <div class="brand-subtitle">v8 development shell <span class="stable-note">Stable runtime: v7.0.0</span></div>
+        </div>
+      </div>
+      <div class="app-context">
+        <label class="compact-field">Project
+          <select id="projectSelect" aria-label="Active project"></select>
+        </label>
+        <div class="status-stack" aria-label="Active connection state">
+          <span id="connectionChip" class="chip neutral">NO CONNECTION</span>
+          <span id="modeChip" class="chip neutral">MODE NONE</span>
+          <span id="writeChip" class="chip locked">WRITE LOCKED</span>
+        </div>
+        <button id="themeButton" class="icon-button" type="button" aria-label="Change theme">Theme</button>
+        <button id="densityButton" class="icon-button" type="button" aria-label="Change density">Density</button>
+      </div>
+    </header>
+
+    <aside class="nav-rail" aria-label="Workbench navigation">
+      <button class="nav-item active" data-workspace="connections" data-feature="connectionCenter" type="button"><span>Connections</span><small>Live ownership</small></button>
+      <button class="nav-item" data-workspace="master" data-feature="masterWorkspace" type="button"><span>Master</span><small>Poll & write</small></button>
+      <button class="nav-item" data-workspace="simulator" data-feature="simulatorWorkspace" type="button"><span>Simulator</span><small>Slave/server</small></button>
+      <button class="nav-item" data-workspace="traffic" data-feature="unifiedTraffic" type="button"><span>Traffic</span><small>Unified evidence</small></button>
+      <button class="nav-item" data-workspace="registers" data-feature="registerLab" type="button"><span>Register Lab</span><small>Engineering decode</small></button>
+      <button class="nav-item" data-workspace="discovery" data-feature="discoveryWorkspace" type="button"><span>Discovery</span><small>Safe scans</small></button>
+      <button class="nav-item" data-workspace="test" data-feature="testCenter" type="button"><span>Test Center</span><small>Raw & recipes</small></button>
+      <button class="nav-item" data-workspace="charts" data-feature="charts" type="button"><span>Charts</span><small>Trend & logger</small></button>
+      <button class="nav-item" data-workspace="projects" data-feature="projectSchemaV3" type="button"><span>Projects</span><small>Schema v3</small></button>
+    </aside>
+
+    <main class="workspace" id="workspace" tabindex="-1">
+      <section id="connectionsWorkspace" class="workspace-panel">
+        <div class="workspace-heading">
+          <div>
+            <p class="eyebrow">Connection Center</p>
+            <h1>Transport ownership you can trust</h1>
+            <p class="lede">Saved profiles are configuration only. Opening a connection requires an explicit runtime mode and always starts with writes locked.</p>
+          </div>
+          <button id="newConnectionButton" class="primary-button" type="button">New connection</button>
+        </div>
+
+        <div class="metric-grid" aria-label="Connection summary">
+          <article class="metric-card"><span>Saved profiles</span><strong id="profileCount">0</strong><small>Schema-v3 project</small></article>
+          <article class="metric-card"><span>Open now</span><strong id="openCount">0</strong><small>Runtime-owned</small></article>
+          <article class="metric-card"><span>Write state</span><strong id="writeMetric">LOCKED</strong><small>Never restored armed</small></article>
+          <article class="metric-card"><span>Project schema</span><strong id="schemaMetric">3</strong><small>v7 migration safe</small></article>
+        </div>
+
+        <div id="notice" class="notice hidden" role="status" aria-live="polite"></div>
+
+        <section class="panel connection-panel" aria-labelledby="connectionsTitle">
+          <div class="panel-heading">
+            <div><h2 id="connectionsTitle">Connection profiles</h2><p>Runtime state is read from the Connection Broker, not inferred from this page.</p></div>
+            <button id="refreshButton" class="secondary-button" type="button">Refresh</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Transport</th><th>Endpoint</th><th>State</th><th>Owner</th><th>Capability</th><th>Write</th><th class="actions-col">Actions</th></tr></thead>
+              <tbody id="connectionRows"></tbody>
+            </table>
+          </div>
+          <div id="emptyConnections" class="empty-state hidden">
+            <strong>No v8 connection profiles yet.</strong>
+            <span>Create one here, or migrate a v7 workspace to create safe configuration-only profiles.</span>
+          </div>
+        </section>
+
+        <section class="safety-strip" aria-label="Connection Center safety rules">
+          <div><strong>PASSIVE stays passive</strong><span>Analyzer ownership has no transmit intent.</span></div>
+          <div><strong>Explicit ownership</strong><span>Master, Slave, Discovery and Test modes are chosen at open time.</span></div>
+          <div><strong>WRITE LOCKED</strong><span>Connection profiles cannot persist armed write or fault state.</span></div>
+        </section>
+      </section>
+
+      <section id="projectsWorkspace" class="workspace-panel hidden">
+        <div class="workspace-heading">
+          <div><p class="eyebrow">Projects</p><h1>Schema v3 project boundary</h1><p class="lede">v7 engineering evidence migrates explicitly into a separate v8 workspace with backup and migration reporting.</p></div>
+        </div>
+        <section class="panel"><div class="panel-heading"><div><h2>Available projects</h2><p>The selected project defines the visible connection profiles.</p></div></div><div id="projectCards" class="project-grid"></div></section>
+      </section>
+
+      <section id="comingSoonWorkspace" class="workspace-panel hidden">
+        <div class="coming-soon-card">
+          <p class="eyebrow">Staged module</p>
+          <h1 id="comingSoonTitle">Workspace</h1>
+          <p id="comingSoonText">This module remains feature-gated until its runtime and acceptance tests are complete.</p>
+          <span class="chip neutral">NOT ENABLED IN V8 DEV SHELL</span>
+        </div>
+      </section>
+    </main>
+
+    <footer class="status-bar">
+      <span id="footerProject">Project —</span>
+      <span id="footerConnection">Connection —</span>
+      <span id="footerMode">Owner NONE</span>
+      <span id="footerWrite">WRITE LOCKED</span>
+      <span class="status-spacer"></span>
+      <span>Local-only development shell</span>
+    </footer>
+  </div>
+
+  <dialog id="connectionDialog" class="connection-dialog">
+    <form id="connectionForm" method="dialog">
+      <div class="dialog-heading"><div><p class="eyebrow">Saved profile</p><h2>Create connection</h2></div><button id="closeDialogButton" class="icon-button" type="button">Close</button></div>
+      <p class="dialog-help">Saving this profile does not open the transport and cannot arm writes.</p>
+      <div class="form-grid">
+        <label>Connection ID<input name="connectionId" required maxlength="120" placeholder="meter-room-rs485"></label>
+        <label>Display name<input name="name" maxlength="200" placeholder="Meter Room RS485"></label>
+        <label>Transport<select name="transportKind" id="transportKind"><option value="serial-rtu">Serial RTU</option><option value="serial-ascii">Serial ASCII</option><option value="tcp-client">TCP Client</option><option value="tcp-server">TCP Server</option><option value="virtual">Virtual / Lab</option></select></label>
+        <label class="serial-field">Serial port<input name="serialPort" placeholder="COM7 or /dev/ttyUSB0"></label>
+        <label class="serial-field">Baud rate<input name="baudRate" type="number" min="50" value="9600"></label>
+        <label class="serial-field">Parity<select name="parity"><option>none</option><option>even</option><option>odd</option><option>mark</option><option>space</option></select></label>
+        <label class="tcp-field hidden">Host / listen IP<input name="tcpHost" value="127.0.0.1"></label>
+        <label class="tcp-field hidden">Port<input name="tcpPort" type="number" min="0" max="65535" value="502"></label>
+      </div>
+      <div class="dialog-safety"><strong>Saved state:</strong> owner NONE · transmit NONE · WRITE LOCKED · fault injection OFF · activation MANUAL</div>
+      <div class="dialog-actions"><button id="cancelDialogButton" class="secondary-button" type="button">Cancel</button><button class="primary-button" type="submit">Save profile</button></div>
+    </form>
+  </dialog>
+</body>
+</html>
