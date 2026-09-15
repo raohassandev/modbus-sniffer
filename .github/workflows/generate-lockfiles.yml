@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/generate-lockfiles.yml'
+      - 'package.json'
+      - 'desktop/package.json'
   workflow_dispatch:
 
 permissions:
@@ -32,5 +34,5 @@ jobs:
             echo "Lockfiles already current."
             exit 0
           fi
-          git commit -m "Add reproducible npm lockfiles"
+          git commit -m "Refresh reproducible npm lockfiles"
           git push origin HEAD:main
