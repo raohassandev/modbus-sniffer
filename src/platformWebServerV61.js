@@ -15,7 +15,8 @@ const { installActiveDiscoveryRoutes } = require('./activeDiscoveryRoutes');
 
 function csvEscape(v) {
   if (v == null) return '';
-  const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  let s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  if (typeof v === 'string' && /^[\t\r\n ]*[=+\-@]/.test(s)) s = `'${s}`;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -68,24 +69,48 @@ function validateTcp(body) {
   return cfg;
 }
 
+function sameOriginRequest(req){
+  const site=String(req.headers['sec-fetch-site']||'').toLowerCase();
+  if(site&&site!=='same-origin'&&site!=='none')return false;
+  const origin=req.headers.origin;
+  if(!origin)return true;
+  try{return new URL(origin).host===String(req.headers.host||'');}catch{return false;}
+}
+
+function mutationBodyLimit(req){
+  return ['/api/capture/import','/api/workspace/import'].includes(req.path) ? 25*1024*1024 : 2*1024*1024;
+}
+
 async function startPlatformWebServer({ state, options, configureSerial, disconnectSerial, autoDetectSerial, replay, demo = false, workspaces, history, tcpProxy }) {
   const app = express();
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const wss = new WebSocketServer({ server, path: '/ws', verifyClient:({origin,req})=>!origin||sameOriginRequest({headers:{...req.headers,origin}}) });
   const publicDir = path.join(__dirname, '..', 'public');
   const baseHtml = fs.readFileSync(path.join(publicDir, 'v4.html'), 'utf8');
   const workbench = baseHtml
     .replace('UI v4.0', 'UI v7.0')
     .replace('</body>', '<link rel="stylesheet" href="/platform-v6.css?v=20260915"><script src="/platform-v6.js?v=20260915-1"></script></body>');
+  const mutationMethods=new Set(['POST','PUT','PATCH','DELETE']);
+  const rateBuckets=new Map();
 
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '25mb' }));
   app.use((req,res,next) => {
     res.setHeader('X-Content-Type-Options','nosniff');
+    res.setHeader('X-Frame-Options','DENY');
     res.setHeader('Referrer-Policy','no-referrer');
+    res.setHeader('Cross-Origin-Resource-Policy','same-origin');
+    res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     res.setHeader('Cache-Control', req.path.startsWith('/api/') ? 'no-store' : 'no-cache, no-store, must-revalidate');
+    if(!mutationMethods.has(req.method))return next();
+    if(!sameOriginRequest(req))return res.status(403).json({error:'Cross-origin state-changing request blocked.',code:'CROSS_ORIGIN_MUTATION_BLOCKED'});
+    const length=Number(req.headers['content-length']||0),limit=mutationBodyLimit(req);
+    if(Number.isFinite(length)&&length>limit)return res.status(413).json({error:`Request body exceeds ${Math.round(limit/1024/1024)} MB limit.`,code:'REQUEST_BODY_TOO_LARGE'});
+    const ip=req.socket?.remoteAddress||'local',now=Date.now(),bucket=rateBuckets.get(ip)||{start:now,count:0};
+    if(now-bucket.start>=60000){bucket.start=now;bucket.count=0;}bucket.count++;rateBuckets.set(ip,bucket);
+    if(bucket.count>600)return res.status(429).json({error:'Too many state-changing requests. Retry shortly.',code:'MUTATION_RATE_LIMIT'});
     next();
   });
+  app.use(express.json({ limit: '25mb' }));
 
   const broadcast = (type,payload) => {
     const msg = JSON.stringify({ type, payload });
@@ -232,4 +257,4 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   };
 }
 
-module.exports = { startPlatformWebServer, validateSerialConfig, validateTcp, isLoopbackHost };
+module.exports = { startPlatformWebServer, validateSerialConfig, validateTcp, isLoopbackHost, csvEscape, sameOriginRequest, mutationBodyLimit };
