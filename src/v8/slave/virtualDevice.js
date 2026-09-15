@@ -12,8 +12,8 @@ class VirtualDeviceError extends Error {
 }
 
 function validateUnitId(unitId) {
-  if (!Number.isInteger(unitId) || unitId < 1 || unitId > 247) {
-    throw new VirtualDeviceError('INVALID_UNIT_ID', 'Virtual RTU device Unit/Slave ID must be 1..247', 3, { unitId });
+  if (!Number.isInteger(unitId) || unitId < 1 || unitId > 255) {
+    throw new VirtualDeviceError('INVALID_UNIT_ID', 'Virtual Modbus device Unit ID must be 1..255', 3, { unitId });
   }
   return unitId;
 }
