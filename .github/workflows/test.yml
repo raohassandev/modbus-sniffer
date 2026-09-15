@@ -17,6 +17,7 @@ jobs:
       - run: npm ci
       - run: npm run version:check
       - run: npm run lint
+      - run: node scripts/benchmark-v7.js --cycles 25000 --min-fps 500 --max-heap-mb 384
       - name: Runtime dependency audit
         run: npm audit --omit=dev --audit-level=high
 
@@ -73,6 +74,7 @@ jobs:
       - run: node --check scripts/smoke.js
       - run: node --check scripts/discover.js
       - run: node --check scripts/version-sync.js
+      - run: node --check scripts/benchmark-v7.js
       - run: node --check playwright.config.js
       - run: npm test
       - run: npm run smoke
