@@ -2,14 +2,14 @@
 
 **Last audited:** 2026-09-15  
 **Stable product release:** 7.0.0  
-**v8 development state:** foundation/runtime work in progress on `main`  
+**v8 development state:** foundation/runtime and staged application-shell work in progress on `main`  
 **Status source of truth:** this document for implemented state; `V8_MASTER_TODO.md` remains the full target-scope roadmap.
 
 ## Why the repository still says v7
 
-The default application entry point, browser product surface and Windows desktop launcher intentionally remain on the accepted v7 runtime while v8 is built behind `src/v8/`. Keeping `package.json`, the desktop package and `npm start` on 7.0.0 is therefore a release boundary, not a version-sync defect.
+The default application entry point, stable browser product surface and Windows desktop launcher intentionally remain on the accepted v7 runtime while v8 is built behind `src/v8/`. Keeping `package.json`, the desktop package and `npm start` on 7.0.0 is therefore a release boundary, not a version-sync defect.
 
-Do not label the product v8 or change the default launcher until the v8 shell, runtime integration and applicable release gates are complete. A v8 source module being present on `main` does not by itself make that capability production-exposed.
+The v8 development shell has its own explicit `npm run v8:dev` entry point and local browser surface. Its existence does **not** make v8 the released/default product. Do not change the default launcher or product version until the remaining v8 workspaces, runtime integration and applicable release gates are complete.
 
 ## Implemented v8 foundation
 
@@ -21,7 +21,19 @@ The following work is present with automated coverage:
 - WP-04: real serial RTU/ASCII transport foundation, timing/framing, serial enumeration, echo suppression and RTS direction support.
 - WP-05: cyclic poll scheduler, write safety/read-back/audit service and canonical address notation.
 - WP-06: v8 project schema v3, explicit/idempotent v7 schema-2 migration, separate `workbench-v8.json` persistence, atomic writes/backups, migration evidence, corrupt-primary recovery and safe configuration-only connection profiles.
+- WP-07: staged local-only v8 application shell and Connection Center wired to the real Connection Broker and real virtual/serial/TCP transports, with exact owner/capability/write-lock status, explicit owner selection, safe profile creation, project switching and feature flags for incomplete workspaces.
 - Deep-audit hardening: FC22 Mask Write Register end-to-end support, serial Unit-ID validation, correct RTU/ASCII broadcast behavior, immutable broker-level transmission evidence, reopen write-lock hardening, strict simulator seed validation, serialized serial transmit execution and explicit handling of indeterminate driver-write outcomes.
+
+## v8 shell / Connection Center boundary
+
+- `npm start` still starts stable v7. `npm run v8:dev` starts the separate v8 development shell.
+- The development shell is loopback-only. It rejects non-local bind addresses until production authentication/network-bind policy exists.
+- Connection profiles remain inert configuration. Saving a profile never opens a transport or restores ownership/write/fault state.
+- Opening a profile requires an explicit allowed owner mode. The UI renders the broker-reported state, owner, transmit capability and write lock instead of inferring runtime state from UI selection.
+- Serial RTU, Serial ASCII, TCP client, TCP server and virtual/lab profiles are integrated into the Connection Center transport factory.
+- The shell exposes no write-unlock action. Open Master/Test connections remain `WRITE LOCKED`; active write UI belongs to a later guarded workspace package.
+- Changing projects closes/relinquishes live v8 runtime ownership before switching the visible profile set.
+- Incomplete workspaces remain visible but feature-gated rather than presenting placeholder controls as working product behavior.
 
 ## Project migration guarantees
 
@@ -49,7 +61,8 @@ The following work is present with automated coverage:
 | P1 | Simulator `seed()` could silently wrap invalid values through typed arrays | Seed operations now use the same strict bit/register value validation as live writes while still allowing initialization of read-only areas |
 | P1 | CI syntax gates explicitly covered older runtime files but not the whole v8 source tree | Added recursive `npm run check:v8` syntax gate and wired it into CI |
 | P1 | v8 had a planned schema but no executable, safe v7-to-v8 migration boundary | Added schema v3, validation, idempotent migration, source backup/reporting and a separate v8 store so v7 data is never silently overwritten |
-| P2 | README/version state made v8 commits look inconsistent with a v7 package | Documentation now explicitly separates stable v7 release surfaces from the in-progress v8 foundation |
+| P1 | Saved v8 connection profiles had no real application surface proving safe restore/ownership behavior | Added the staged Connection Center: profiles restore inert, runtime mode is explicit, ownership comes from the broker and writes remain locked |
+| P2 | README/version state made v8 commits look inconsistent with a v7 package | Documentation explicitly separates stable v7 release surfaces from the in-progress v8 development shell/foundation |
 
 ## Safety invariants currently enforced in code
 
@@ -64,24 +77,25 @@ The following work is present with automated coverage:
 - Every confirmed low-level write/raw/test transmission gets bounded append-only process-lifetime evidence containing timestamp, connection, owner, transport, intent and exact transmitted HEX; indeterminate writes also get an `outcome: unknown` audit record with the error code.
 - The richer write audit additionally records user/session, address/quantity, requested values, old value when available, response, verification and result.
 - Persisted v8 connection profiles contain configuration only and always normalize to manual/inactive/unowned/transmit-disabled/write-locked/fault-disabled state.
+- The v8 development shell cannot turn a saved profile into live ownership without an explicit open action and owner-mode selection.
 
 ## What is intentionally still not complete
 
 These are roadmap items, not hidden completion claims:
 
-- v8 application shell, Connection Center UI, Master UI and Simulator UI.
-- persistence/editing of Master documents/jobs, Slave maps/generators, Test recipes, chart/logger definitions and HMI pages on top of the new schema.
+- production v8 Master workspace: Poll Documents/jobs, result grid, guarded write drawer, write-evidence UX and project persistence for jobs.
+- production v8 Simulator workspace: device/server tree, memory editor, generators, session inspection and explicit LAB fault-injection UI.
 - unified v8 Traffic/Register Lab browser integration.
 - address/unit scanning through the shared Master engine.
 - Test Center/raw-frame studio and recipe engine.
 - UDP/tunnelling, IPv6 completion and Modbus/TCP Security/TLS.
 - charts/logger/SQLite historian, capture-to-digital-twin, automation APIs/CLI/SDK and HMI Builder.
-- complete accessibility/keyboard/performance/security hardening for the new v8 product shell.
+- complete accessibility/keyboard/performance/security hardening for the full v8 product shell.
 - 24-hour v8 combined workload soak, third-party interoperability matrix and real-device/site acceptance.
 - switching the default runtime/desktop launcher/product version from v7 to v8.
 
 ## Release interpretation
 
-`main` can be green while v8 is still incomplete because the stable v7 runtime remains the default product and v8 foundation modules are being introduced behind it with regression tests. The next product-completion work should integrate the tested broker/transports/Master/Slave/project schema vertically into the v8 application shell and Connection Center rather than prematurely changing the release version.
+`main` can be green while v8 is still incomplete because the stable v7 runtime remains the default product and v8 modules are introduced behind an explicit development entry point with regression tests. The next product-completion work should build the Master workspace as a vertical slice over the tested Connection Broker, Master runtime, write-safety service and schema-v3 project model rather than changing the stable release version.
 
 A future v8 release candidate should only be declared after the applicable P0/P1 work in `V8_MASTER_TODO.md` is reconciled, the default entry point moves to v8, migration is tested, browser/desktop acceptance passes, and no open P0 remains. Real RS485 electrical/site qualification stays an external field gate even after software release-candidate status.
