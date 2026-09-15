@@ -28,16 +28,22 @@ function prepareData() {
   return prepareDesktopDataDir({ userDataRoot, legacyCandidates });
 }
 
-function chooseFreePort() {
+function probePort(requested = 0) {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.unref();
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(requested, '127.0.0.1', () => {
       const selected = server.address()?.port;
       server.close(error => error ? reject(error) : resolve(selected));
     });
   });
+}
+
+async function chooseBackendPort() {
+  const requested = Number(process.env.MODBUS_DESKTOP_PORT || 0);
+  if (Number.isInteger(requested) && requested >= 1024 && requested <= 65535) return probePort(requested);
+  return probePort(0);
 }
 
 function backendEntry(root = backendRoot()) {
@@ -129,9 +135,9 @@ async function create() {
     return;
   }
 
-  try { port = await chooseFreePort(); }
+  try { port = await chooseBackendPort(); }
   catch (error) {
-    dialog.showErrorBox('Startup error', `Could not allocate a local backend port: ${error.message}`);
+    dialog.showErrorBox('Startup error', `Could not allocate the local backend port: ${error.message}`);
     app.quit();
     return;
   }
