@@ -32,6 +32,7 @@ jobs:
       - run: node --check src/activeDiscovery.js
       - run: node --check src/activeDiscoveryManager.js
       - run: node --check src/activeDiscoveryRoutes.js
+      - run: node --check src/discoveryAdoption.js
       - run: node --check src/platformWebServer.js
       - run: node --check src/workspaceStore.js
       - run: node --check src/historyStore.js
