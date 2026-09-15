@@ -21,5 +21,16 @@
 .active-discovery-evidence-row{align-items:center}
 .active-discovery-evidence-row small{display:block;margin-top:4px;color:var(--muted);line-height:1.45}
 .active-discovery-evidence-row .button-row{justify-content:flex-end;flex-wrap:wrap}
-@media(max-width:900px){.active-discovery-grid{grid-template-columns:repeat(2,minmax(140px,1fr))}.active-discovery-wide{grid-column:span 2}.active-discovery-evidence-head{align-items:flex-start;flex-direction:column}}
-@media(max-width:560px){.active-discovery-grid{grid-template-columns:1fr}.active-discovery-wide{grid-column:span 1}.active-discovery-evidence-row{align-items:flex-start;flex-direction:column}.active-discovery-evidence-row .button-row{justify-content:flex-start}}
+.active-discovery-adoption{margin-top:14px;padding:14px;border:1px solid var(--border-strong,var(--border));border-radius:12px;background:var(--panel-alt,var(--surface-2,#151b24))}
+.active-adoption-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.active-adoption-head h3{margin:0 0 4px}
+.active-adoption-head p{margin:0;max-width:800px}
+.active-adoption-selectors{grid-template-columns:minmax(180px,1fr) minmax(260px,2fr)}
+.active-adoption-target{margin-top:12px;padding:11px 12px;border:1px solid var(--border);border-radius:9px;line-height:1.5}
+.active-adoption-table{margin-top:12px}
+.active-adoption-conflict td{background:var(--warning-bg,rgba(255,193,7,.08))}
+.active-adoption-warning{margin-top:12px;padding:11px 12px;border:1px solid var(--warning-border,#8a6d1d);border-radius:9px;background:var(--warning-bg,rgba(255,193,7,.08))}
+.active-adoption-overwrite{margin-top:12px!important;padding:11px 12px;border:1px solid var(--warning-border,#8a6d1d);border-radius:9px;background:var(--warning-bg,rgba(255,193,7,.08))}
+.active-adoption-success{margin-top:12px;padding:11px 12px;border:1px solid var(--success-border,var(--border));border-radius:9px;background:var(--success-bg,rgba(46,160,67,.08))}
+@media(max-width:900px){.active-discovery-grid{grid-template-columns:repeat(2,minmax(140px,1fr))}.active-discovery-wide{grid-column:span 2}.active-discovery-evidence-head{align-items:flex-start;flex-direction:column}.active-adoption-selectors{grid-template-columns:1fr}}
+@media(max-width:560px){.active-discovery-grid{grid-template-columns:1fr}.active-discovery-wide{grid-column:span 1}.active-discovery-evidence-row{align-items:flex-start;flex-direction:column}.active-discovery-evidence-row .button-row{justify-content:flex-start}.active-adoption-head{flex-direction:column}}
