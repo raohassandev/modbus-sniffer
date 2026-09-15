@@ -22,4 +22,5 @@ module.exports = Object.freeze({
   ...require('./master/addressNotation'),
   ...require('./slave/virtualDevice'),
   ...require('./slave/virtualSlaveServer'),
+  ...require('./project'),
 });
