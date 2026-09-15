@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { makeDeviceKey, parseDeviceKey } = require('./transportIdentity');
+const { validateMappingDefinition } = require('./engineering');
 
 function now() { return new Date().toISOString(); }
 function clone(v) { return JSON.parse(JSON.stringify(v)); }
@@ -12,6 +13,7 @@ function finite(v, fallback = null) { const n = Number(v); return Number.isFinit
 function safeStamp() { return new Date().toISOString().replace(/[:.]/g,'-'); }
 function ignorableSyncError(error) { return ['EPERM','EINVAL','ENOTSUP','ENOSYS'].includes(error?.code); }
 function replaceRetryError(error) { return ['EPERM','EEXIST','ENOTEMPTY','EACCES'].includes(error?.code); }
+function mappingError(code,message,extra={}){const e=new Error(message);e.code=code;Object.assign(e,extra);return e;}
 function discoverySummary(results=[]) {
   const list=Array.isArray(results)?results:[];
   return {checked:list.length,responding:list.filter(x=>x?.responded).length,identified:list.filter(x=>x?.identificationSupported&&Array.isArray(x?.objects)&&x.objects.length).length,unsupported:list.filter(x=>x?.responded&&x?.identificationSupported===false).length,silent:list.filter(x=>!x?.responded).length};
@@ -32,6 +34,30 @@ function normalizeDiscoveryRun(input={}) {
     summary:{...discoverySummary(results),...(input.summary&&typeof input.summary==='object'?clone(input.summary):{})},results
   };
 }
+
+function validateRegisterShape(mapping){
+  const functionCode=Number(mapping.functionCode);if(!Number.isInteger(functionCode)||functionCode<1||functionCode>127)throw mappingError('INVALID_FUNCTION_CODE','Invalid function code.');
+  const v=validateMappingDefinition(mapping);
+  return{functionCode,...v};
+}
+function overlap(a,b){return a.address<=b.endAddress&&b.address<=a.endAddress;}
+function validateRegisterSet(rows,{allowSameStartReplace=false}={}){
+  const groups=new Map();
+  for(const row of rows){
+    const v=validateRegisterShape(row),deviceKey=String(row.deviceKey||'profile'),gkey=`${deviceKey}:${v.functionCode}`;
+    const normalized={...row,...v};if(!groups.has(gkey))groups.set(gkey,[]);groups.get(gkey).push(normalized);
+  }
+  for(const list of groups.values()){
+    list.sort((a,b)=>a.address-b.address);
+    for(let i=0;i<list.length;i++)for(let j=i+1;j<list.length;j++){
+      if(list[j].address>list[i].endAddress)break;
+      if(allowSameStartReplace&&list[i].address===list[j].address)continue;
+      if(overlap(list[i],list[j])&&(list[i].wordCount>1||list[j].wordCount>1))throw mappingError('MAPPING_OVERLAP',`Register mapping ${list[j].address} overlaps multiword mapping ${list[i].address} on FC${list[i].functionCode}.`,{first:list[i],second:list[j]});
+    }
+  }
+  return true;
+}
+function normalizeProfileRegister(r){const v=validateRegisterShape(r);return{...clone(r),type:v.type,address:v.address,byteOrder:v.byteOrder,wordCount:v.wordCount,endAddress:v.endAddress,functionCode:v.functionCode};}
 
 class WorkspaceCorruptionError extends Error {
   constructor(message, details = {}) { super(message); this.name='WorkspaceCorruptionError'; this.code='WORKSPACE_CORRUPT'; Object.assign(this,details); }
@@ -104,6 +130,7 @@ class WorkspaceStore {
       legacyUnassigned:p.legacyUnassigned&&typeof p.legacyUnassigned==='object'?p.legacyUnassigned:{devices:{},registers:{}},
       updatedAt:p.updatedAt||p.createdAt||now(),createdAt:p.createdAt||now()
     }));
+    db.profiles=db.profiles.map(p=>({...p,version:Math.max(1,Number(p.version)||1),source:p.source&&typeof p.source==='object'?p.source:{type:'legacy-profile'}}));
     return db;
   }
 
@@ -120,7 +147,8 @@ class WorkspaceStore {
         legacyUnassigned:{devices:oldDevices,registers:oldRegisters,migratedFromVersion:1,reason:'Original v1 data had no transport/channel identity. Assign it explicitly before use.'}
       };
     });
-    const db={version:2,activeProjectId:data.activeProjectId,projects,profiles:clone(data.profiles||[])};
+    const profiles=(data.profiles||[]).map(p=>({...clone(p),version:Math.max(1,Number(p.version)||1),source:p.source&&typeof p.source==='object'?clone(p.source):{type:'legacy-profile'}}));
+    const db={version:2,activeProjectId:data.activeProjectId,projects,profiles};
     if(!projects.some(p=>p.id===db.activeProjectId)&&projects.length)db.activeProjectId=projects[0].id;
     const report={migratedAt:now(),fromVersion:1,toVersion:2,backupFile,projectCount:projects.length,legacyDevices,legacyRegisters,policy:'No legacy device/register was guessed onto a live channel. All v1 identities remain Legacy / Unassigned until explicitly assigned.'};
     return {db,report};
@@ -142,6 +170,21 @@ class WorkspaceStore {
       for(const run of p.discoveryRuns||[]){if(!run||typeof run!=='object'||!run.id)throw new Error(`Project ${p.id} has invalid discovery evidence.`);if(!['RTU','TCP'].includes(String(run.transport||'').toUpperCase()))throw new Error(`Project ${p.id} discovery run ${run.id} has invalid transport.`);if(!Array.isArray(run.results)||run.results.length>256)throw new Error(`Project ${p.id} discovery run ${run.id} has invalid results.`);}
       for(const [key,d] of Object.entries(p.devices||{})){const parsed=parseDeviceKey(key);if(!parsed||d.deviceKey&&d.deviceKey!==key)throw new Error(`Invalid device key ${key} in project ${p.id}.`);}
     }
+    for(const p of data.profiles){if(!p||typeof p!=='object'||!p.id)throw new Error('Workspace profile is missing an ID.');if(p.registers!=null&&!Array.isArray(p.registers))throw new Error(`Profile ${p.id} has invalid registers.`);if((p.registers||[]).length>10000)throw new Error(`Profile ${p.id} has too many register mappings.`);}
+    return true;
+  }
+
+  _validateEngineeringData(data){
+    for(const p of data.projects||[]){
+      const rows=[];
+      for(const [key,r] of Object.entries(p.registers||{})){
+        if(!r||typeof r!=='object'||!r.deviceKey)throw mappingError('INVALID_REGISTER_MAPPING',`Project ${p.id} contains an invalid register mapping ${key}.`);
+        const parsed=parseDeviceKey(r.deviceKey);if(!parsed||!p.channels?.[parsed.channelId])throw mappingError('INVALID_REGISTER_MAPPING',`Register mapping ${key} references an unknown channel/device.`);
+        const v=validateRegisterShape(r);rows.push({...r,...v});
+      }
+      validateRegisterSet(rows);
+    }
+    for(const p of data.profiles||[])validateRegisterSet((p.registers||[]).map(r=>({...r,deviceKey:'profile'})));
     return true;
   }
 
@@ -215,17 +258,22 @@ class WorkspaceStore {
 
   setDevice(projectId,ref,patch={},channelId=null) {
     const p=this._project(projectId),key=this._resolveDeviceKey(p,ref,channelId,{allowUnseen:true}),parsed=parseDeviceKey(key);if(!p.channels[parsed.channelId])throw new Error(`Channel ${parsed.channelId} is not registered in this project.`);
-    const prev=p.devices[key]||{};p.devices[key]={...prev,deviceKey:key,channelId:parsed.channelId,unitId:parsed.unitId,slaveId:parsed.unitId,name:String(patch.name??prev.name??`${p.channels[parsed.channelId].transport==='TCP'?'Unit':'Slave'} ${parsed.unitId}`).trim().slice(0,120),manufacturer:String(patch.manufacturer??prev.manufacturer??'').trim().slice(0,120),model:String(patch.model??prev.model??'').trim().slice(0,120),notes:String(patch.notes??prev.notes??'').trim().slice(0,2000),profileId:patch.profileId===undefined?(prev.profileId||null):(patch.profileId||null),updatedAt:now()};p.updatedAt=now();this._save();return clone(p.devices[key]);
+    const prev=p.devices[key]||{};p.devices[key]={...prev,deviceKey:key,channelId:parsed.channelId,unitId:parsed.unitId,slaveId:parsed.unitId,name:String(patch.name??prev.name??`${p.channels[parsed.channelId].transport==='TCP'?'Unit':'Slave'} ${parsed.unitId}`).trim().slice(0,120),manufacturer:String(patch.manufacturer??prev.manufacturer??'').trim().slice(0,120),model:String(patch.model??prev.model??'').trim().slice(0,120),notes:String(patch.notes??prev.notes??'').trim().slice(0,2000),profileId:patch.profileId===undefined?(prev.profileId||null):(patch.profileId||null),profileVersion:patch.profileVersion===undefined?(prev.profileVersion||null):(Number(patch.profileVersion)||null),profileSource:patch.profileSource===undefined?(prev.profileSource||null):(patch.profileSource?clone(patch.profileSource):null),updatedAt:now()};p.updatedAt=now();this._save();return clone(p.devices[key]);
   }
   getDevice(projectId,ref,channelId=null){const p=this._project(projectId),key=this._resolveDeviceKey(p,ref,channelId);return key?clone(p.devices[key]||null):null;}
 
+  _registerCandidate(project,key,input={}){
+    const parsed=parseDeviceKey(key);if(!parsed||!project.channels[parsed.channelId])throw new Error(`Channel ${parsed?.channelId||'unknown'} is not registered in this project.`);
+    const functionCode=Number(input.functionCode),address=Number(input.address),mapKey=`${key}:${functionCode}:${address}`,prev=project.registers[mapKey]||{},base={...prev,...input,deviceKey:key,functionCode,address};
+    const validated=validateRegisterShape(base),candidate={deviceKey:key,channelId:parsed.channelId,unitId:parsed.unitId,slaveId:parsed.unitId,functionCode:validated.functionCode,address:validated.address,name:String(input.name??prev.name??'').trim().slice(0,160),type:validated.type,byteOrder:validated.byteOrder,wordCount:validated.wordCount,endAddress:validated.endAddress,scale:finite(input.scale,finite(prev.scale,1)),offset:finite(input.offset,finite(prev.offset,0)),unit:String(input.unit??prev.unit??'').trim().slice(0,40),notes:String(input.notes??prev.notes??'').trim().slice(0,2000),updatedAt:now()};
+    const peers=Object.entries(project.registers).filter(([k])=>k!==mapKey).map(([,r])=>r).filter(r=>r.deviceKey===key&&Number(r.functionCode)===validated.functionCode);
+    for(const other of peers){const ov=validateRegisterShape(other);if(overlap(candidate,ov)&&(candidate.wordCount>1||ov.wordCount>1))throw mappingError('MAPPING_OVERLAP',`${candidate.type} mapping ${candidate.address}-${candidate.endAddress} overlaps existing ${other.type||'register'} mapping ${other.address}-${ov.endAddress} on the same device and FC.`,{candidate,existing:other});}
+    return{mapKey,candidate};
+  }
+
   setRegister(projectId,input={}) {
-    const p=this._project(projectId),key=this._resolveDeviceKey(p,input.deviceKey||(input.unitId??input.slaveId),input.channelId,{allowUnseen:true}),parsed=parseDeviceKey(key);
-    if(!p.channels[parsed.channelId])throw new Error(`Channel ${parsed.channelId} is not registered in this project.`);
-    const functionCode=Number(input.functionCode),address=Number(input.address);if(!Number.isInteger(functionCode)||functionCode<1||functionCode>127)throw new Error('Invalid function code.');if(!Number.isInteger(address)||address<0||address>65535)throw new Error('Invalid register address.');
-    const mapKey=`${key}:${functionCode}:${address}`,prev=p.registers[mapKey]||{},type=String(input.type??prev.type??'uint16').toLowerCase();if(!['uint16','int16','uint32','int32','float32','uint64','int64','float64','ascii','bits'].includes(type))throw new Error('Unsupported data type.');
-    const byteOrder=String(input.byteOrder??prev.byteOrder??(type.includes('64')?'ABCDEFGH':'ABCD')).toUpperCase();
-    p.registers[mapKey]={deviceKey:key,channelId:parsed.channelId,unitId:parsed.unitId,slaveId:parsed.unitId,functionCode,address,name:String(input.name??prev.name??'').trim().slice(0,160),type,byteOrder,scale:finite(input.scale,finite(prev.scale,1)),offset:finite(input.offset,finite(prev.offset,0)),unit:String(input.unit??prev.unit??'').trim().slice(0,40),notes:String(input.notes??prev.notes??'').trim().slice(0,2000),updatedAt:now()};p.updatedAt=now();this._save();return clone(p.registers[mapKey]);
+    const p=this._project(projectId),key=this._resolveDeviceKey(p,input.deviceKey||(input.unitId??input.slaveId),input.channelId,{allowUnseen:true}),{mapKey,candidate}=this._registerCandidate(p,key,input);
+    p.registers[mapKey]=candidate;p.updatedAt=now();this._save();return clone(candidate);
   }
   deleteRegister(projectId,ref,functionCode,address,channelId=null){const p=this._project(projectId),deviceKey=this._resolveDeviceKey(p,ref,channelId);if(!deviceKey)return false;const key=`${deviceKey}:${Number(functionCode)}:${Number(address)}`,existed=Boolean(p.registers[key]);delete p.registers[key];if(existed){p.updatedAt=now();this._save();}return existed;}
   listRegisters(projectId,ref=null,channelId=null){const p=this._project(projectId);let deviceKey=null;if(ref!=null)deviceKey=this._resolveDeviceKey(p,ref,channelId);return Object.values(p.registers).filter(r=>!deviceKey||r.deviceKey===deviceKey).map(clone).sort((a,b)=>String(a.deviceKey).localeCompare(String(b.deviceKey))||a.functionCode-b.functionCode||a.address-b.address);}
@@ -241,17 +289,30 @@ class WorkspaceStore {
   getDiscoveryRun(projectId,runId){const p=this._project(projectId),run=(p.discoveryRuns||[]).find(x=>x.id===runId);return run?clone(run):null;}
   deleteDiscoveryRun(projectId,runId){const p=this._project(projectId),before=(p.discoveryRuns||[]).length;p.discoveryRuns=(p.discoveryRuns||[]).filter(x=>x.id!==runId);if(p.discoveryRuns.length===before)return false;p.updatedAt=now();this._save();return true;}
 
-  listProfiles(){return this.db.profiles.map(p=>({id:p.id,name:p.name,manufacturer:p.manufacturer,model:p.model,registerCount:(p.registers||[]).length,createdAt:p.createdAt,updatedAt:p.updatedAt}));}
+  listProfiles(){return this.db.profiles.map(p=>({id:p.id,name:p.name,manufacturer:p.manufacturer,model:p.model,version:p.version||1,source:clone(p.source||{}),registerCount:(p.registers||[]).length,createdAt:p.createdAt,updatedAt:p.updatedAt}));}
   getProfile(profileId){const p=this.db.profiles.find(x=>x.id===profileId);return p?clone(p):null;}
-  saveProfile(input={}){const stamp=now(),existing=input.id?this.db.profiles.find(x=>x.id===input.id):null,profile=existing||{id:id('profile'),createdAt:stamp};profile.name=String(input.name||profile.name||'Unnamed Profile').trim().slice(0,160);profile.manufacturer=String(input.manufacturer??profile.manufacturer??'').trim().slice(0,120);profile.model=String(input.model??profile.model??'').trim().slice(0,120);profile.notes=String(input.notes??profile.notes??'').trim().slice(0,2000);profile.registers=Array.isArray(input.registers)?clone(input.registers):clone(profile.registers||[]);profile.updatedAt=stamp;if(!existing)this.db.profiles.push(profile);this._save();return clone(profile);}
-  createProfileFromDevice(projectId,ref,meta={},channelId=null){const p=this._project(projectId),key=this._resolveDeviceKey(p,ref,channelId),regs=this.listRegisters(projectId,key).map(r=>{const x={...r};for(const k of ['deviceKey','channelId','unitId','slaveId','updatedAt'])delete x[k];return x;}),d=this.getDevice(projectId,key)||{};return this.saveProfile({name:meta.name||`${d.manufacturer||'Device'} ${d.model||''}`.trim()||`${key} profile`,manufacturer:meta.manufacturer??d.manufacturer,model:meta.model??d.model,notes:meta.notes||'',registers:regs});}
-  applyProfile(projectId,ref,profileId,channelId=null){const profile=this.getProfile(profileId);if(!profile)throw new Error('Profile not found.');const p=this._project(projectId),key=this._resolveDeviceKey(p,ref,channelId,{allowUnseen:true});let count=0;for(const r of profile.registers){this.setRegister(projectId,{...r,deviceKey:key});count++;}this.setDevice(projectId,key,{...this.getDevice(projectId,key),manufacturer:profile.manufacturer,model:profile.model,profileId});return{count,device:this.getDevice(projectId,key)};}
+  saveProfile(input={}){
+    const stamp=now(),existing=input.id?this.db.profiles.find(x=>x.id===input.id):null,profile=existing||{id:id('profile'),createdAt:stamp};
+    const regs=Array.isArray(input.registers)?input.registers:(profile.registers||[]),normalized=regs.map(normalizeProfileRegister);validateRegisterSet(normalized.map(r=>({...r,deviceKey:'profile'})));
+    profile.name=String(input.name||profile.name||'Unnamed Profile').trim().slice(0,160);profile.manufacturer=String(input.manufacturer??profile.manufacturer??'').trim().slice(0,120);profile.model=String(input.model??profile.model??'').trim().slice(0,120);profile.notes=String(input.notes??profile.notes??'').trim().slice(0,2000);profile.registers=normalized;profile.version=existing?Math.max(1,Number(existing.version)||1)+1:Math.max(1,Number(input.version)||1);profile.source=input.source&&typeof input.source==='object'?clone(input.source):(profile.source||{type:'user'});profile.updatedAt=stamp;if(!existing)this.db.profiles.push(profile);this._save();return clone(profile);
+  }
+  createProfileFromDevice(projectId,ref,meta={},channelId=null){const p=this._project(projectId),key=this._resolveDeviceKey(p,ref,channelId),regs=this.listRegisters(projectId,key).map(r=>{const x={...r};for(const k of ['deviceKey','channelId','unitId','slaveId','updatedAt'])delete x[k];return x;}),d=this.getDevice(projectId,key)||{};return this.saveProfile({name:meta.name||`${d.manufacturer||'Device'} ${d.model||''}`.trim()||`${key} profile`,manufacturer:meta.manufacturer??d.manufacturer,model:meta.model??d.model,notes:meta.notes||'',source:{type:'project-device',projectId,deviceKey:key,capturedAt:now()},registers:regs});}
+  applyProfile(projectId,ref,profileId,channelId=null){
+    const profile=this.getProfile(profileId);if(!profile)throw new Error('Profile not found.');const p=this._project(projectId),key=this._resolveDeviceKey(p,ref,channelId,{allowUnseen:true});
+    // Preflight every mapping against a cloned project so an invalid profile can never partially apply.
+    const preview=clone(p);let count=0;
+    for(const r of profile.registers){const{mapKey,candidate}=this._registerCandidate(preview,key,{...r,deviceKey:key});preview.registers[mapKey]=candidate;count++;}
+    p.registers=preview.registers;
+    const current=this.getDevice(projectId,key)||{};const parsed=parseDeviceKey(key),prev=p.devices[key]||{};
+    p.devices[key]={...prev,deviceKey:key,channelId:parsed.channelId,unitId:parsed.unitId,slaveId:parsed.unitId,name:current.name||prev.name||`${p.channels[parsed.channelId].transport==='TCP'?'Unit':'Slave'} ${parsed.unitId}`,manufacturer:profile.manufacturer||current.manufacturer||'',model:profile.model||current.model||'',notes:current.notes||prev.notes||'',profileId:profile.id,profileVersion:profile.version||1,profileSource:clone(profile.source||{}),updatedAt:now()};
+    p.updatedAt=now();this._save();return{count,device:this.getDevice(projectId,key),profile:{id:profile.id,version:profile.version||1,source:clone(profile.source||{})}};
+  }
   deleteProfile(profileId){const n=this.db.profiles.length;this.db.profiles=this.db.profiles.filter(x=>x.id!==profileId);if(this.db.profiles.length===n)return false;this._save();return true;}
 
   exportAll(){return clone(this.db);}
-  importAll(data){const candidate=this._normalizeV2(clone(data));this._validateDb(candidate);if(!candidate.projects.length)throw new Error('Workspace export contains no projects.');if(!candidate.projects.some(p=>p.id===candidate.activeProjectId))candidate.activeProjectId=candidate.projects[0].id;this._atomicWrite(candidate,{backupExisting:true});this.db=candidate;return this.exportAll();}
+  importAll(data){const candidate=this._normalizeV2(clone(data));this._validateDb(candidate);this._validateEngineeringData(candidate);if(!candidate.projects.length)throw new Error('Workspace export contains no projects.');if(!candidate.projects.some(p=>p.id===candidate.activeProjectId))candidate.activeProjectId=candidate.projects[0].id;this._atomicWrite(candidate,{backupExisting:true});this.db=candidate;return this.exportAll();}
   getMigrationReport(){return this.lastMigrationReport?clone(this.lastMigrationReport):null;}
   _project(projectId){const p=this.db.projects.find(x=>x.id===(projectId||this.db.activeProjectId));if(!p)throw new Error('Project not found.');return p;}
 }
 
-module.exports={WorkspaceStore,WorkspaceCorruptionError,normalizeDiscoveryRun,discoverySummary};
+module.exports={WorkspaceStore,WorkspaceCorruptionError,normalizeDiscoveryRun,discoverySummary,validateRegisterSet};
