@@ -11,6 +11,7 @@ const { analyzeDeep } = require('./deepDiagnostics');
 const { reportHtml } = require('./reportGenerator');
 const { collectExportModel, buildWorkbook, buildPdf, streamProjectZip, safeName } = require('./exportBundle');
 const { makeDeviceKey, parseDeviceKey } = require('./transportIdentity');
+const { installActiveDiscoveryRoutes } = require('./activeDiscoveryRoutes');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -74,8 +75,8 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   const publicDir = path.join(__dirname, '..', 'public');
   const baseHtml = fs.readFileSync(path.join(publicDir, 'v4.html'), 'utf8');
   const workbench = baseHtml
-    .replace('UI v4.0', 'UI v6.2')
-    .replace('</body>', '<link rel="stylesheet" href="/platform-v6.css?v=20260914"><script src="/platform-v6.js?v=20260914-2"></script></body>');
+    .replace('UI v4.0', 'UI v7.0')
+    .replace('</body>', '<link rel="stylesheet" href="/platform-v6.css?v=20260915"><script src="/platform-v6.js?v=20260915-1"></script></body>');
 
   app.disable('x-powered-by');
   app.use(express.json({ limit: '25mb' }));
@@ -90,6 +91,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     const msg = JSON.stringify({ type, payload });
     for (const ws of wss.clients) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
   };
+  const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast});
   const active = () => workspaces.getActiveProject();
   const apiError = (r,e,defaultStatus=400) => r.status(e?.code==='AMBIGUOUS_DEVICE'?409:defaultStatus).json({error:e.message,code:e.code||null,deviceKeys:e.deviceKeys||undefined});
   const syncRuntimeChannels = () => {
@@ -135,7 +137,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.get('/api/devices', (q,r) => { try{r.json(state.getDevices(q.query));}catch(e){apiError(r,e);} });
   app.get('/api/devices/:ref', (q,r) => { try{const d=state.getDevice(decodeURIComponent(q.params.ref),{channelId:q.query.channelId||null});if(!d)return r.status(404).json({error:`Device ${q.params.ref} has not been observed.`});r.json(d);}catch(e){apiError(r,e);} });
   app.get('/api/decode', (q,r) => r.json(state.getDataTypeAnalysis(q.query)));
-  app.get('/api/config', (_q,r) => r.json({ ...state.config, demo, version:'6.2.0' }));
+  app.get('/api/config', (_q,r) => r.json({ ...state.config, demo, version:'7.0.0' }));
   app.get('/api/replay/status', (_q,r) => r.json(replay.status()));
   app.get('/api/diagnostics/deep', (_q,r) => r.json(analyzeDeep({ state, config:state.config })));
   app.get('/api/engineering', (_q,r) => { try{r.json(engineering());}catch(e){apiError(r,e);} });
@@ -186,7 +188,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.get('/api/export/results.xlsx', async (_q,r) => { try { const model=exportModel(); const buf=await buildWorkbook(model); const name=safeName(model.project?.name); r.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); r.setHeader('Content-Disposition',`attachment; filename="${name}-modbus-results.xlsx"`); r.send(buf); } catch(e) { r.status(500).json({error:e.message}); } });
   app.get('/api/export/report.pdf', async (_q,r) => { try { const model=exportModel(); const buf=await buildPdf(model); const name=safeName(model.project?.name); r.setHeader('Content-Type','application/pdf'); r.setHeader('Content-Disposition',`attachment; filename="${name}-modbus-report.pdf"`); r.send(buf); } catch(e) { r.status(500).json({error:e.message}); } });
   app.get('/api/export/project.zip', async (_q,r) => { try { const model=exportModel(); const html=reportHtml({project:model.project,state,diagnostics:model.diagnostics,mappings:model.mappings}); await streamProjectZip(r,model,html); } catch(e) { if(!r.headersSent) r.status(500).json({error:e.message}); else r.destroy(e); } });
-  app.get('/api/export/manifest', (_q,r) => r.json({version:'6.2.0',exports:[
+  app.get('/api/export/manifest', (_q,r) => r.json({version:'7.0.0',exports:[
     {id:'xlsx',label:'Excel Workbook',href:'/api/export/results.xlsx',extension:'.xlsx'},
     {id:'pdf',label:'Engineering Report',href:'/api/export/report.pdf',extension:'.pdf'},
     {id:'capture',label:'Raw Capture',href:'/api/capture/export.mbcap',extension:'.mbcap'},
@@ -219,14 +221,14 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   for (const [ev,fn] of Object.entries(handlers)) state.on(ev,fn);
   tcpProxy.on('status', p=>broadcast('tcp-status',p));
   wss.on('connection', ws => {
-    ws.send(JSON.stringify({type:'hello',payload:{status:state.getStatus(),analysis:state.getAnalysis(),devices:state.getDevices(),replay:replay.status(),project:syncRuntimeChannels(),tcp:tcpProxy.status()}}));
+    ws.send(JSON.stringify({type:'hello',payload:{status:state.getStatus(),analysis:state.getAnalysis(),devices:state.getDevices(),replay:replay.status(),project:syncRuntimeChannels(),tcp:tcpProxy.status(),discoveryActive:activeDiscovery.status()}}));
     ws.on('error',()=>{});
   });
 
   await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(options.webPort,options.webHost,resolve); });
   return {
     url:`http://${options.webHost==='0.0.0.0'?'127.0.0.1':options.webHost}:${options.webPort}`,
-    close:async()=>{ for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
+    close:async()=>{ await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
   };
 }
 
