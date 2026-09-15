@@ -54,6 +54,12 @@ class VirtualSlaveServer extends EventEmitter {
 
   addDevice(deviceOrOptions) {
     const device = deviceOrOptions instanceof VirtualDevice ? deviceOrOptions : new VirtualDevice(deviceOrOptions);
+    if (['rtu', 'ascii'].includes(this.framing) && device.unitId > 247) {
+      throw new VirtualDeviceError('INVALID_SERIAL_UNIT_ID', 'RTU/ASCII virtual Slave Unit ID must be 1..247', 3, {
+        unitId: device.unitId,
+        framing: this.framing,
+      });
+    }
     if (this.devices.has(device.unitId)) throw new Error(`Virtual Unit ${device.unitId} already exists`);
     this.devices.set(device.unitId, device);
     return device;
