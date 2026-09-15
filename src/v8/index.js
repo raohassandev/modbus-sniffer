@@ -15,6 +15,9 @@ module.exports = Object.freeze({
   ...require('./transports/serialTransport'),
   ...require('./master/asyncSemaphore'),
   ...require('./master/masterEngine'),
+  ...require('./master/pollScheduler'),
+  ...require('./master/writeSafety'),
+  ...require('./master/addressNotation'),
   ...require('./slave/virtualDevice'),
   ...require('./slave/virtualSlaveServer'),
 });
