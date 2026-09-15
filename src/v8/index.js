@@ -5,4 +5,7 @@ module.exports = Object.freeze({
   ...require('./events'),
   ...require('./connectionBroker'),
   ...require('./transports/virtualLoopback'),
+  ...require('./master/masterEngine'),
+  ...require('./slave/virtualDevice'),
+  ...require('./slave/virtualSlaveServer'),
 });
