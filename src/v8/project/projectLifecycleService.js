@@ -43,6 +43,7 @@ function configurationSnapshot(project) {
     digitalTwins: clone(normalized.digitalTwins),
     automation: clone(normalized.automation),
     hmiScreens: clone(normalized.hmiScreens),
+    hmiTemplates: clone(normalized.hmiTemplates),
     ui: clone(normalized.ui),
   });
 }
@@ -140,6 +141,7 @@ class ProjectLifecycleService {
         charts: project.charts.length,
         loggerProfiles: project.loggerProfiles.length,
         hmiScreens: project.hmiScreens.length,
+        hmiTemplates: project.hmiTemplates.length,
       }),
     });
   }
