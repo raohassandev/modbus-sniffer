@@ -45,7 +45,6 @@ class WriteAuditTrail {
   }
 
   clear() {
-    // Audit records are append-only during a process lifetime. Explicit persistence/rotation owns deletion later.
     throw new WriteSafetyError('AUDIT_APPEND_ONLY', 'Write audit trail cannot be cleared through the runtime API');
   }
 }
@@ -55,19 +54,38 @@ function describeWritePdu(pdu) {
   switch (raw[0]) {
     case protocol.FC.WRITE_SINGLE_COIL: {
       const decoded = protocol.decodeWriteSingleRequest(raw);
-      return { functionCode: raw[0], area: 'coils', address: decoded.address, quantity: 1, values: [decoded.value], bulk: false };
+      return { functionCode: raw[0], area: 'coils', address: decoded.address, quantity: 1, values: [decoded.value], bulk: false, supportsReadBack: true };
     }
     case protocol.FC.WRITE_SINGLE_REGISTER: {
       const decoded = protocol.decodeWriteSingleRequest(raw);
-      return { functionCode: raw[0], area: 'holdingRegisters', address: decoded.address, quantity: 1, values: [decoded.value], bulk: false };
+      return { functionCode: raw[0], area: 'holdingRegisters', address: decoded.address, quantity: 1, values: [decoded.value], bulk: false, supportsReadBack: true };
     }
     case protocol.FC.WRITE_MULTIPLE_COILS: {
       const decoded = protocol.decodeWriteMultipleRequest(raw);
-      return { functionCode: raw[0], area: 'coils', address: decoded.address, quantity: decoded.quantity, values: [...decoded.values], bulk: true };
+      return { functionCode: raw[0], area: 'coils', address: decoded.address, quantity: decoded.quantity, values: [...decoded.values], bulk: true, supportsReadBack: true };
     }
     case protocol.FC.WRITE_MULTIPLE_REGISTERS: {
       const decoded = protocol.decodeWriteMultipleRequest(raw);
-      return { functionCode: raw[0], area: 'holdingRegisters', address: decoded.address, quantity: decoded.quantity, values: [...decoded.values], bulk: true };
+      return { functionCode: raw[0], area: 'holdingRegisters', address: decoded.address, quantity: decoded.quantity, values: [...decoded.values], bulk: true, supportsReadBack: true };
+    }
+    case protocol.FC.WRITE_FILE_RECORD: {
+      const decoded = protocol.decodeWriteFileRecord(raw);
+      return {
+        functionCode: raw[0],
+        area: 'fileRecords',
+        address: null,
+        quantity: decoded.records.reduce((sum, record) => sum + record.recordLength, 0),
+        values: null,
+        bulk: true,
+        fileWrite: true,
+        supportsReadBack: false,
+        fileRecords: decoded.records.map((record) => ({
+          fileNumber: record.fileNumber,
+          recordNumber: record.recordNumber,
+          recordLength: record.recordLength,
+          values: [...record.values],
+        })),
+      };
     }
     case protocol.FC.MASK_WRITE_REGISTER: {
       const decoded = protocol.decodeMaskWriteRegisterRequest(raw);
@@ -81,6 +99,7 @@ function describeWritePdu(pdu) {
         maskWrite: true,
         andMask: decoded.andMask,
         orMask: decoded.orMask,
+        supportsReadBack: true,
       };
     }
     case protocol.FC.READ_WRITE_MULTIPLE_REGISTERS: {
@@ -94,6 +113,7 @@ function describeWritePdu(pdu) {
         bulk: true,
         readAddress: decoded.readAddress,
         readQuantity: decoded.readQuantity,
+        supportsReadBack: true,
       };
     }
     default:
@@ -102,6 +122,9 @@ function describeWritePdu(pdu) {
 }
 
 function readPduForDescriptor(descriptor) {
+  if (descriptor.supportsReadBack === false || descriptor.address == null) {
+    throw new WriteSafetyError('READBACK_UNSUPPORTED', 'This write type does not support generic register/coil read-back', { functionCode: descriptor.functionCode });
+  }
   return protocol.encodeReadRequest({
     functionCode: descriptor.area === 'coils' ? protocol.FC.READ_COILS : protocol.FC.READ_HOLDING_REGISTERS,
     address: descriptor.address,
@@ -114,6 +137,7 @@ function maskWriteResult(current, andMask, orMask) {
 }
 
 function expectedWriteValues(descriptor, oldValues) {
+  if (descriptor.values == null && !descriptor.maskWrite) return null;
   if (!descriptor.maskWrite) return [...descriptor.values];
   if (!Array.isArray(oldValues) || oldValues.length !== 1) return null;
   return [maskWriteResult(Number(oldValues[0]), descriptor.andMask, descriptor.orMask)];
@@ -176,6 +200,9 @@ class WriteSafetyController extends EventEmitter {
   async execute({ unitId, pdu, confirmation = null, captureOldValue = true, readBack = false, context = {} } = {}) {
     const descriptor = describeWritePdu(pdu);
     this._validateConfirmation({ unitId, descriptor, confirmation });
+    if (readBack && descriptor.supportsReadBack === false) {
+      throw new WriteSafetyError('READBACK_UNSUPPORTED', 'Read-back verification is not available for this write type', { functionCode: descriptor.functionCode });
+    }
     const startedAt = Date.now();
     let oldValues = null;
     let expectedValues = descriptor.values ? [...descriptor.values] : null;
@@ -184,7 +211,7 @@ class WriteSafetyController extends EventEmitter {
     let failure = null;
 
     try {
-      const needsOldValue = unitId !== 0 && (captureOldValue || (descriptor.maskWrite && readBack));
+      const needsOldValue = descriptor.supportsReadBack !== false && unitId !== 0 && (captureOldValue || (descriptor.maskWrite && readBack));
       if (needsOldValue) {
         const oldResult = await this.master.request({ unitId, pdu: readPduForDescriptor(descriptor) });
         oldValues = [...(oldResult.decoded?.values || [])];
@@ -230,6 +257,7 @@ class WriteSafetyController extends EventEmitter {
         address: descriptor.address,
         quantity: descriptor.quantity,
         requestedValues: expectedValues ? [...expectedValues] : null,
+        fileRecords: descriptor.fileRecords ? descriptor.fileRecords.map((record) => ({ ...record, values: [...record.values] })) : null,
         maskWrite: descriptor.maskWrite ? { andMask: descriptor.andMask, orMask: descriptor.orMask } : null,
         oldValues,
         pduHex: Buffer.from(pdu).toString('hex').toUpperCase(),
@@ -253,7 +281,10 @@ class WriteSafetyController extends EventEmitter {
   _validateConfirmation({ unitId, descriptor, confirmation }) {
     if (!confirmation?.confirmed) throw new WriteSafetyError('CONFIRMATION_REQUIRED', 'Explicit write confirmation is required');
     if (descriptor.bulk && confirmation.bulk !== true) {
-      throw new WriteSafetyError('BULK_CONFIRMATION_REQUIRED', 'FC15/FC16/FC23 require explicit bulk-write confirmation', { functionCode: descriptor.functionCode });
+      throw new WriteSafetyError('BULK_CONFIRMATION_REQUIRED', 'Bulk/write-record functions require explicit bulk-write confirmation', { functionCode: descriptor.functionCode });
+    }
+    if (descriptor.fileWrite && confirmation.fileRecord !== true) {
+      throw new WriteSafetyError('FILE_RECORD_CONFIRMATION_REQUIRED', 'FC21 Write File Record requires explicit file-record confirmation', { functionCode: descriptor.functionCode });
     }
     if (unitId === 0 && confirmation.broadcast !== true) {
       throw new WriteSafetyError('BROADCAST_CONFIRMATION_REQUIRED', 'Broadcast writes require explicit broadcast confirmation');
