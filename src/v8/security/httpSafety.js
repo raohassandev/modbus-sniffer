@@ -1,5 +1,7 @@
 'use strict';
 
+const net = require('node:net');
+
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 class HttpSafetyError extends Error {
@@ -12,6 +14,26 @@ class HttpSafetyError extends Error {
   }
 }
 
+function normalizeHostname(value) {
+  return String(value || '').trim().replace(/^\[|\]$/g, '').toLowerCase();
+}
+
+function isLoopbackHostname(value) {
+  const host = normalizeHostname(value);
+  if (host === 'localhost') return true;
+  const family = net.isIP(host);
+  if (family === 4) return host.startsWith('127.');
+  if (family === 6) return host === '::1' || host === '0:0:0:0:0:0:0:1';
+  return false;
+}
+
+function hostnameFromHostHeader(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  try { return normalizeHostname(new URL(`http://${raw}`).hostname); }
+  catch { return null; }
+}
+
 function requestOrigin(req) {
   const protocol = String(req.protocol || 'http').trim();
   const host = String(req.headers.host || '').trim();
@@ -21,6 +43,14 @@ function requestOrigin(req) {
 function originOf(value) {
   if (!value) return null;
   try { return new URL(String(value)).origin; } catch { return null; }
+}
+
+function loopbackHostGuard(req, res, next) {
+  const hostname = hostnameFromHostHeader(req?.headers?.host);
+  if (!hostname || !isLoopbackHostname(hostname)) {
+    return res.status(403).json({ ok: false, error: { code: 'NON_LOOPBACK_HOST', message: 'Workbench accepts only loopback Host headers' } });
+  }
+  return next();
 }
 
 function sameOriginMutationGuard(req, res, next) {
@@ -38,15 +68,19 @@ function sameOriginMutationGuard(req, res, next) {
 }
 
 function webSocketOriginAllowed(request) {
+  const hostHeader = String(request?.headers?.host || '').trim();
+  const hostName = hostnameFromHostHeader(hostHeader);
+  if (!hostName || !isLoopbackHostname(hostName)) return false;
   const rawOrigin = request?.headers?.origin;
   // Non-browser local SDK/automation clients generally do not send Origin.
   if (rawOrigin == null || rawOrigin === '') return true;
   const supplied = originOf(rawOrigin);
   if (!supplied) return false;
-  const host = String(request?.headers?.host || '').trim();
-  if (!host) return false;
+  let suppliedHostname = null;
+  try { suppliedHostname = normalizeHostname(new URL(supplied).hostname); } catch { return false; }
+  if (!isLoopbackHostname(suppliedHostname)) return false;
   const protocol = request?.socket?.encrypted ? 'https' : 'http';
-  return supplied === `${protocol}://${host}`;
+  return supplied === `${protocol}://${hostHeader}`;
 }
 
 function createMutationRateLimiter({ windowMs = 60000, max = 240, maxEntries = 10000 } = {}) {
@@ -92,8 +126,12 @@ function createBodyLengthGuard({ maxBytes = 2 * 1024 * 1024 } = {}) {
 module.exports = {
   MUTATION_METHODS,
   HttpSafetyError,
+  normalizeHostname,
+  isLoopbackHostname,
+  hostnameFromHostHeader,
   requestOrigin,
   originOf,
+  loopbackHostGuard,
   sameOriginMutationGuard,
   webSocketOriginAllowed,
   createMutationRateLimiter,
