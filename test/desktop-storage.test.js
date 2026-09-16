@@ -42,11 +42,14 @@ test('desktop storage never merges legacy data into an existing user workspace',
   assert.equal(fs.readFileSync(path.join(dest,'workspaces.json'),'utf8'),'current');
 });
 
-test('desktop launcher starts the v7 backend and keeps loopback dynamic port safety',()=>{
+test('desktop launcher starts the v8 backend and keeps loopback dynamic port safety',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','desktop','main.js'),'utf8');
-  assert.match(source,/src['"],\s*['"]index-v7\.js/);
-  assert.doesNotMatch(source,/src['"],\s*['"]index-v6\.js/);
+  assert.match(source,/src['"],\s*['"]index-v8\.js/);
+  assert.doesNotMatch(source,/src['"],\s*['"]index-v7\.js/);
   assert.match(source,/--data-dir/);
+  assert.match(source,/--host/);
+  assert.match(source,/--port/);
+  assert.match(source,/\/api\/v8\/status/);
   assert.match(source,/requestSingleInstanceLock/);
   assert.match(source,/server\.listen\(requested,\s*['"]127\.0\.0\.1['"]/);
   assert.match(source,/MODBUS_DESKTOP_PORT/);
