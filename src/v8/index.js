@@ -3,6 +3,9 @@
 module.exports = Object.freeze({
   protocol: require('./protocol'),
   ...require('./events'),
+  ...require('./featureFlags'),
+  ...require('./connectionProfiles'),
+  ...require('./projectSchema'),
   ...require('./connectionBroker'),
   ...require('./connectionBrokerSafety'),
   ...require('./transports/virtualLoopback'),
