@@ -4,4 +4,6 @@ module.exports = Object.freeze({
   ...require('./schema'),
   ...require('./migrateV7'),
   ...require('./projectStore'),
+  ...require('./projectLifecycleService'),
+  ...require('./projectLifecycleRoutes'),
 });
