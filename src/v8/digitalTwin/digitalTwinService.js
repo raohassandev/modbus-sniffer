@@ -6,7 +6,7 @@ const { createWorkbenchEvent } = require('../events');
 
 const AREAS = Object.freeze(['coils', 'discreteInputs', 'holdingRegisters', 'inputRegisters']);
 const MAX_TWINS = 1000;
-const MAX_SOURCE_POINTS = 10000;
+const MAX_SOURCE_POINTS = 100000;
 
 class DigitalTwinError extends Error {
   constructor(code, message, details = {}) {
@@ -162,7 +162,8 @@ class DigitalTwinService extends EventEmitter {
       ? new Set(options.unitIds.map(Number).filter((value) => Number.isInteger(value) && value >= 1 && value <= 255))
       : null;
     const writableAreas = normalizeWritableAreas(options.writableAreas);
-    const points = this.registerLab.list({ connectionId: sourceConnectionId, limit: MAX_SOURCE_POINTS })
+    const pointLimit = Math.min(MAX_SOURCE_POINTS, Math.max(1, Number(this.registerLab.maxPoints) || MAX_SOURCE_POINTS));
+    const points = this.registerLab.list({ connectionId: sourceConnectionId, limit: pointLimit })
       .filter((point) => !requestedUnits || requestedUnits.has(point.unitId));
     if (!points.length) throw new DigitalTwinError('NO_SOURCE_POINTS', `No captured Register Lab points exist for ${sourceConnectionId}`, { sourceConnectionId });
 
@@ -236,6 +237,49 @@ class DigitalTwinService extends EventEmitter {
     return this.get(record.twinId);
   }
 
+  retarget(twinId, patch = {}) {
+    const project = this._project();
+    const twin = clone(this.get(twinId));
+    if (!['draft', 'applied-review-required'].includes(twin.status)) {
+      throw new DigitalTwinError('TWIN_ALREADY_APPROVED', 'Approved digital twins cannot be retargeted; create a new draft instead', { twinId, status: twin.status });
+    }
+    const target = { ...twin.target };
+    if (Object.prototype.hasOwnProperty.call(patch, 'targetConnectionId')) target.connectionId = text(patch.targetConnectionId, 'targetConnectionId', { optional: true }) || null;
+    if (Object.prototype.hasOwnProperty.call(patch, 'serverId')) target.serverId = text(patch.serverId, 'serverId');
+    if (Object.prototype.hasOwnProperty.call(patch, 'framing')) {
+      const framing = String(patch.framing || '').toLowerCase();
+      if (!['rtu', 'ascii', 'tcp'].includes(framing)) throw new DigitalTwinError('INVALID_TWIN', 'framing must be rtu, ascii or tcp', { framing });
+      target.framing = framing;
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'receivePollMs')) {
+      const value = Number(patch.receivePollMs);
+      if (!Number.isFinite(value) || value < 1 || value > 60000) throw new DigitalTwinError('INVALID_TWIN', 'receivePollMs must be 1..60000', { value: patch.receivePollMs });
+      target.receivePollMs = Math.round(value);
+    }
+    const writableAreas = Object.prototype.hasOwnProperty.call(patch, 'writableAreas')
+      ? normalizeWritableAreas(patch.writableAreas)
+      : normalizeWritableAreas(twin.safety?.writableAreas || {});
+    twin.target = target;
+    twin.name = Object.prototype.hasOwnProperty.call(patch, 'name') ? String(patch.name || twin.name).slice(0, 200) : twin.name;
+    twin.safety = { ...twin.safety, writableAreas: clone(writableAreas), approved: false };
+    twin.status = 'draft';
+    twin.updatedAt = new Date().toISOString();
+    delete twin.appliedAt;
+    delete twin.approvedAt;
+    for (const device of twin.devices || []) {
+      device.serverId = target.serverId;
+      device.deviceId = `${target.serverId}:unit:${device.unitId}`;
+      device.writableAreas = clone(writableAreas);
+      device.metadata = {
+        ...(device.metadata || {}),
+        safeDefault: !writableAreas.coils && !writableAreas.holdingRegisters ? 'read-only' : 'explicit-writable-areas',
+      };
+    }
+    this._replace(project, twin);
+    this._emit('digital-twin.retargeted', twin, { serverId: target.serverId, connectionId: target.connectionId });
+    return this.get(twinId);
+  }
+
   apply(twinId) {
     const project = this._project();
     const twin = clone(this.get(twinId));
@@ -270,6 +314,7 @@ class DigitalTwinService extends EventEmitter {
     }
 
     twin.status = 'applied-review-required';
+    twin.safety.approved = false;
     twin.appliedAt = new Date().toISOString();
     twin.updatedAt = twin.appliedAt;
     this._replace(project, twin);
@@ -353,6 +398,7 @@ class DigitalTwinService extends EventEmitter {
 module.exports = {
   AREAS,
   MAX_TWINS,
+  MAX_SOURCE_POINTS,
   DigitalTwinError,
   DigitalTwinService,
   buildDevice,
