@@ -21,6 +21,7 @@
     "smoke": "node scripts/smoke.js",
     "acceptance": "node scripts/acceptance.js",
     "soak": "node scripts/soak.js",
+    "soak:v8": "node scripts/soak-v8.js",
     "field-check": "node scripts/field-check.js",
     "discover": "node scripts/discover.js",
     "e2e": "playwright test",
