@@ -183,6 +183,12 @@ function startV8WorkbenchServer({
     res.json({ ok: true, interfaces: center.listNetworkInterfaces() });
   }));
 
+  app.get('/api/v8/system/recommend-interface', route(async (req, res) => {
+    assertFeature(flags, 'connectionCenter');
+    const target = String(req.query.target || '').trim();
+    res.json({ ok: true, target, recommendation: center.recommendLocalInterface(target) });
+  }));
+
   app.use('/v8', express.static(publicDir, { index: 'index.html', fallthrough: true }));
   app.get('/', (_req, res) => res.redirect('/v8/'));
   app.get('/v8/*splat', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
