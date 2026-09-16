@@ -19,6 +19,7 @@ const COLLECTION_LIMITS = Object.freeze({
   digitalTwins: 1000,
   automation: 10000,
   hmiScreens: 10000,
+  hmiTemplates: 10000,
   discoveryRuns: 100,
 });
 
@@ -33,6 +34,7 @@ const V8_ARRAY_FIELDS = Object.freeze([
   'digitalTwins',
   'automation',
   'hmiScreens',
+  'hmiTemplates',
 ]);
 
 class V8ProjectSchemaError extends Error {
