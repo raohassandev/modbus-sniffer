@@ -10,7 +10,7 @@
 
 The v8 all-in-one Modbus Engineering Workbench is now the default runtime on the release-candidate branch. `npm start`, the package entry point, and the Windows desktop launcher use `src/index-v8.js`. The desktop shell opens the v8 UI and checks `/api/v8/status`. v7 is retained only as an explicit compatibility path.
 
-This document records implemented software state on PR #31. A feature is not considered released on `main` until the exact PR head passes the configured release validation and is merged. Release validation for this repository runs on the existing Automatrix self-hosted Apple-silicon Mac runner. Real RS485 electrical behavior, representative third-party device interoperability, and clean Windows installer execution remain field/hardware acceptance gates and cannot be manufactured by software CI.
+This document records implemented software state on PR #31. A feature is not considered released on `main` until the exact PR head passes the release validation and is merged. The primary software gate is now the deterministic local macOS command `npm run release:gate:mac`; it records exact-head evidence under `.release-evidence/`. GitHub self-hosted validation is retained as a manually dispatched option only and requires a runner registered for this repository. Real RS485 electrical behavior, representative third-party device interoperability, and clean Windows installer execution remain field/hardware acceptance gates and cannot be manufactured by software CI.
 
 ## Implemented v8 work packages
 
@@ -29,8 +29,8 @@ This document records implemented software state on PR #31. A feature is not con
 - **WP-13 — Charts/Logger/Historian:** bounded chart service, backend decimation, rotating JSONL logging, optional SQLite historian and browser history workspaces.
 - **WP-14 — UDP:** bounded Modbus UDP client/server transports with explicit reply routing and IPv4/IPv6 low-level coverage.
 - **WP-15 — tunnelling/TLS:** RTU/ASCII over TCP/UDP transport modes plus TLS client/server, certificate/key loading, trust configuration, mutual-TLS options and fail-closed behavior.
-- **WP-16 — Digital Twin + Automation:** capture/Register-Lab-to-Simulator draft workflow with approval boundary, loopback-first automation client, CLI, JavaScript SDK and Python example client.
-- **WP-17 — HMI Builder:** persistent screens/templates, edit/preview/run modes, snap grid, layers/properties, live reads, guarded writes through the shared Master safety path, recipe/screen actions and bulk-write confirmation.
+- **WP-16 — Digital Twin + Automation:** capture/Register-Lab-to-Simulator draft workflow with approval boundary, conflict-safe/rollback-atomic apply, loopback-first automation client, CLI, JavaScript SDK and Python example client.
+- **WP-17 — HMI Builder:** persistent screens/templates, edit/preview/run modes, snap grid, layers/properties, live reads, guarded writes through the shared Master safety path, recipe/screen actions, persisted-screen Run-mode guard and effective FC16 bulk-write confirmation.
 - **WP-18 — Projects/Reports/Release hardening:** project clone/Save As, reusable project templates with preview, project-switch live-connection interlock, engineering handover ZIP, SHA-256 manifest, identity-aware exports, formula-injection/filename protection, secret redaction, strict connection import preflight/rollback, same-origin HTTP/WebSocket browser protections, bounded mutation/body/realtime resources and v8 default/desktop promotion.
 
 ## Safety invariants enforced
@@ -39,7 +39,7 @@ This document records implemented software state on PR #31. A feature is not con
 - Discovery is read-only and cannot inherit Master write permission.
 - Serial resources have exclusive active ownership through the Connection Broker.
 - Writes are per-connection, off by default, require a live connection, and re-lock on close/reopen/restart.
-- Strong confirmation is enforced for bulk/write-sensitive operations; HMI FC16 requires explicit bulk confirmation as well as operator confirmation.
+- Strong confirmation is enforced for bulk/write-sensitive operations; HMI effective FC16 requires explicit bulk confirmation as well as operator confirmation.
 - Unit-0 serial broadcast is limited to supported write functions; read-bearing FC23 cannot be treated as no-response broadcast.
 - Raw/Test/LAB capabilities are distinct from normal validated production requests.
 - Fault injection exists only in the Simulator LAB path and is disabled by default.
@@ -54,6 +54,7 @@ This document records implemented software state on PR #31. A feature is not con
 - Simulator expressions use a restricted parser/RPN evaluator rather than arbitrary JavaScript execution; generator count, schedule size and formula length are bounded.
 - Handover reports redact credential/private-key fields while preserving engineering identity and typed evidence.
 - Persistent desktop diagnostics redact credential patterns and accidental PEM private-key content before disk write.
+- Generated Digital Twin topology apply is conflict-safe and restores the previous generated topology on partial failure.
 
 ## Project and handover guarantees
 
@@ -78,22 +79,35 @@ This document records implemented software state on PR #31. A feature is not con
 - `benchmark:v8` covers 100 poll jobs, 100 Unit IDs, 10,000 Register Lab points and 100,000 Traffic events with time/heap ceilings.
 - `soak:v8` provides a concurrent v8 Master/Slave/PollScheduler/Traffic/RegisterLab/Chart workload with a short regression in `npm test` and configurable long-duration execution.
 
-## SQLite / runner hardening
+## Release metadata closure
 
-The SQLite historian is activated lazily so product-server tests that do not configure historian streams do not open unnecessary database handles. The repository includes deterministic SQLite lifecycle/isolation coverage and bounded test execution so a test cannot hold the release runner indefinitely. Release CI is routed to the existing Automatrix self-hosted Mac runner using labels `self-hosted`, `macOS`, `ARM64`, `automatrix-ci`, and `automatrix-mac`. Node 20, 22 and 24 validation is serialized on that runner to avoid resource contention.
+The root package, desktop package, root lockfile and desktop lockfile are synchronized to **8.0.0**. The guarded bootstrap changed only the four intended lockfile root-version lines; the temporary bootstrap workflow and self-modifying release helper have been removed. Release validation must not regenerate unrelated lockfile dependency metadata merely to alter a version surface.
+
+## Local Mac release gate
+
+`npm run release:gate:mac` is the primary exact-head software gate. It:
+
+- requires macOS and a clean worktree;
+- records the starting Git SHA;
+- runs complete Node 20, 22 and 24 test/smoke/acceptance passes;
+- runs version consistency, lint, recursive v8 syntax, v8 scale benchmark, v7 compatibility benchmark and runtime dependency audit;
+- runs a bounded concurrent v8 soak;
+- installs/runs Playwright Chromium E2E;
+- rejects an unavailable Node matrix entry instead of skipping it;
+- verifies HEAD and tracked files did not change during validation;
+- retains summary/log/lockfile-hash evidence under `.release-evidence/`.
+
+See `docs/LOCAL_MAC_RELEASE_GATE.md` for the exact procedure and evidence rules.
+
+The existing `automatrix-macbook-01` runner documented in the `automatrix-engineering` repository was registered to that repository URL. Matching labels alone do not make it available to `modbus-sniffer`. `.github/workflows/test.yml` is therefore manual-only and optional until a runner is registered specifically for this repository or at a suitable organization scope.
 
 ## Release-candidate gate
 
-PR #31 may be merged only when its **exact current head** passes all configured software gates on the self-hosted Mac runner:
+PR #31 may be merged only when its **exact current head** has a valid local Mac PASS evidence set containing the same start/end SHA and the required release-gate checks above. `mergeable=true` is not sufficient.
 
-- release/version consistency
-- lint and recursive v8 syntax checks
-- runtime dependency audit
-- Node 20 / 22 / 24 full tests
-- smoke and acceptance suites
-- Chromium browser E2E
+A later commit invalidates earlier local evidence and requires the gate to be run again on the new exact head.
 
-The guarded release-metadata sync must first change only the root-version fields in the two npm lockfiles to 8.0.0 and remove its temporary workflow helper. The release branch is intentionally not described as merged/released until those checks complete successfully.
+No exact-head local Mac PASS is claimed by this document; actual execution evidence is still required before merge.
 
 ## External acceptance still required
 
