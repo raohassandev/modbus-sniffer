@@ -7,7 +7,7 @@ const {
 const { TcpClientTransport } = require('./transports/tcpClientTransport');
 const { TcpServerTransport } = require('./transports/tcpServerTransport');
 const { VirtualLoopbackEndpoint } = require('./transports/virtualLoopback');
-const { listLocalAddresses } = require('./transports/networkAddresses');
+const { listLocalAddresses, recommendLocalAddress } = require('./transports/networkAddresses');
 
 const OWNER_MODES = Object.freeze(new Set([
   'analyzer',
@@ -303,6 +303,10 @@ class ConnectionCenterService {
 
   listNetworkInterfaces() {
     return listLocalAddresses();
+  }
+
+  recommendLocalInterface(targetAddress) {
+    return recommendLocalAddress(targetAddress, this.listNetworkInterfaces());
   }
 
   _profile(connectionId, projectId) {
