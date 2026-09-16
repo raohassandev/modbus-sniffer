@@ -17,7 +17,7 @@ const { DigitalTwinService } = require('./digitalTwin/digitalTwinService');
 const { mountDigitalTwinRoutes } = require('./digitalTwin/digitalTwinRoutes');
 const { TestCenterWorkspaceService } = require('./testCenter/testCenterWorkspaceService');
 const { mountTestCenterRoutes } = require('./testCenter/testCenterRoutes');
-const { HistoryWorkspaceService } = require('./history/historyWorkspaceService');
+const { HistoryWorkspaceService } = require('./history/historyWorkspaceServiceLazy');
 const { mountHistoryRoutes } = require('./history/historyRoutes');
 
 async function startV8ProductServer(options = {}) {
