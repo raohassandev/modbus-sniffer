@@ -40,7 +40,7 @@ Implemented software areas include:
 - REST/WebSocket/CLI/SDK automation surfaces
 - HMI Builder with central write-safety integration
 - project migration, clone/Save As and templates
-- reports/handover bundles with identity preservation, SHA-256 manifests, spreadsheet/filename protection
+- reports/handover bundles with identity preservation, SHA-256 manifests, spreadsheet/filename protection and credential redaction
 - v8 default runtime and Electron desktop shell
 
 ## Release-safety closure
@@ -57,8 +57,16 @@ The following invariants are software-enforced and regression covered:
 - Indeterminate serial writes re-lock the connection and surface `TRANSMISSION_OUTCOME_UNKNOWN`.
 - Import applies as a validated set and rolls back on failure rather than leaving partial runtime state.
 - Cross-site browser mutations, oversized bodies and excessive mutation rates are rejected.
+- Browser WebSocket handshakes are same-origin; no-Origin local SDK/automation WebSockets remain supported.
+- Realtime WebSockets have bounded inbound payload size and client count.
 - Project switching is blocked while live connection ownership exists.
 - TLS transport fails closed rather than silently downgrading to plain TCP.
+- Handover files redact known credential/private-key fields without removing engineering identity fields.
+- Persistent desktop logs redact JSON/key-value credentials and accidental PEM private-key blocks.
+- Recipe execution is bounded before transport acquisition: default maximum 10,000 expanded executable steps and repeat nesting depth 8.
+- Raw-frame repeat remains explicitly bounded.
+- Simulator formulas use a restricted parser/RPN evaluator rather than arbitrary JavaScript execution.
+- Simulator dynamic generators are bounded by generator count, schedule-step count and formula length.
 
 ## UI / accessibility closure
 
@@ -75,7 +83,8 @@ The release candidate now includes:
 - status labels that include text rather than color-only meaning
 - Chromium E2E coverage at 1366×768 and 1920×1080
 - HiDPI browser configuration and document-level horizontal-overflow assertion
-- intentional virtualized Traffic row rendering using a scroll spacer/window rather than rendering the full retained list
+- virtualized Traffic row rendering using a scroll spacer/window
+- Register Lab 10,000-point query support with virtualized visible-window rendering and keyboard navigation across the virtual window
 
 ## Scale / performance closure
 
@@ -90,7 +99,7 @@ The release candidate now includes:
 - Traffic error filtering
 - elapsed-time and heap ceilings
 
-The Traffic browser workspace already uses row-window virtualization: the scroll spacer represents the full result length while only the visible slice plus overscan is rendered.
+Traffic and Register Lab browser workspaces use virtual row windows so retained engineering datasets do not require one DOM node per retained row.
 
 Charts keep bounded document points and support min/max decimation for requested render/query budgets.
 
@@ -123,6 +132,7 @@ Source-level desktop release work now includes:
 - persistent user data under Electron `userData`
 - non-destructive legacy data migration policy
 - persistent desktop/backend/crash diagnostics at `<userData>/logs/workbench-desktop.log`
+- credential/private-key redaction before persistent desktop log writes
 - Windows packaging workflow pointed at Workbench v8 rather than the old v7 health endpoint
 - release provenance file and SHA-256 checksum generation
 - Workbench v8 artifact naming
@@ -180,6 +190,8 @@ The **exact final PR head** must pass:
 
 PR #31 must not be merged on `mergeable=true` alone because `main` has no branch-protection gate enforcing these checks.
 
+At the current release-candidate stage, the remaining repository release-metadata action is the exact four lockfile root-version fields (`package-lock.json` and `desktop/package-lock.json`). The temporary release-metadata job performs a guarded version-only replacement and removes itself before the final exact-head validation. It must run on the configured self-hosted Mac runner; unrelated lockfile dependency metadata must not be regenerated or rewritten merely to close this version gate.
+
 ## Remaining extended / external acceptance
 
 These items are intentionally **not** described as missing source implementation. They require duration, target OS, external software, credentials or physical equipment:
@@ -217,6 +229,6 @@ These items are intentionally **not** described as missing source implementation
 
 ## Release decision
 
-Once the exact final release head passes the configured self-hosted Mac software gate, the source/software release candidate can be merged to `main`.
+Once the guarded release metadata sync completes and the exact final release head passes the configured self-hosted Mac software gate, the source/software release candidate can be merged to `main`.
 
 The extended and external items above remain explicitly tracked as acceptance evidence. They must not be silently converted into software-CI passes, and they do not justify reopening already-implemented core work packages unless their real execution finds a defect.
