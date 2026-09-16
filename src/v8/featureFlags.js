@@ -13,7 +13,7 @@ const DEFAULT_FLAGS = Object.freeze({
   chartsWorkspace: false,
   historianWorkspace: false,
   automationWorkspace: false,
-  hmiWorkspace: false,
+  hmiWorkspace: true,
 });
 
 function parseBoolean(value, fallback) {
