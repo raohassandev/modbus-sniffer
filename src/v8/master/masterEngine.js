@@ -10,6 +10,7 @@ const WRITE_FUNCTIONS = new Set([
   protocol.FC.WRITE_SINGLE_REGISTER,
   protocol.FC.WRITE_MULTIPLE_COILS,
   protocol.FC.WRITE_MULTIPLE_REGISTERS,
+  protocol.FC.WRITE_FILE_RECORD,
   protocol.FC.MASK_WRITE_REGISTER,
   protocol.FC.READ_WRITE_MULTIPLE_REGISTERS,
 ]);
@@ -278,15 +279,31 @@ class MasterEngine extends EventEmitter {
       case protocol.FC.WRITE_SINGLE_COIL:
       case protocol.FC.WRITE_SINGLE_REGISTER:
         return protocol.decodeWriteSingleRequest(responsePdu);
+      case protocol.FC.READ_EXCEPTION_STATUS:
+        return protocol.decodeReadExceptionStatusResponse(responsePdu);
+      case protocol.FC.DIAGNOSTICS:
+        return protocol.decodeDiagnostics(responsePdu);
+      case protocol.FC.GET_COMM_EVENT_COUNTER:
+        return protocol.decodeGetCommEventCounterResponse(responsePdu);
+      case protocol.FC.GET_COMM_EVENT_LOG:
+        return protocol.decodeGetCommEventLogResponse(responsePdu);
       case protocol.FC.WRITE_MULTIPLE_COILS:
       case protocol.FC.WRITE_MULTIPLE_REGISTERS:
         return protocol.decodeWriteMultipleResponse(responsePdu);
+      case protocol.FC.REPORT_SERVER_ID:
+        return protocol.decodeReportServerIdResponse(responsePdu);
+      case protocol.FC.READ_FILE_RECORD:
+        return protocol.decodeReadFileRecordResponse(responsePdu);
+      case protocol.FC.WRITE_FILE_RECORD:
+        return protocol.decodeWriteFileRecord(responsePdu);
       case protocol.FC.MASK_WRITE_REGISTER:
         return protocol.decodeMaskWriteRegisterRequest(responsePdu);
       case protocol.FC.READ_WRITE_MULTIPLE_REGISTERS: {
         const request = protocol.decodeReadWriteMultipleRegistersRequest(requestPdu);
         return protocol.decodeReadRegistersResponse(responsePdu, { expectedQuantity: request.readQuantity });
       }
+      case protocol.FC.READ_FIFO_QUEUE:
+        return protocol.decodeReadFifoQueueResponse(responsePdu);
       case protocol.FC.ENCAPSULATED_INTERFACE:
         return protocol.decodeDeviceIdResponse(responsePdu);
       default:
