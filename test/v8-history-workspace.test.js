@@ -8,20 +8,21 @@ const path = require('node:path');
 const { EventEmitter } = require('node:events');
 const v8 = require('../src/v8');
 
-function tempDir(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modbus-v8-history-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  return dir;
+function tempDir() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'modbus-v8-history-'));
 }
 
 class FakeRegisterLab extends EventEmitter {}
 
 function setup(t) {
-  const dir = tempDir(t);
+  const dir = tempDir();
   const store = new v8.V8ProjectStore({ dataDir: dir, autoMigrate: false });
   const registerLab = new FakeRegisterLab();
   const history = new v8.HistoryWorkspaceService({ store, registerLab, dataDir: dir });
-  t.after(() => history.shutdown());
+  t.after(() => {
+    history.shutdown();
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 25 });
+  });
   return { dir, store, registerLab, history };
 }
 
