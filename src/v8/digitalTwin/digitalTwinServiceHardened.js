@@ -54,6 +54,12 @@ class DigitalTwinService extends base.DigitalTwinService {
           existingTwinId: previousTwinId,
         });
       }
+      if (previousServer.runtime?.running === true) {
+        throw new base.DigitalTwinError('SERVER_RUNNING', `Stop Simulator server ${serverId} before reapplying its digital twin`, {
+          twinId,
+          serverId,
+        });
+      }
       if (typeof this.simulator.listDevices !== 'function') {
         throw new base.DigitalTwinError('TWIN_SNAPSHOT_UNAVAILABLE', 'Simulator device snapshot support is required for atomic digital-twin reapply', {
           twinId,
