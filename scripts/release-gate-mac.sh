@@ -89,6 +89,11 @@ if [ "$ALLOW_DIRTY" != "1" ] && [ -n "$(git status --porcelain)" ]; then
   exit 3
 fi
 
+# Remove only ignored, deterministic test-runtime state. Never remove project
+# data/, logs/ or any external/user-data directory as part of a release gate.
+CURRENT_STEP="clean-test-runtime-artifacts"
+rm -rf "$ROOT/.tmp" "$ROOT/test-results" "$ROOT/playwright-report"
+
 # Load common Node version managers when available. The gate never silently
 # skips a requested Node major; unavailable majors fail explicitly.
 if [ -n "${NVM_DIR:-}" ] && [ -s "$NVM_DIR/nvm.sh" ]; then
