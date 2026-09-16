@@ -6,6 +6,7 @@ const { ConnectionBroker } = require('./v8/connectionBroker');
 const { V8ProjectStore } = require('./v8/project');
 const { startV8ProductServer } = require('./v8/workbenchServerV8');
 const { loadFeatureFlags } = require('./v8/featureFlags');
+const { PRODUCT_NAME, PRODUCT_VERSION } = require('./v8/version');
 
 function parseArgs(argv) {
   const options = {
@@ -28,7 +29,7 @@ function parseArgs(argv) {
 
 function helpText() {
   return [
-    'Modbus Engineering Workbench v8 development launcher',
+    `${PRODUCT_NAME} v${PRODUCT_VERSION}`,
     '',
     'Usage: node src/index-v8.js [options]',
     '',
@@ -48,15 +49,9 @@ async function main() {
   const store = new V8ProjectStore({ dataDir: options.dataDir });
   const broker = new ConnectionBroker();
   const flags = loadFeatureFlags();
-  const web = await startV8ProductServer({
-    store,
-    broker,
-    host: options.host,
-    port: options.port,
-    flags,
-  });
+  const web = await startV8ProductServer({ store, broker, host: options.host, port: options.port, flags });
 
-  console.log('=== Modbus Engineering Workbench v8 (development) ===');
+  console.log(`=== ${PRODUCT_NAME} v${PRODUCT_VERSION} ===`);
   console.log(`Web      : ${web.url}`);
   console.log(`Projects : ${path.resolve(options.dataDir)}`);
   console.log(`Schema   : ${store.exportAll().schemaVersion}`);
@@ -79,8 +74,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = {
-  parseArgs,
-  helpText,
-  main,
-};
+module.exports = { parseArgs, helpText, main };
