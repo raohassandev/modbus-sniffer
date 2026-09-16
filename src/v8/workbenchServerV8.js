@@ -19,7 +19,7 @@ const { TestCenterWorkspaceService } = require('./testCenter/testCenterWorkspace
 const { mountTestCenterRoutes } = require('./testCenter/testCenterRoutes');
 const { HistoryWorkspaceService } = require('./history/historyWorkspaceService');
 const { mountHistoryRoutes } = require('./history/historyRoutes');
-const { HmiBuilderService } = require('./hmi/hmiBuilderService');
+const { HmiBuilderService } = require('./hmi/hmiBuilderServiceHardened');
 const { mountHmiRoutes } = require('./hmi/hmiRoutes');
 
 async function startV8ProductServer(options = {}) {

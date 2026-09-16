@@ -5,12 +5,15 @@ const { httpErrorStatus, errorPayload } = require('../workbenchServer');
 const BAD_REQUEST = new Set([
   'INVALID_SCREEN', 'INVALID_WIDGET', 'INVALID_WIDGET_TYPE', 'INVALID_BINDING', 'INVALID_WRITE_BINDING', 'INVALID_ACTION',
   'WIDGET_NOT_BOUND', 'WIDGET_NOT_WRITABLE', 'WRITE_BINDING_REQUIRED', 'CONFIRMATION_REQUIRED', 'INVALID_WIDGET_VALUE', 'INVALID_SCALE',
+  'WIDGET_ACTION_REQUIRED', 'DUPLICATE_WIDGET_ID', 'SCREEN_LIMIT', 'WIDGET_LIMIT', 'TEMPLATE_LIMIT',
 ]);
 const NOT_FOUND = new Set(['PROJECT_NOT_FOUND', 'SCREEN_NOT_FOUND', 'WIDGET_NOT_FOUND', 'TEMPLATE_NOT_FOUND', 'RECIPE_NOT_FOUND']);
+const UNAVAILABLE = new Set(['TEST_CENTER_UNAVAILABLE']);
 
 function hmiErrorStatus(error) {
   if (BAD_REQUEST.has(error?.code)) return 400;
   if (NOT_FOUND.has(error?.code)) return 404;
+  if (UNAVAILABLE.has(error?.code)) return 503;
   if (['RESOURCE_BUSY', 'CONNECTION_OWNED', 'OWNER_MISMATCH', 'WRITE_LOCKED'].includes(error?.code)) return 409;
   return httpErrorStatus(error);
 }

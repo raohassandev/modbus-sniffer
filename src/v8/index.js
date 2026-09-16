@@ -57,6 +57,7 @@ module.exports = Object.freeze({
   ...require('./history/historyWorkspaceService'),
   ...require('./history/historyRoutes'),
   ...require('./hmi/hmiBuilderService'),
+  ...require('./hmi/hmiBuilderServiceHardened'),
   ...require('./hmi/hmiRoutes'),
   ...require('./automation/workbenchClient'),
   ...require('./project'),
