@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Force deterministic test-server behavior. In particular, Playwright must not
+# reuse an unrelated process already listening on the configured E2E ports.
+export CI=true
+
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "ERROR: release-gate-mac.sh must run on macOS." >&2
   exit 2
@@ -24,6 +28,15 @@ LOG_FILE="$EVIDENCE_DIR/release-gate.log"
 SUMMARY_FILE="$EVIDENCE_DIR/summary.txt"
 SOAK_SECONDS="${RELEASE_GATE_SOAK_SECONDS:-60}"
 ALLOW_DIRTY="${RELEASE_GATE_ALLOW_DIRTY:-0}"
+
+if ! [[ "$SOAK_SECONDS" =~ ^[0-9]+$ ]] || [ "$SOAK_SECONDS" -lt 1 ] || [ "$SOAK_SECONDS" -gt 86400 ]; then
+  echo "ERROR: RELEASE_GATE_SOAK_SECONDS must be an integer from 1 to 86400." >&2
+  exit 2
+fi
+if [ "$ALLOW_DIRTY" != "0" ] && [ "$ALLOW_DIRTY" != "1" ]; then
+  echo "ERROR: RELEASE_GATE_ALLOW_DIRTY must be 0 or 1." >&2
+  exit 2
+fi
 
 mkdir -p "$EVIDENCE_DIR"
 
@@ -47,6 +60,8 @@ finish() {
     echo "end_head=$END_HEAD"
     echo "host_os=$(uname -s)"
     echo "host_arch=$(uname -m)"
+    echo "ci=$CI"
+    echo "soak_seconds=$SOAK_SECONDS"
     echo "last_step=$CURRENT_STEP"
     echo "log=$LOG_FILE"
   } > "$SUMMARY_FILE"
@@ -65,6 +80,7 @@ echo "Branch    : ${START_BRANCH:-detached}"
 echo "HEAD      : $START_HEAD"
 echo "macOS     : $(sw_vers -productVersion 2>/dev/null || echo unknown)"
 echo "Arch      : $(uname -m)"
+echo "CI        : $CI"
 echo "Soak      : ${SOAK_SECONDS}s"
 
 if [ "$ALLOW_DIRTY" != "1" ] && [ -n "$(git status --porcelain)" ]; then
