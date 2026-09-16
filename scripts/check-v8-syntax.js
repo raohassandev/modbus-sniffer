@@ -18,8 +18,17 @@ function collectJs(dir) {
 }
 
 const files = collectJs(sourceRoot);
+for (const extra of [
+  path.join(root, 'src', 'index-v8.js'),
+  path.join(root, 'public', 'v8', 'app.js'),
+  path.join(root, 'public', 'v8', 'shell-extras.js'),
+]) {
+  if (fs.existsSync(extra)) files.push(extra);
+}
+files.sort();
+
 if (!files.length) {
-  console.error('No v8 JavaScript files found under src/v8.');
+  console.error('No v8 JavaScript files found.');
   process.exit(1);
 }
 

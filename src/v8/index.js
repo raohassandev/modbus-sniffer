@@ -3,8 +3,11 @@
 module.exports = Object.freeze({
   protocol: require('./protocol'),
   ...require('./events'),
+  ...require('./featureFlags'),
   ...require('./connectionBroker'),
   ...require('./connectionBrokerSafety'),
+  ...require('./connectionCenterService'),
+  ...require('./workbenchServer'),
   ...require('./transports/virtualLoopback'),
   ...require('./transports/receiveQueue'),
   ...require('./transports/tcpStreamFramer'),

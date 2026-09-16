@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en" data-theme="system" data-density="comfortable">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Modbus Engineering Workbench v8</title>
+  <link rel="stylesheet" href="/v8/styles.css">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="app-bar">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">M8</div>
+        <div>
+          <div class="brand-title">Modbus Engineering Workbench</div>
+          <div class="brand-subtitle">v8 development workspace · Ctrl/Cmd+K quick open</div>
+        </div>
+      </div>
+      <div class="app-bar-center">
+        <label class="field-inline" for="projectSelect">
+          <span>Project</span>
+          <select id="projectSelect" aria-label="Active project"></select>
+        </label>
+        <div class="runtime-summary" aria-label="Active runtime state">
+          <span id="activeConnectionChip" class="status-chip neutral">No active connection</span>
+          <span id="activeModeChip" class="status-chip neutral">IDLE</span>
+          <span id="writeStateChip" class="status-chip safe">WRITES LOCKED</span>
+        </div>
+      </div>
+      <div class="app-actions">
+        <button id="themeButton" class="button secondary" type="button">Theme: System</button>
+        <button id="densityButton" class="button secondary" type="button">Density: Comfortable</button>
+      </div>
+    </header>
+
+    <aside class="primary-nav" aria-label="Primary navigation">
+      <nav id="navList">
+        <button class="nav-item active" data-workspace="connections" type="button"><span class="nav-icon">↔</span><span>Connections</span></button>
+        <button class="nav-item" data-workspace="master" type="button"><span class="nav-icon">M</span><span>Master</span></button>
+        <button class="nav-item" data-workspace="simulator" type="button"><span class="nav-icon">S</span><span>Simulator</span></button>
+        <button class="nav-item" data-workspace="traffic" type="button"><span class="nav-icon">T</span><span>Traffic</span></button>
+        <button class="nav-item" data-workspace="registerLab" type="button"><span class="nav-icon">R</span><span>Register Lab</span></button>
+        <button class="nav-item" data-workspace="testCenter" type="button"><span class="nav-icon">✓</span><span>Test Center</span></button>
+        <button class="nav-item" data-workspace="charts" type="button"><span class="nav-icon">⌁</span><span>Charts</span></button>
+        <button class="nav-item" data-workspace="historian" type="button"><span class="nav-icon">H</span><span>Historian</span></button>
+        <button class="nav-item" data-workspace="discovery" type="button"><span class="nav-icon">D</span><span>Discovery</span></button>
+        <button class="nav-item" data-workspace="automation" type="button"><span class="nav-icon">A</span><span>Automation</span></button>
+        <button class="nav-item" data-workspace="hmi" type="button"><span class="nav-icon">▣</span><span>HMI</span></button>
+        <button class="nav-item" data-workspace="settings" type="button"><span class="nav-icon">⚙</span><span>Settings</span></button>
+      </nav>
+    </aside>
+
+    <main class="workspace-host">
+      <section id="workspace-connections" class="workspace active" aria-labelledby="connectionsTitle">
+        <div class="workspace-header">
+          <div>
+            <h1 id="connectionsTitle">Connection Center</h1>
+            <p>Saved transport profiles and exact live ownership state.</p>
+          </div>
+          <div class="toolbar">
+            <button id="refreshConnections" class="button secondary" type="button">Refresh</button>
+            <button id="importConnections" class="button secondary" type="button">Import</button>
+            <button id="exportConnections" class="button secondary" type="button">Export</button>
+            <button id="newConnection" class="button primary" type="button">New Connection</button>
+            <input id="importFile" type="file" accept="application/json,.json" hidden>
+          </div>
+        </div>
+
+        <div class="metric-strip" role="status" aria-live="polite">
+          <div class="metric-card"><span class="metric-label">Profiles</span><strong id="metricProfiles">0</strong></div>
+          <div class="metric-card"><span class="metric-label">Open</span><strong id="metricOpen">0</strong></div>
+          <div class="metric-card"><span class="metric-label">Serial</span><strong id="metricSerial">0</strong></div>
+          <div class="metric-card"><span class="metric-label">TCP</span><strong id="metricTcp">0</strong></div>
+          <div class="metric-card"><span class="metric-label">Write enabled</span><strong id="metricWrites">0</strong></div>
+        </div>
+
+        <div class="panel table-panel">
+          <div class="table-toolbar">
+            <input id="connectionFilter" class="text-input" type="search" placeholder="Filter profiles…" aria-label="Filter connections">
+            <div id="connectionMessage" class="inline-message" role="status" aria-live="polite"></div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Profile</th>
+                  <th>Transport</th>
+                  <th>Endpoint</th>
+                  <th>Runtime</th>
+                  <th>Owner</th>
+                  <th>Writes</th>
+                  <th class="actions-column">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="connectionsBody"></tbody>
+            </table>
+          </div>
+          <div id="connectionsEmpty" class="empty-state" hidden>
+            <div class="empty-icon">↔</div>
+            <h2>No connection profiles</h2>
+            <p>Create a serial, TCP client/server, or virtual profile to begin.</p>
+            <button class="button primary" data-action="new-connection" type="button">Create profile</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="workspace-settings" class="workspace" aria-labelledby="settingsTitle">
+        <div class="workspace-header">
+          <div>
+            <h1 id="settingsTitle">Workspace Settings</h1>
+            <p>Safe visual preferences stored with the active project.</p>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <div class="panel settings-card">
+            <h2>Appearance</h2>
+            <label class="field"><span>Theme</span><select id="settingsTheme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+            <label class="field"><span>Density</span><select id="settingsDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option><option value="dense">Dense</option></select></label>
+            <button id="saveSettings" class="button primary" type="button">Save preferences</button>
+          </div>
+          <div class="panel settings-card">
+            <h2>Release boundary</h2>
+            <dl class="details-list"><div><dt>Stable product</dt><dd>v7.0.0</dd></div><div><dt>Workbench</dt><dd>v8 development</dd></div><div><dt>Writes on restart</dt><dd>Locked</dd></div></dl>
+          </div>
+        </div>
+      </section>
+
+      <section id="workspace-placeholder" class="workspace" aria-labelledby="placeholderTitle">
+        <div class="workspace-header"><div><h1 id="placeholderTitle">Workspace</h1><p id="placeholderText"></p></div></div>
+        <div class="panel empty-state placeholder-state"><div class="empty-icon">◫</div><h2 id="placeholderName">Workspace</h2><p>This workspace is feature-gated until its runtime work package is complete.</p></div>
+      </section>
+    </main>
+
+    <aside id="contextInspector" class="context-inspector" aria-label="Context inspector">
+      <div class="inspector-header"><strong>Inspector</strong><button id="toggleInspector" class="icon-button" type="button" aria-label="Collapse inspector">×</button></div>
+      <div id="inspectorContent" class="inspector-content">
+        <div class="empty-inspector">Select a connection to inspect its runtime details.</div>
+      </div>
+    </aside>
+
+    <footer class="status-bar">
+      <div><span id="wsStatusDot" class="status-dot offline"></span><span id="wsStatus">Realtime disconnected</span></div>
+      <div id="statusProject">Project: —</div>
+      <div id="statusSchema">Schema: —</div>
+      <div id="statusLastUpdate">Updated: —</div>
+    </footer>
+  </div>
+
+  <dialog id="connectionDialog" class="dialog">
+    <form id="connectionForm" method="dialog" class="dialog-form">
+      <div class="dialog-header"><div><h2 id="connectionDialogTitle">New Connection</h2><p>Profiles store configuration only. Runtime ownership and write state are never persisted.</p></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field"><span>Connection ID</span><input id="connectionId" class="text-input" required maxlength="120" placeholder="plant-meter-1"></label>
+        <label class="field"><span>Name</span><input id="connectionName" class="text-input" required maxlength="200" placeholder="Plant Meter 1"></label>
+        <label class="field"><span>Transport</span><select id="connectionTransport"><option value="serial-rtu">Serial RTU</option><option value="serial-ascii">Serial ASCII</option><option value="tcp-client">TCP Client</option><option value="tcp-server">TCP Server</option><option value="virtual">Virtual</option></select></label>
+        <label class="field serial-field"><span>Serial port</span><div class="input-action"><select id="serialPath"></select><button id="reloadPorts" class="button secondary" type="button">Scan</button></div></label>
+        <label class="field serial-field"><span>Baud rate</span><select id="serialBaud"><option>1200</option><option>2400</option><option>4800</option><option selected>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label>
+        <label class="field serial-field"><span>Parity</span><select id="serialParity"><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option></select></label>
+        <label class="field tcp-field"><span>Host / listen IP</span><input id="tcpHost" class="text-input" value="127.0.0.1"></label>
+        <label class="field tcp-field"><span>Port</span><input id="tcpPort" class="text-input" type="number" min="0" max="65535" value="502"></label>
+        <label class="field tcp-client-field"><span>Local interface</span><select id="tcpLocalAddress"><option value="">Automatic</option></select></label>
+      </div>
+      <div id="dialogError" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button class="button secondary" value="cancel" type="button" data-dialog-cancel>Cancel</button><button id="saveConnection" class="button primary" type="submit">Save profile</button></div>
+    </form>
+  </dialog>
+
+  <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+  <script src="/v8/app.js"></script>
+  <script src="/v8/shell-extras.js"></script>
+</body>
+</html>
