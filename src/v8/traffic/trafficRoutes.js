@@ -67,19 +67,19 @@ function mountTrafficRegisterRoutes({ app, timeline, registerLab, flags, assertF
   }));
 
   app.get('/api/v8/register-lab/:sourceKey/interpretations', registerRoute(async (req, res) => {
-    const sourceKey = decodeURIComponent(req.params.sourceKey);
+    const sourceKey = req.params.sourceKey;
     res.json({ ok: true, point: registerLab.get(sourceKey), interpretations: registerLab.interpretationMatrix(sourceKey) });
   }));
 
   app.put('/api/v8/register-lab/:sourceKey/definition', registerRoute(async (req, res) => {
-    const sourceKey = decodeURIComponent(req.params.sourceKey);
+    const sourceKey = req.params.sourceKey;
     const definition = registerLab.saveDefinition({ ...(req.body || {}), sourceKey });
     broadcast({ type: 'register-lab.definition-saved', sourceKey });
     res.json({ ok: true, definition, point: registerLab.get(sourceKey) });
   }));
 
   app.delete('/api/v8/register-lab/:sourceKey/definition', registerRoute(async (req, res) => {
-    const sourceKey = decodeURIComponent(req.params.sourceKey);
+    const sourceKey = req.params.sourceKey;
     const removed = registerLab.removeDefinition(sourceKey);
     broadcast({ type: 'register-lab.definition-removed', sourceKey });
     res.json({ ok: true, removed });
