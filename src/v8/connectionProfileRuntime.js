@@ -5,6 +5,7 @@ const { SerialTransport } = require('./transports/serialTransport');
 const { TcpClientTransport } = require('./transports/tcpClientTransport');
 const { TcpServerTransport } = require('./transports/tcpServerTransport');
 const { createVirtualLoopbackPair } = require('./transports/virtualLoopback');
+const { assertLocalAddress } = require('./transports/networkAddresses');
 
 class ConnectionProfileRuntimeError extends Error {
   constructor(code, message, details = {}) {
@@ -92,19 +93,26 @@ function tcpClientOptions(profile) {
   const host = text(source.host || source.targetHost || endpoint.host);
   if (!host) throw new ConnectionProfileRuntimeError('INVALID_PROFILE_CONFIG', 'TCP client profile requires a host', { connectionId: profile.connectionId });
   const reconnectSource = source.reconnect && typeof source.reconnect === 'object' ? source.reconnect : {};
+  const family = int(source.family, 0, { min: 0, max: 6, field: 'family' });
+  if (![0, 4, 6].includes(family)) throw new ConnectionProfileRuntimeError('INVALID_PROFILE_CONFIG', 'family must be 0, 4 or 6', { family });
+  const localAddressText = text(source.localAddress);
+  const localAddress = localAddressText ? assertLocalAddress(localAddressText, { field: 'tcp.localAddress' }) : null;
+  const initialDelayMs = num(reconnectSource.initialDelayMs, 100, { min: 0, max: 600000, field: 'reconnect.initialDelayMs' });
+  const maxDelayMs = num(reconnectSource.maxDelayMs, 2000, { min: 0, max: 3600000, field: 'reconnect.maxDelayMs' });
+  if (maxDelayMs < initialDelayMs) throw new ConnectionProfileRuntimeError('INVALID_PROFILE_CONFIG', 'reconnect.maxDelayMs must be >= reconnect.initialDelayMs', { initialDelayMs, maxDelayMs });
   return {
     host,
     port: int(source.port ?? source.targetPort ?? endpoint.port, 502, { min: 1, max: 65535, field: 'port' }),
-    localAddress: text(source.localAddress) || null,
-    family: int(source.family, 0, { min: 0, max: 6, field: 'family' }),
+    localAddress,
+    family,
     connectTimeoutMs: num(source.connectTimeoutMs, 3000, { min: 1, max: 3600000, field: 'connectTimeoutMs' }),
     idleTimeoutMs: num(source.idleTimeoutMs, 0, { min: 0, max: 3600000, field: 'idleTimeoutMs' }),
     writeTimeoutMs: num(source.writeTimeoutMs, 3000, { min: 1, max: 3600000, field: 'writeTimeoutMs' }),
     reconnect: {
       enabled: Boolean(reconnectSource.enabled),
       maxAttempts: int(reconnectSource.maxAttempts, 5, { min: 0, max: 1000, field: 'reconnect.maxAttempts' }),
-      initialDelayMs: num(reconnectSource.initialDelayMs, 100, { min: 0, max: 600000, field: 'reconnect.initialDelayMs' }),
-      maxDelayMs: num(reconnectSource.maxDelayMs, 2000, { min: 0, max: 3600000, field: 'reconnect.maxDelayMs' }),
+      initialDelayMs,
+      maxDelayMs,
     },
   };
 }
@@ -112,7 +120,8 @@ function tcpClientOptions(profile) {
 function tcpServerOptions(profile) {
   const source = profile.tcp && typeof profile.tcp === 'object' ? profile.tcp : {};
   const endpoint = parseEndpoint(profile.endpoint, 502);
-  const host = text(source.host || source.listenHost || endpoint.host || '127.0.0.1');
+  const requestedHost = text(source.host || source.listenHost || endpoint.host || '127.0.0.1');
+  const host = assertLocalAddress(requestedHost, { allowWildcard: true, field: 'tcp.host' });
   return {
     host,
     port: int(source.port ?? source.listenPort ?? endpoint.port, 502, { min: 0, max: 65535, field: 'port' }),
