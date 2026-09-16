@@ -1,13 +1,14 @@
 {
   "name": "modbus-engineering-analyzer",
   "version": "7.0.0",
-  "description": "Intelligent Modbus RTU/TCP reverse-engineering analyzer with automatic device formation, polling-cycle reconstruction, register inference, fingerprints, relationships, anomalies, persistent projects and desktop packaging.",
-  "main": "src/index-v7.js",
+  "description": "All-in-one Modbus Engineering Workbench v8 with RTU/ASCII/TCP/UDP/TLS tooling, Master, Simulator, Discovery, Traffic/Register Lab, history, HMI, automation and engineering handover exports.",
+  "main": "src/index-v8.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index-v7.js",
+    "start": "node src/index-v8.js",
     "v8": "node src/index-v8.js",
     "v8:cli": "node scripts/v8-cli.js",
+    "v7": "node src/index-v7.js",
     "ports": "node src/index-v7.js --list-ports",
     "demo": "node src/index-v7.js --demo",
     "test": "node --test",
