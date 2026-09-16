@@ -47,3 +47,46 @@ test('v8 RecipeEngine enforces expansion budget before resolving any I/O context
   );
   assert.equal(resolved, 0);
 });
+
+test('v8 recipe safety preflight rejects missing arm/write confirmations before execution', () => {
+  assert.throws(
+    () => v8.validateRecipe({ schemaVersion: 1, steps: [{ type: 'armWrites', connectionId: 'c1' }] }),
+    (error) => error.code === 'CONFIRMATION_REQUIRED',
+  );
+  assert.throws(
+    () => v8.validateRecipe({ schemaVersion: 1, steps: [{ type: 'armLab', connectionId: 'c1', confirmation: { confirmed: true } }] }),
+    (error) => error.code === 'LAB_CONFIRMATION_REQUIRED',
+  );
+  assert.throws(
+    () => v8.validateRecipe({
+      schemaVersion: 1,
+      steps: [{ type: 'write', connectionId: 'c1', unitId: 1, functionCode: 16, address: 0, values: [1], confirmation: { confirmed: true } }],
+    }),
+    (error) => error.code === 'BULK_CONFIRMATION_REQUIRED',
+  );
+  assert.throws(
+    () => v8.validateRecipe({
+      schemaVersion: 1,
+      steps: [{ type: 'write', connectionId: 'c1', unitId: 0, functionCode: 6, address: 0, value: 1, confirmation: { confirmed: true } }],
+    }),
+    (error) => error.code === 'BROADCAST_CONFIRMATION_REQUIRED',
+  );
+});
+
+test('v8 Test Center rejects an unsafe recipe before acquiring any connection session', async () => {
+  const service = new v8.TestCenterWorkspaceService({ store: {}, broker: {}, connectionCenter: {} });
+  let acquired = 0;
+  service._ensureSession = async () => {
+    acquired += 1;
+    throw new Error('must not acquire');
+  };
+
+  await assert.rejects(
+    () => service.runRecipe({
+      schemaVersion: 1,
+      steps: [{ type: 'write', connectionId: 'c1', unitId: 1, functionCode: 16, address: 0, values: [1], confirmation: { confirmed: true } }],
+    }),
+    (error) => error.code === 'BULK_CONFIRMATION_REQUIRED',
+  );
+  assert.equal(acquired, 0);
+});
