@@ -8,6 +8,8 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const script = fs.readFileSync(path.join(root, 'scripts', 'release-gate-mac.sh'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const macWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'test.yml'), 'utf8');
+const windowsWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'desktop-windows.yml'), 'utf8');
 
 function includesAll(text, values) {
   for (const value of values) assert.match(text, value, `release gate must retain ${value}`);
@@ -56,4 +58,14 @@ test('v8 local Mac release gate never silently skips an unavailable Node major',
   assert.match(script, /Node \$target is required but is unavailable/);
   assert.match(script, /requested Node \$target but active version is/);
   assert.doesNotMatch(script, /continue.*Node.*unavailable/i);
+});
+
+test('GitHub workflows are manual-only and cannot consume hosted runners on normal branch activity', () => {
+  for (const [name, workflow] of [['Mac validation', macWorkflow], ['Windows packaging', windowsWorkflow]]) {
+    assert.match(workflow, /workflow_dispatch:/, `${name} must remain manually dispatched`);
+    assert.doesNotMatch(workflow, /^\s{2}push:/m, `${name} must not run automatically on push`);
+    assert.doesNotMatch(workflow, /^\s{2}pull_request:/m, `${name} must not run automatically on pull requests`);
+  }
+  assert.match(macWorkflow, /self-hosted/);
+  assert.match(macWorkflow, /automatrix-mac/);
 });
