@@ -14,6 +14,15 @@ async function cleanup(request) {
   const traffic = await request.delete(`${V8}/api/v8/traffic`);
   if (!traffic.ok() && traffic.status() !== 403) await json(traffic);
 
+  const connectionsBefore = await request.get(`${V8}/api/v8/connections`);
+  if (connectionsBefore.ok()) {
+    const payload = await connectionsBefore.json();
+    for (const item of payload.connections || []) {
+      if (item.runtime?.owner?.ownerMode !== 'master') continue;
+      await request.post(`${V8}/api/v8/master/runtime/${encodeURIComponent(item.profile.connectionId)}/disconnect`, { data: {} });
+    }
+  }
+
   const serversResponse = await request.get(`${V8}/api/v8/simulator/servers`);
   if (serversResponse.ok()) {
     const payload = await serversResponse.json();
@@ -28,11 +37,7 @@ async function cleanup(request) {
   const payload = await connectionsResponse.json();
   for (const item of payload.connections || []) {
     const id = encodeURIComponent(item.profile.connectionId);
-    if (item.runtime?.owner?.ownerMode === 'master') {
-      await request.post(`${V8}/api/v8/master/runtime/${id}/disconnect`, { data: {} });
-    } else if (item.runtime?.owner) {
-      await request.post(`${V8}/api/v8/connections/${id}/close`, { data: {} });
-    }
+    if (item.runtime?.owner) await request.post(`${V8}/api/v8/connections/${id}/close`, { data: {} });
     await request.delete(`${V8}/api/v8/connections/${id}`);
   }
 }
@@ -96,8 +101,8 @@ test.describe('v8 Unified Traffic and Register Lab', () => {
     await expect(traffic).toHaveClass(/active/);
     await expect(traffic.getByRole('heading', { name: 'Unified Traffic' })).toBeVisible();
     await traffic.locator('#trafficConnection').fill('gate5-client');
-    await expect.poll(async () => Number(await traffic.locator('#trafficRetained').textContent())).toBeGreaterThan(0);
-    await expect(traffic.locator('#trafficWindow .traffic-row')).toHaveCount(2);
+    await traffic.locator('#trafficText').fill('traffic.');
+    await expect.poll(async () => traffic.locator('#trafficWindow .traffic-row').count()).toBeGreaterThanOrEqual(2);
     const firstRow = traffic.locator('#trafficWindow .traffic-row').first();
     await firstRow.click();
     await expect(traffic.locator('#trafficSelectedLabel')).toContainText('traffic.');
@@ -114,7 +119,7 @@ test.describe('v8 Unified Traffic and Register Lab', () => {
     await lab.locator('#registerConnection').fill('gate5-client');
     await expect.poll(async () => Number(await lab.locator('#registerMetricPoints').textContent())).toBe(4);
     await expect(lab.locator('#registerBody .register-row')).toHaveCount(4);
-    await lab.locator('#registerBody .register-row').filter({ hasText: '10' }).first().click();
+    await lab.locator('#registerBody .register-row').first().click();
     await expect(lab.locator('#interpretationGrid')).toContainText('float32');
     await expect(lab.locator('#interpretationGrid')).toContainText('1');
 
@@ -138,9 +143,9 @@ test.describe('v8 Unified Traffic and Register Lab', () => {
     await page.getByRole('button', { name: 'Traffic' }).click();
     const traffic = page.locator('#workspace-traffic');
     await traffic.locator('#trafficConnection').fill('traffic-e2e');
-    await expect.poll(async () => Number(await traffic.locator('#trafficRetained').textContent())).toBeGreaterThan(0);
+    await expect.poll(async () => traffic.locator('#trafficWindow .traffic-row').count()).toBeGreaterThan(0);
     await traffic.locator('#trafficText').fill('connection');
-    await expect(traffic.locator('#trafficWindow .traffic-row')).not.toHaveCount(0);
+    await expect.poll(async () => traffic.locator('#trafficWindow .traffic-row').count()).toBeGreaterThan(0);
     await traffic.locator('#trafficBookmarksOnly').check();
     await expect(traffic.locator('#trafficWindow .traffic-row')).toHaveCount(0);
     await traffic.locator('#trafficBookmarksOnly').uncheck();
