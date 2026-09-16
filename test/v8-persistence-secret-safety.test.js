@@ -14,6 +14,8 @@ test('v8 persisted connection metadata keeps TLS path references but strips cred
   const profile = sanitizeConnectionProfile({
     connectionId: 'tls-profile',
     transportKind: 'tls-client',
+    serial: { path: '/dev/ttyUSB0', password: 'serial-secret' },
+    tcp: { host: '10.0.0.5', port: 502, accessToken: 'tcp-secret' },
     metadata: {
       transportOptions: {
         tls: {
@@ -38,6 +40,10 @@ test('v8 persisted connection metadata keeps TLS path references but strips cred
   assert.equal('token' in profile.metadata, false);
   assert.equal('clientSecret' in profile.metadata.nested, false);
   assert.equal(profile.metadata.nested.note, 'retain-me');
+  assert.equal(profile.serial.path, '/dev/ttyUSB0');
+  assert.equal('password' in profile.serial, false);
+  assert.equal(profile.tcp.host, '10.0.0.5');
+  assert.equal('accessToken' in profile.tcp, false);
 });
 
 test('v8 normal profile save cannot persist arbitrary credential metadata', (t) => {
