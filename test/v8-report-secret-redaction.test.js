@@ -21,6 +21,18 @@ test('v8 handover redaction removes credential fields without damaging engineeri
   assert.equal(safe.auth.api_key, '[REDACTED]');
 });
 
+test('v8 handover redaction preserves Buffer and Date evidence types', () => {
+  const timestamp = new Date('2026-09-16T00:00:00.000Z');
+  const raw = Buffer.from([0x01, 0x03, 0x00, 0x00]);
+  const safe = redactSensitive({ raw, timestamp, password: 'secret' });
+  assert.equal(Buffer.isBuffer(safe.raw), true);
+  assert.deepEqual(safe.raw, raw);
+  assert.notEqual(safe.raw, raw);
+  assert.equal(safe.timestamp instanceof Date, true);
+  assert.equal(safe.timestamp.toISOString(), timestamp.toISOString());
+  assert.equal(safe.password, '[REDACTED]');
+});
+
 test('v8 handover project and runtime report files are emitted from redacted copies', () => {
   const project = {
     id: 'p1',
