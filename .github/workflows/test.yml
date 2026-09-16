@@ -1,13 +1,10 @@
-name: Node tests
+name: Optional self-hosted Mac validation
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 concurrency:
-  group: node-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: modbus-v8-manual-${{ github.ref }}
   cancel-in-progress: true
 
 env:
