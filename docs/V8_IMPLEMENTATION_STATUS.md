@@ -10,7 +10,7 @@
 
 The v8 all-in-one Modbus Engineering Workbench is now the default runtime on the release-candidate branch. `npm start`, the package entry point, and the Windows desktop launcher use `src/index-v8.js`. The desktop shell opens the v8 UI and checks `/api/v8/status`. v7 is retained only as an explicit compatibility path.
 
-This document records implemented software state on PR #31. A feature is not considered released on `main` until the exact PR head passes the complete CI matrix and is merged. Real RS485 electrical behavior and third-party device interoperability remain field/hardware acceptance gates and cannot be manufactured by software CI.
+This document records implemented software state on PR #31. A feature is not considered released on `main` until the exact PR head passes the configured release validation and is merged. Release validation for this repository runs on the existing Automatrix self-hosted Apple-silicon Mac runner. Real RS485 electrical behavior, representative third-party device interoperability, and clean Windows installer execution remain field/hardware acceptance gates and cannot be manufactured by software CI.
 
 ## Implemented v8 work packages
 
@@ -61,19 +61,18 @@ This document records implemented software state on PR #31. A feature is not con
 - CSV text is protected against spreadsheet formula injection and generated filenames are sanitized.
 - Handover content includes project configuration plus bounded Master/write-audit/Traffic/Simulator/Recipe/Historian/Chart/Logger/HMI/Digital-Twin evidence where available.
 
-## Windows / SQLite hardening
+## SQLite / runner hardening
 
-The SQLite historian is activated lazily so product-server tests that do not configure historian streams do not open unnecessary database handles. Windows Node 22/24 CI isolates SQLite historian tests deterministically instead of skipping them or forcing process termination. CI also uses pull-request concurrency so obsolete heads do not block the current release candidate indefinitely.
+The SQLite historian is activated lazily so product-server tests that do not configure historian streams do not open unnecessary database handles. The repository includes deterministic SQLite lifecycle/isolation coverage and bounded test execution so a test cannot hold the release runner indefinitely. Release CI is routed to the existing Automatrix self-hosted Mac runner using labels `self-hosted`, `macOS`, `ARM64`, `automatrix-ci`, and `automatrix-mac`. Node 20, 22 and 24 validation is serialized on that runner to avoid resource contention.
 
 ## Release-candidate gate
 
-PR #31 may be merged only when its **exact current head** passes all configured gates:
+PR #31 may be merged only when its **exact current head** passes all configured software gates on the self-hosted Mac runner:
 
-- version consistency
+- release/version consistency
 - lint and recursive v8 syntax checks
 - runtime dependency audit
-- Linux + Windows Node 20/22/24 tests
-- Windows SQLite historian isolation coverage
+- Node 20 / 22 / 24 full tests
 - smoke and acceptance suites
 - Chromium browser E2E
 
@@ -81,7 +80,7 @@ The release branch is intentionally not described as merged/released until those
 
 ## External acceptance still required
 
-These are not missing software implementations; they require real equipment or field time:
+These are not missing software implementations; they require real equipment or target-platform time:
 
 - real RS485 transceiver/termination/noise/timing qualification
 - representative third-party PLC/inverter/meter interoperability
