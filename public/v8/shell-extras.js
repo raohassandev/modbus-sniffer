@@ -25,6 +25,8 @@
 
   const tabBar = document.createElement('div');
   tabBar.className = 'document-tabs';
+  tabBar.setAttribute('role', 'tablist');
+  tabBar.setAttribute('aria-label', 'Open workspaces');
   workspaceHost.prepend(tabBar);
 
   function renderTabs() {
@@ -34,6 +36,9 @@
       tab.type = 'button';
       tab.className = `document-tab${workspace === activeTab ? ' active' : ''}`;
       tab.dataset.workspaceTab = workspace;
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-selected', workspace === activeTab ? 'true' : 'false');
+      tab.tabIndex = workspace === activeTab ? 0 : -1;
       const label = document.createElement('span'); label.textContent = workspaceLabels.get(workspace) || workspace;
       const tabState = document.createElement('span'); tabState.className = 'document-state'; tabState.textContent = 'Saved';
       tab.append(label, tabState); tabBar.appendChild(tab);
@@ -51,6 +56,21 @@
     openedTabs.add(nav.dataset.workspace); activeTab = nav.dataset.workspace; renderTabs();
   });
   tabBar.addEventListener('click', (event) => { const tab = event.target.closest('[data-workspace-tab]'); if (tab) openWorkspace(tab.dataset.workspaceTab); });
+  tabBar.addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const tabs = [...tabBar.querySelectorAll('[role="tab"]')];
+    if (!tabs.length) return;
+    const current = event.target.closest('[role="tab"]');
+    const index = Math.max(0, tabs.indexOf(current));
+    let nextIndex = index;
+    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = tabs.length - 1;
+    event.preventDefault();
+    tabs[nextIndex].click();
+    queueMicrotask(() => tabBar.querySelector(`[data-workspace-tab="${activeTab}"]`)?.focus());
+  });
 
   function createPalette() {
     const dialog = document.createElement('dialog'); dialog.className = 'dialog command-palette';
