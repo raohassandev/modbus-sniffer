@@ -26,6 +26,7 @@ module.exports = Object.freeze({
   ...require('./master/writeSafety'),
   ...require('./master/addressNotation'),
   ...require('./master/masterWorkspaceService'),
+  ...require('./master/masterWorkspaceServiceHardened'),
   ...require('./master/masterWorkspaceRoutes'),
   ...require('./discovery/discoveryRequestEngine'),
   ...require('./discovery/discoveryScanService'),
