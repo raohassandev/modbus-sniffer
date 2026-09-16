@@ -64,6 +64,9 @@ const SENSITIVE_FIELD_NAMES = new Set([
 ]);
 
 function redactSensitive(value) {
+  if (Buffer.isBuffer(value)) return Buffer.from(value);
+  if (value instanceof Date) return new Date(value.getTime());
+  if (ArrayBuffer.isView(value)) return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
   if (Array.isArray(value)) return value.map(redactSensitive);
   if (!value || typeof value !== 'object') return value;
   const output = {};
@@ -107,9 +110,6 @@ class ReportBundleService {
     let writeAudit = [];
     let historianTags = configuredHistorianTags(project);
 
-    // Master sessions, Traffic and live Historian state belong to the active
-    // project only. Inactive handovers use persisted configuration and never
-    // instantiate cached logger/SQLite runtimes merely to build a report.
     if (active) {
       try { master = this.masterWorkspace?.snapshot(projectId) || null; } catch { master = null; }
       try { writeAudit = this.masterWorkspace?.audit({ limit: 10000 }) || []; } catch { writeAudit = []; }
