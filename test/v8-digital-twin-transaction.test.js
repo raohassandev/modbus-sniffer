@@ -46,7 +46,41 @@ test('v8 Digital Twin applyWithPatch restores the original twin when patched tar
   assert.equal(restored.target.serverId, 'original-target');
 });
 
+test('v8 Digital Twin refuses same-twin reapply while the generated server is running without mutation', () => {
+  const { store, registerLab } = fixture();
+  let removeCalls = 0;
+  let saveCalls = 0;
+  const service = new v8.DigitalTwinService({
+    store,
+    registerLab,
+    simulator: {
+      getServer: () => ({
+        serverId: 'running-twin',
+        runtime: { running: true },
+        metadata: { digitalTwin: { twinId: 'placeholder' } },
+      }),
+      listDevices: () => [],
+      removeServer() { removeCalls += 1; },
+      saveServer() { saveCalls += 1; },
+      saveDevice() { saveCalls += 1; },
+    },
+  });
+  const draft = service.saveDraft({ sourceConnectionId: 'source', targetConnectionId: 'target', serverId: 'running-twin' });
+  // Make the fake existing generated server identify as this exact twin.
+  service.simulator.getServer = () => ({
+    serverId: 'running-twin',
+    runtime: { running: true },
+    metadata: { digitalTwin: { twinId: draft.twinId } },
+  });
+
+  assert.throws(() => service.apply(draft.twinId), (error) => error.code === 'SERVER_RUNNING');
+  assert.equal(removeCalls, 0);
+  assert.equal(saveCalls, 0);
+  assert.equal(service.get(draft.twinId).status, 'draft');
+});
+
 test('v8 Digital Twin target conflicts are returned as HTTP 409', () => {
   assert.equal(digitalTwinErrorStatus({ code: 'TWIN_TARGET_CONFLICT' }), 409);
   assert.equal(digitalTwinErrorStatus({ code: 'TWIN_SNAPSHOT_UNAVAILABLE' }), 409);
+  assert.equal(digitalTwinErrorStatus({ code: 'SERVER_RUNNING' }), 409);
 });
