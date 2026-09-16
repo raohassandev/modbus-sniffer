@@ -4,14 +4,33 @@ const { test, expect } = require('@playwright/test');
 
 const V8 = 'http://127.0.0.1:18778';
 
+async function resetSimulator(request) {
+  const response = await request.get(`${V8}/api/v8/simulator/servers`);
+  if (!response.ok()) return;
+  const payload = await response.json();
+  for (const server of payload.servers || []) {
+    const id = encodeURIComponent(server.serverId);
+    if (server.runtime?.running) {
+      await request.post(`${V8}/api/v8/simulator/servers/${id}/stop`, { data: {} }).catch(() => undefined);
+    }
+    await request.delete(`${V8}/api/v8/simulator/servers/${id}`).catch(() => undefined);
+  }
+}
+
 async function resetConnections(request) {
+  // Simulator owns active server connections until its runtime is stopped. Tear it
+  // down first so Test Center cleanup never races another workspace owner.
+  await resetSimulator(request);
+
   const response = await request.get(`${V8}/api/v8/connections`);
   if (!response.ok()) return;
   const payload = await response.json();
   for (const item of payload.connections || []) {
     const id = encodeURIComponent(item.profile.connectionId);
-    if (item.runtime?.owner) {
+    const ownerMode = item.runtime?.owner?.ownerMode || null;
+    if (ownerMode === 'test') {
       await request.post(`${V8}/api/v8/test-center/session/${id}/disconnect`, { data: {} }).catch(() => undefined);
+    } else if (item.runtime?.owner) {
       await request.post(`${V8}/api/v8/connections/${id}/close`, { data: {} }).catch(() => undefined);
     }
     await request.delete(`${V8}/api/v8/connections/${id}`).catch(() => undefined);
@@ -21,11 +40,16 @@ async function resetConnections(request) {
 test.describe('v8 Test Center workspace', () => {
   test.beforeEach(async ({ page, request }) => {
     await resetConnections(request);
-    await request.post(`${V8}/api/v8/connections`, {
+    const created = await request.post(`${V8}/api/v8/connections`, {
       data: { connectionId: 'test-e2e', name: 'Test Center E2E', transportKind: 'virtual', endpoint: 'loopback' },
     });
+    expect(created.ok()).toBeTruthy();
     await page.goto(`${V8}/v8/`);
     await expect(page.locator('#workspace-testCenter')).toBeAttached();
+  });
+
+  test.afterEach(async ({ request }) => {
+    await resetConnections(request);
   });
 
   test('opens with LAB and writes locked, then requires explicit confirmations to arm them', async ({ page }) => {
