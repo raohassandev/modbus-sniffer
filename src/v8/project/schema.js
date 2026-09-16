@@ -102,8 +102,8 @@ function sanitizeConnectionProfile(input = {}, { index = 0 } = {}) {
   }
 
   const transport = String(input.transport || input.transportKind || '').toUpperCase();
-  const serial = input.serial && typeof input.serial === 'object' && !Array.isArray(input.serial) ? clone(input.serial) : null;
-  const tcp = input.tcp && typeof input.tcp === 'object' && !Array.isArray(input.tcp) ? clone(input.tcp) : null;
+  const serial = input.serial && typeof input.serial === 'object' && !Array.isArray(input.serial) ? sanitizePersistedMetadata(input.serial) : null;
+  const tcp = input.tcp && typeof input.tcp === 'object' && !Array.isArray(input.tcp) ? sanitizePersistedMetadata(input.tcp) : null;
   const metadata = input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
     ? sanitizePersistedMetadata(input.metadata)
     : {};
@@ -172,7 +172,6 @@ function normalizeV8Project(project = {}, { index = 0 } = {}) {
   for (const field of V8_ARRAY_FIELDS) normalized[field] = arrayOr(project[field]);
   normalized.connections = normalized.connections.map((connection, connectionIndex) => sanitizeConnectionProfile(connection, { index: connectionIndex }));
 
-  // Old or imported runtime state must never become an armed persisted state.
   delete normalized.writeLock;
   delete normalized.writesEnabled;
   delete normalized.writeEnabled;
