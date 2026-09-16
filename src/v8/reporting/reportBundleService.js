@@ -36,6 +36,15 @@ function csv(rows, keys) {
   return `${header}\r\n${body}${body ? '\r\n' : ''}`;
 }
 
+function autoCsv(rows, preferred = []) {
+  const keys = [...preferred];
+  const seen = new Set(keys);
+  for (const row of rows || []) {
+    for (const key of Object.keys(row || {})) if (!seen.has(key)) { seen.add(key); keys.push(key); }
+  }
+  return csv(rows || [], keys);
+}
+
 function json(value) {
   return `${JSON.stringify(value, (_key, current) => typeof current === 'bigint' ? current.toString() : current, 2)}\n`;
 }
@@ -79,14 +88,17 @@ class ReportBundleService {
     files.set('project/project.json', Buffer.from(json(model.project)));
     files.set('reports/master-summary.json', Buffer.from(json(model.master || { available: false })));
     files.set('reports/write-audit.json', Buffer.from(json(model.writeAudit)));
+    files.set('reports/write-audit.csv', Buffer.from(autoCsv(model.writeAudit, ['timestamp','auditId','connectionId','unitId','functionCode','address','quantity','result','requestRawHex','responseRawHex'])));
     files.set('reports/traffic.json', Buffer.from(json(model.traffic)));
-    files.set('reports/devices.csv', Buffer.from(csv(devices, ['deviceKey','deviceKey','channelId','unitId','slaveId','name','manufacturer','model','revision'])));
+    files.set('reports/traffic.csv', Buffer.from(autoCsv(model.traffic, ['sequence','timestamp','eventId','type','source','connectionId','channelId','ownerMode','direction','unitId','functionCode','error','rawHex'])));
+    files.set('reports/devices.csv', Buffer.from(csv(devices, ['deviceKey','channelId','unitId','slaveId','name','manufacturer','model','revision'])));
     files.set('reports/registers.csv', Buffer.from(csv(registers, ['registerKey','channelId','deviceKey','unitId','slaveId','functionCode','address','name','type','dataType','byteOrder','scale','offset','unit'])));
     files.set('reports/simulator-model.json', Buffer.from(json({ servers: model.project.slaveServers || [], devices: model.project.virtualDevices || [] })));
     files.set('reports/recipes.json', Buffer.from(json(model.project.testRecipes || [])));
     files.set('reports/historian.json', Buffer.from(json({ tags: model.historianTags, loggerProfiles: model.project.loggerProfiles || [], charts: model.project.charts || [] })));
     files.set('reports/hmi-pages.json', Buffer.from(json(model.project.hmiScreens || [])));
     files.set('reports/digital-twins.json', Buffer.from(json(model.project.digitalTwins || [])));
+    files.set('reports/automation.json', Buffer.from(json(model.project.automation || [])));
     const manifest = {
       format: 'modbus-workbench-v8-handover', formatVersion: 1,
       product: 'Modbus Engineering Workbench', productVersion: '8.0.0-rc',
@@ -113,4 +125,4 @@ class ReportBundleService {
   }
 }
 
-module.exports = { ReportBundleError, ReportBundleService, safeName, spreadsheetSafeText, csv, sha256 };
+module.exports = { ReportBundleError, ReportBundleService, safeName, spreadsheetSafeText, csv, autoCsv, sha256 };
