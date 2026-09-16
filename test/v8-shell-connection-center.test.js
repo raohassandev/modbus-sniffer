@@ -42,11 +42,25 @@ test('v8 connection-profile runtime describes serial/TCP/virtual resources witho
   assert.equal(virtual.exclusive, true);
 });
 
+test('v8 connection-profile runtime rejects invalid address-family and non-local listen configuration before opening', () => {
+  assert.throws(
+    () => v8.describeProfileRuntime({ connectionId: 'bad-family', transportKind: 'tcp-client', tcp: { host: '127.0.0.1', port: 502, family: 5 } }),
+    (error) => error.code === 'INVALID_PROFILE_CONFIG',
+  );
+  assert.throws(
+    () => v8.describeProfileRuntime({ connectionId: 'bad-listen', transportKind: 'tcp-server', tcp: { host: '203.0.113.250', port: 502 } }),
+    (error) => error.code === 'LOCAL_ADDRESS_NOT_ASSIGNED',
+  );
+});
+
 test('v8 preview Connection Center opens virtual profile with writes locked and does not persist runtime ownership', async (t) => {
   const dataDir = tempDir(t);
   const preview = await v8.startV8WorkbenchServer({ dataDir, port: 0, quiet: true });
   t.after(() => preview.close());
   const base = preview.url.replace(/\/v8\/$/, '');
+
+  const shell = await fetch(`${base}/v8/`, { redirect: 'manual' });
+  assert.equal(shell.status, 200);
 
   const status = await json(base, '/api/v8/status');
   assert.equal(status.response.status, 200);
@@ -91,6 +105,36 @@ test('v8 preview Connection Center opens virtual profile with writes locked and 
   assert.equal(tested.payload.ok, true);
   assert.equal(tested.payload.writesArmed, false);
   assert.equal(tested.payload.broker.writeLock, 'LOCKED');
+});
+
+test('v8 Connection Center validates the full import/save payload before mutating project persistence', async (t) => {
+  const dataDir = tempDir(t);
+  const preview = await v8.startV8WorkbenchServer({ dataDir, port: 0, quiet: true });
+  t.after(() => preview.close());
+  const base = preview.url.replace(/\/v8\/$/, '');
+  const projectId = (await json(base, '/api/v8/status')).payload.activeProject.id;
+
+  const invalidSave = await json(base, `/api/v8/projects/${encodeURIComponent(projectId)}/connections/bad-family`, {
+    method: 'PUT',
+    body: { connectionId: 'bad-family', name: 'Bad family', transportKind: 'tcp-client', tcp: { host: '127.0.0.1', port: 502, family: 5 } },
+  });
+  assert.equal(invalidSave.response.status, 400);
+  assert.equal(invalidSave.payload.code, 'INVALID_PROFILE_CONFIG');
+
+  const invalidImport = await json(base, `/api/v8/projects/${encodeURIComponent(projectId)}/connections/import`, {
+    method: 'POST',
+    body: { connections: [
+      { connectionId: 'good-loop', name: 'Good loop', transportKind: 'virtual-rtu' },
+      { connectionId: 'bad-listen', name: 'Bad listen', transportKind: 'tcp-server', tcp: { host: '203.0.113.250', port: 502 } },
+    ] },
+  });
+  assert.equal(invalidImport.response.status, 400);
+  assert.equal(invalidImport.payload.code, 'LOCAL_ADDRESS_NOT_ASSIGNED');
+
+  const inventory = await json(base, '/api/v8/connections');
+  assert.equal(inventory.payload.connections.length, 0);
+  const disk = JSON.parse(fs.readFileSync(path.join(dataDir, 'workbench-v8.json'), 'utf8'));
+  assert.equal(disk.projects[0].connections.length, 0);
 });
 
 test('v8 Connection Center rejects cross-site mutations', async (t) => {
