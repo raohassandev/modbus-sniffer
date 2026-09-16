@@ -1,32 +1,40 @@
-# Modbus Engineering Analyzer v7
+# Modbus Engineering Workbench v8
 
-A field-oriented **Modbus RTU / RS485 and Modbus TCP engineering analyzer and reverse-engineering workstation** built with Node.js and a local browser UI.
+An all-in-one Modbus engineering workstation for **RTU, ASCII, TCP, UDP, tunnelling and TLS** workflows. The v8 product combines Master polling/writes, Slave/Server simulation, passive/proxy analysis, discovery, Traffic/Register Lab, Test Center/recipes, Charts/Logger/Historian, Digital Twin workflows, automation and HMI Builder surfaces behind one shared protocol and connection-ownership model.
 
-v7 automatically forms devices from observed Unit/Slave IDs, reconstructs register groups and polling intervals, detects missing replies, analyzes RTT/jitter/exceptions, infers register data types and byte orders, reconstructs the master polling cycle, fingerprints similar devices, detects register relationships and communication anomalies, compares captures, maintains persistent engineering projects, and generates handover reports.
+## Release status
 
-## Release and development status
+This branch is the **8.0.0 release candidate** carried by PR #31. On this branch:
 
-**Stable/default product:** v7.0.0. `npm start` and the Windows desktop launcher intentionally start `src/index-v7.js`.
+- `npm start` launches `src/index-v8.js`.
+- the package entry point is v8.
+- the Windows desktop launcher starts the v8 backend and UI.
+- v7 remains available explicitly with `npm run v7` for compatibility.
 
-**v8 development:** the all-in-one Modbus Workbench foundation is being built under `src/v8/` on `main`. WP-01 through WP-05 are present with shared protocol/ownership foundations, virtual/TCP/serial transports, Master/Slave runtime foundations, scheduler, write safety/audit and address notation. These modules are **not yet the default product UI/runtime**, so the repository must not be described as a released v8 application yet.
-
-For the audited implementation state and closed inconsistencies, see `docs/V8_IMPLEMENTATION_STATUS.md`. `docs/V8_MASTER_TODO.md` remains the complete target-scope roadmap rather than the live release-status document.
+Do not describe 8.0.0 as merged/released on `main` until PR #31's exact current head passes the full CI matrix and is merged. See `docs/V8_IMPLEMENTATION_STATUS.md` for the audited release boundary.
 
 ## Safety model
 
-**Passive Modbus RTU capture is receive-only.** The normal analyzer does not transmit production Modbus RTU requests. Use a separate high-impedance / isolated USB-RS485 adapter connected in parallel with the live A/B bus.
+The active workspaces are deliberately separated from passive and LAB behavior:
 
-The optional **Modbus TCP analyzer is an inline forwarding proxy**, not a passive Ethernet tap. It forwards existing client/server bytes unchanged and analyzes the MBAP request/response traffic.
-
-The separate active device-identification scanner is intentionally guarded. RTU active discovery requires explicit maintenance-mode and exclusive-bus confirmation before it can transmit read-only identification requests.
-
-The in-development v8 active Master/Test foundation has a separate safety boundary: writes are connection-scoped, off by default, may only be armed while a live connection is open, return to locked on reopen/close, and write/raw/test transmissions retain broker-level raw evidence. These v8 active-mode capabilities are not exposed through the stable v7 analyzer UI.
+- Passive Analyzer/replay does not gain transmit capability implicitly.
+- Discovery is read-only and cannot inherit Master write permission.
+- Serial resources have one active owner through the central Connection Broker.
+- Write permission is per connection, off by default, available only while the connection is live and re-locks on close/reopen/restart.
+- Bulk/sensitive writes require stronger confirmation. HMI FC16 writes require explicit bulk confirmation as well as the operator confirmation.
+- Unit-0 RTU/ASCII broadcast semantics are limited to supported write functions.
+- Raw Test Center traffic is distinct from normal validated Modbus requests.
+- Fault injection exists only in the Simulator LAB path and is disabled by default.
+- Low-level write/raw/test transmissions retain bounded audit evidence including connection, ownership, timestamp and transmitted HEX.
+- Browser cross-site mutations are rejected and mutation/body limits are enforced.
+- Persisted/imported projects and connections cannot restore live ownership, armed writes or active fault injection.
 
 ## Requirements
 
 - Node.js 20 or newer
-- Windows, Linux, or macOS
-- USB-RS485 adapter for live RTU capture
+- Windows, Linux or macOS
+- USB-RS485 adapter for real RTU/ASCII work
+- appropriate network access for TCP/UDP/TLS targets
 
 ## Install and run
 
@@ -37,225 +45,150 @@ npm install
 npm start
 ```
 
-Open:
+The default v8 browser endpoint is:
 
 ```text
-http://127.0.0.1:8080
+http://127.0.0.1:8088/v8/
 ```
 
-The top-right badge should show **UI v7.0**.
-
-For an existing clone:
+Use another port when required:
 
 ```powershell
-cd modbus-sniffer
-git pull origin main
-npm install
-npm start
+npm start -- --port 8090
 ```
 
-## Demo mode
-
-Run the complete stable analyzer without hardware:
+Use a separate data directory:
 
 ```powershell
-npm run demo
+npm start -- --data-dir C:\ModbusWorkbench\data
 ```
 
-The simulator produces multi-device Modbus traffic so device formation, registers, polling, timeouts, analysis and the v7 Intelligence workspace can be evaluated before site deployment.
+The web server binds to loopback by default. Change `--host` only when you intentionally need another bind address and understand the network exposure.
 
-## Automatic device formation
+## v7 compatibility
 
-No manual slave configuration is required. Every observed Modbus Unit/Slave ID becomes an independent device under its exact transport/channel identity.
+The accepted legacy analyzer remains available explicitly:
 
-If a master polls ten RTU slaves, the analyzer creates ten device models automatically. Each device tracks:
+```powershell
+npm run v7
+```
 
-- requests, responses and function codes
-- discovered register groups and current raw values
-- polling request groups and intervals
-- median/P95 interval and jitter
-- missing-response timeouts
-- exceptions and unmatched replies
-- average/P95 RTT
-- online / silent / offline state
-- health score
+This is a compatibility path, not the default product on the v8 release-candidate branch.
 
-Identical register addresses on different slaves remain isolated.
+## Main v8 workspaces
 
-## v7 Intelligence workspace
+- **Connection Center** — saved connection profiles, ownership/state, serial/network enumeration, diagnostics and safe open/close/test actions.
+- **Master** — one-shot requests, persistent cyclic poll jobs, scheduling, result grids, canonical addressing and guarded writes/read-back/audit.
+- **Discovery** — FC43-first read-only identification and adaptive FC01-04 scanning with evidence and Master handoff.
+- **Simulator** — persistent virtual servers/devices, memory editing, dynamic generators and isolated LAB fault injection.
+- **Traffic** — bounded unified runtime timeline with filters, search, bookmarks, raw evidence and error navigation.
+- **Register Lab** — datatype/byte-order/engineering interpretation, scale/offset, enums/bitfields/limits and provenance.
+- **Test Center** — guarded raw-frame studio and versioned automated recipes with assertions, variables, repeat, pause/resume/stop and evidence.
+- **Charts / Logger / Historian** — bounded live series, backend decimation, rotating JSONL logging and optional SQLite historian.
+- **Digital Twin** — draft Simulator models from observed/register evidence with an explicit approval boundary before running generated servers.
+- **HMI Builder** — persistent screens/templates, edit/preview/run modes, bindings, live reads and guarded operator writes/actions.
+- **Projects / Reports** — project clone/Save As, reusable project templates and complete engineering handover bundles.
 
-### Automatic register intelligence
+## Supported protocol/runtime scope
 
-For discovered register windows, v7 evaluates likely interpretations using multiple observed response samples rather than only one current value:
-
-- `uint16` / `int16`
-- `uint32` / `int32` / `float32`
-- `uint64` / `int64` / `float64`
-- common byte/word orders such as ABCD, BADC, CDAB and DCBA
-- ASCII candidates
-- likely timestamps
-- monotonic and resetting counters
-- low-cardinality status / bitfield behavior
-
-Every hypothesis has a confidence score. These are reverse-engineering suggestions, not substitutes for manufacturer documentation.
-
-### Master polling-cycle reconstruction
-
-The ordered Modbus request stream is analyzed per channel to recover the master's repeating communication program:
+The shared v8 protocol core covers standard handling for:
 
 ```text
-Channel: RTU Bus 1
-Cycle: 2.01 s
-
-1  Slave 1  FC03  0..19
-2  Slave 1  FC03  100..119
-3  Slave 2  FC04  300..305
-4  Slave 3  FC03  44112..44131
-...
+FC01  Read Coils
+FC02  Read Discrete Inputs
+FC03  Read Holding Registers
+FC04  Read Input Registers
+FC05  Write Single Coil
+FC06  Write Single Register
+FC07  Read Exception Status
+FC08  Diagnostics
+FC11  Get Comm Event Counter
+FC12  Get Comm Event Log
+FC15  Write Multiple Coils
+FC16  Write Multiple Registers
+FC17  Report Server ID
+FC20  Read File Record
+FC21  Write File Record
+FC22  Mask Write Register
+FC23  Read/Write Multiple Registers
+FC24  Read FIFO Queue
+FC43  MEI / Device Identification
 ```
 
-The model reports requests per cycle, devices per cycle, slot confidence, median/P95 cycle duration, jitter and inter-request gaps.
+The common data model includes exact 16/32/64-bit signed/unsigned handling, float32/float64, configurable byte/word permutations, string/ASCII helpers, BCD and timestamp/date interpretations.
 
-### Device fingerprinting
+Transport families include native serial RTU/ASCII, Modbus TCP client/server, UDP client/server, RTU/ASCII tunnelling over TCP/UDP and TLS client/server options. TLS profiles use explicit certificate/key/trust configuration and do not silently downgrade to insecure TCP.
 
-Devices receive fingerprints derived from:
+## Connection and write safety
 
-- function-code usage
-- register blocks
-- polling request shapes
-- passive FC43 Device Identification data when available
+A connection profile stores configuration only. Opening a connection establishes runtime ownership separately. A saved project cannot restore a previously armed write latch.
 
-Similar devices are scored against one another and v7 can suggest when the same engineering profile is likely reusable.
+Typical Master flow:
 
-### Register relationship analysis
+1. create/save the connection profile;
+2. open it in Master ownership;
+3. perform read-only polling;
+4. explicitly enable writes for that live connection when required;
+5. confirm the individual write, including additional bulk/broadcast confirmation where applicable;
+6. inspect read-back/audit evidence;
+7. close the connection, which returns it to a safe locked state.
 
-The analyzer searches observed values for useful reverse-engineering relationships including:
+If a serial driver write may have reached the bus but completion cannot be proven, the result is reported as `TRANSMISSION_OUTCOME_UNKNOWN`; the connection enters an error state and writes are re-locked until close/reopen.
 
-- duplicate registers
-- strong correlations
-- monotonic / resetting counters
-- totals that approximate the sum of nearby component registers
-- multiplicative relationships with a stable scale factor
+## Projects and migration
 
-### Anomaly engine
+v8 uses schema version 3 and stores its workbench database separately from legacy v7 workspace data. Migration from supported v7 schema-2 data is explicit and creates a source backup and migration report before writing the v8 destination.
 
-The live capture is evaluated for:
+The store uses atomic writes, keeps a last-known-good backup and preserves a corrupt primary file before recovery. Same Unit IDs on different channels remain isolated through channel-scoped identity.
 
-- device silent/offline transitions
-- missing responses
-- high polling jitter
-- changed polling intervals
-- observed write commands
-- RTT shifts
-- increasing line-noise activity
-- newly observed devices
+Project clone/Save As and reusable project templates strip runtime/armed state. Project switching is refused while a connection is active.
 
-### Session comparison
+## Engineering handover export
 
-The Intelligence page can compare two `.mbcap` captures and highlight:
+The v8 handover ZIP contains a manifest with product/version/schema metadata and SHA-256 hashes. Depending on available project/runtime evidence, it can include:
 
-- devices added or removed
-- register-map changes
-- poll groups added/removed
-- polling interval changes
-- timeout/exception changes
-- response-time changes
+- complete project configuration
+- Master summary
+- write audit
+- bounded Traffic evidence
+- device/register CSVs with channel/device identity
+- Simulator model
+- recipes/Test Center definitions
+- Logger/Chart/Historian definitions and tags
+- HMI pages
+- Digital Twin definitions
 
-## Main workspaces
+CSV text is protected against spreadsheet formula injection and generated filenames are sanitized.
 
-- **Dashboard** — current bus health and traffic overview
-- **Devices** — automatically formed devices with device-specific registers/polls
-- **Live Traffic** — decoded request/response/timeout stream and raw HEX
-- **Analysis** — timing, exceptions, timeouts and engineering findings
-- **Registers** — automatically discovered register explorer
-- **Decoder** — 16/32/64-bit interpretations and byte/word order analysis
-- **Intelligence** — v7 reverse-engineering engine
-- **Sessions** — save/load/replay `.mbcap` captures
-- **Projects** — persistent site and bus workspaces
-- **Engineering** — names, mappings, scaling, units and reusable profiles
-- **History** — persistent communication/health snapshots
-- **Discovery** — passive topology and FC43 identity visibility
-- **Modbus TCP** — inline MBAP proxy analysis
-- **Reports** — diagnostic outputs and engineering handover
-- **Settings** — serial selection, reconnect and passive format detection
+## Automation / CLI / SDK
 
-## Engineering register maps
+The v8 automation client defaults to loopback-only API access and requires explicit remote opt-in. Write helpers require explicit confirmation and preserve separate bulk/broadcast confirmations.
 
-A discovered register can be assigned persistent engineering metadata:
-
-```text
-Device      Slave 3
-Function    FC03
-Address     44112
-Name        Total Active Power
-Type        float32
-Byte order  CDAB
-Scale       0.001
-Offset      0
-Unit        kW
-```
-
-Reusable device profiles can be generated from one mapped device and applied to another matching device.
-
-## Missing-response and polling analysis
-
-Requests without a matching response before the configured timeout become explicit `TIMEOUT` events.
-
-Default RTU request timeout:
-
-```text
-1000 ms
-```
-
-Override it with:
+Examples:
 
 ```powershell
-npm start -- --request-timeout 800
+npm run v8:cli -- status --json
+npm run v8:cli -- connections --json
+npm run v8:cli -- read --connection meter-1 --unit 1 --fc 3 --address 0 --quantity 10 --json
+npm run v8:cli -- write --connection meter-1 --unit 1 --fc 6 --address 10 --value 25 --confirm --json
+npm run v8:cli -- recipe-run .\recipe.json --connection meter-1 --json
 ```
 
-## Passive serial-format detection
-
-Settings provides Quick Detect and Full Detect. The analyzer tries common baud/parity combinations and scores valid CRC frames versus undecodable bytes. No Modbus request is transmitted during passive serial detection.
-
-## Capture and replay
-
-Save the current session as `.mbcap`, reload it later without hardware, and replay captured traffic through the analysis model.
-
-Engineering exports include CSV, XLSX, PDF and complete project ZIP outputs.
-
-## Modbus TCP analysis
-
-Start the inline TCP analyzer from the UI or CLI:
-
-```powershell
-npm start -- --tcp-proxy --tcp-listen-port 1502 --tcp-target-host 192.168.1.50 --tcp-target-port 502
-```
-
-Point the existing Modbus TCP client to the analyzer PC on port `1502`; the analyzer forwards traffic to the target on port `502` while preserving transaction and Unit-ID isolation.
-
-## Real RTU example
-
-```powershell
-npm start -- --port COM5 --baud 9600 --parity none --data-bits 8 --stop-bits 1
-```
-
-Recommended passive topology:
+JavaScript SDK entry point:
 
 ```text
-Master / PLC                   Slave bus
-    A+ --------------------------- A+
-      \---- Sniffer USB-RS485 A+
-
-    B- --------------------------- B-
-      \---- Sniffer USB-RS485 B-
-
-   GND --------------------------- GND
-      \---- Sniffer reference/GND
+sdk/js/index.js
 ```
 
-Use an isolated adapter where practical. Do not add a new 120-ohm termination resistor only for the sniffer.
+Dependency-free Python example client:
+
+```text
+sdk/python/modbus_workbench_client.py
+```
 
 ## Validation
+
+Run the local validation gates:
 
 ```powershell
 npm run quality
@@ -263,20 +196,11 @@ npm test
 npm run smoke
 npm run acceptance
 npm run e2e
-npm run soak
 ```
 
-`npm run quality` now includes release-version consistency, linting and a recursive syntax check of every JavaScript module under `src/v8/`.
+CI exercises Windows and Linux across Node 20/22/24, plus quality/dependency audit and Chromium browser E2E. Windows Node 22/24 runs the SQLite historian coverage through the repository's isolation runner rather than skipping it.
 
-CI runs syntax, unit, smoke and acceptance checks on Windows and Linux across supported Node versions, plus a browser E2E gate. v8 runtime modules are exercised by dedicated protocol, broker, transport, Master/Slave and safety tests even though v7 remains the default launcher.
-
-For a real site with ten expected devices:
-
-```powershell
-npm run field-check -- --min-devices 10 --min-frames 500
-```
-
-Real production acceptance still requires hardware/site testing because wiring, termination, adapter behavior, noise and device timing cannot be proven by software CI.
+The release candidate must not be merged solely because it is mergeable; the exact current head must be green.
 
 ## Windows desktop build
 
@@ -286,15 +210,24 @@ npm run desktop:install
 npm run desktop:win
 ```
 
-Installer output is created under `desktop/dist/`. The current installer intentionally launches the stable v7 backend until the v8 release gate is reached.
+Installer output is created under `desktop/dist/`. The release-candidate desktop shell launches v8 on a loopback dynamic port and opens `/v8/` after `/api/v8/status` becomes ready.
+
+## Field acceptance
+
+Software CI cannot prove site wiring, termination, transceiver behavior, electromagnetic noise, third-party device timing or real certificate infrastructure. Perform real equipment/site qualification before production deployment.
+
+For the field procedure see:
+
+```text
+docs/SITE_ACCEPTANCE.md
+```
 
 ## Documentation
 
-- `docs/V8_IMPLEMENTATION_STATUS.md` — current v8 implementation/audit status and release boundary
-- `docs/V8_MASTER_TODO.md` — complete v8 target-scope roadmap
-- `docs/V8_ALL_IN_ONE_MODBUS_WORKBENCH_PLAN.md` — v8 product/architecture plan
-- `docs/V8_EXECUTION_ARCHITECTURE.md` — v8 execution architecture contract
-- `docs/V8_PROFESSIONAL_UI_UX_PLAN.md` — professional v8 UI/UX target
-- `docs/V7_INTELLIGENCE.md` — v7 reverse-engineering layer
-- `docs/V6_PLATFORM.md` — persistent platform / TCP / projects foundation
-- `docs/SITE_ACCEPTANCE.md` — real-hardware acceptance procedure
+- `docs/V8_IMPLEMENTATION_STATUS.md` — audited implementation and release-candidate boundary
+- `docs/V8_MASTER_TODO.md` — full target-scope roadmap
+- `docs/V8_ALL_IN_ONE_MODBUS_WORKBENCH_PLAN.md` — product/architecture plan
+- `docs/V8_EXECUTION_ARCHITECTURE.md` — execution/ownership contract
+- `docs/V8_PROFESSIONAL_UI_UX_PLAN.md` — UI/UX target
+- `docs/V8_WP15_WP16.md` — Digital Twin and automation details
+- `docs/SITE_ACCEPTANCE.md` — real-hardware/site acceptance procedure
