@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/index-v7.js",
     "v8": "node src/index-v8.js",
+    "v8:cli": "node scripts/v8-cli.js",
     "ports": "node src/index-v7.js --list-ports",
     "demo": "node src/index-v7.js --demo",
     "test": "node --test",
