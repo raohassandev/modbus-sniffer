@@ -103,7 +103,7 @@ class ReportBundleService {
     files.set('reports/simulator-model.json', Buffer.from(json({ servers: model.project.slaveServers || [], devices: model.project.virtualDevices || [] })));
     files.set('reports/recipes.json', Buffer.from(json(model.project.testRecipes || [])));
     files.set('reports/historian.json', Buffer.from(json({ tags: model.historianTags, loggerProfiles: model.project.loggerProfiles || [], charts: model.project.charts || [] })));
-    files.set('reports/hmi-pages.json', Buffer.from(json(model.project.hmiScreens || [])));
+    files.set('reports/hmi-pages.json', Buffer.from(json({ screens: model.project.hmiScreens || [], templates: model.project.hmiTemplates || [] })));
     files.set('reports/digital-twins.json', Buffer.from(json(model.project.digitalTwins || [])));
     files.set('reports/automation.json', Buffer.from(json(model.project.automation || [])));
     const manifest = {
