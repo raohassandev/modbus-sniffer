@@ -13,6 +13,10 @@ const FC = Object.freeze({
   ...extendedFunctions.FC,
 });
 
+function decodeRequestPdu(pdu) {
+  return extendedFunctions.decodeExtendedRequestPdu(pdu) || functions.decodeRequestPdu(pdu);
+}
+
 module.exports = Object.freeze({
   ...errors,
   ...model,
@@ -22,4 +26,5 @@ module.exports = Object.freeze({
   ...extendedFunctions,
   ...dataModel,
   FC,
+  decodeRequestPdu,
 });
