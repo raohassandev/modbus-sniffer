@@ -16,6 +16,11 @@
   simulatorScript.defer = true;
   document.head.appendChild(simulatorScript);
 
+  const trafficRegisterScript = document.createElement('script');
+  trafficRegisterScript.src = '/v8/traffic-register.js';
+  trafficRegisterScript.defer = true;
+  document.head.appendChild(trafficRegisterScript);
+
   const workspaceLabels = new Map([
     ['connections', 'Connections'],
     ['master', 'Master'],
