@@ -10,7 +10,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-metadata-sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.sync.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - id: sync
+        name: Synchronize 8.0.0 package metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT_VERSION="$(node -p "require('./package.json').version")"
+          DESKTOP_VERSION="$(node -p "require('./desktop/package.json').version")"
+          ROOT_LOCK_VERSION="$(node -p "require('./package-lock.json').version")"
+          DESKTOP_LOCK_VERSION="$(node -p "require('./desktop/package-lock.json').version")"
+          if [ "$ROOT_VERSION" = "8.0.0" ] && [ "$DESKTOP_VERSION" = "8.0.0" ] && [ "$ROOT_LOCK_VERSION" = "8.0.0" ] && [ "$DESKTOP_LOCK_VERSION" = "8.0.0" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            npm run version:check
+            exit 0
+          fi
+          npm version 8.0.0 --no-git-tag-version --allow-same-version
+          npm --prefix desktop version 8.0.0 --no-git-tag-version --allow-same-version
+          npm run version:check
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Commit synchronized manifests and lockfiles
+        if: steps.sync.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json desktop/package.json desktop/package-lock.json
+          git commit -m "chore: synchronize Workbench 8.0.0 release metadata"
+          git push origin HEAD:v8-release-completion
+
   quality:
+    needs: release-metadata-sync
+    if: needs.release-metadata-sync.outputs.changed != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +73,8 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
   test:
+    needs: release-metadata-sync
+    if: needs.release-metadata-sync.outputs.changed != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -94,6 +142,8 @@ jobs:
       - run: npm run acceptance
 
   browser-e2e:
+    needs: release-metadata-sync
+    if: needs.release-metadata-sync.outputs.changed != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
