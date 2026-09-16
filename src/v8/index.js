@@ -16,6 +16,8 @@ module.exports = Object.freeze({
   ...require('./transports/tcpClientTransport'),
   ...require('./transports/tcpServerTransport'),
   ...require('./transports/udpTransport'),
+  ...require('./transports/tunnelTransport'),
+  ...require('./transports/tlsTransport'),
   ...require('./transports/serialFramers'),
   ...require('./transports/echoSuppressor'),
   ...require('./transports/serialTransport'),
