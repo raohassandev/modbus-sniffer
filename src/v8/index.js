@@ -1,6 +1,7 @@
 'use strict';
 
 module.exports = Object.freeze({
+  ...require('./version'),
   protocol: require('./protocol'),
   ...require('./events'),
   ...require('./featureFlags'),
