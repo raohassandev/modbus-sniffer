@@ -65,6 +65,7 @@ function startV8WorkbenchServer({
       version: '8-dev',
       schemaVersion: db.schemaVersion,
       activeProjectId: db.activeProjectId,
+      activeProject: store.getActiveProject(),
       flags,
       connections: center.inventory(),
       migration: store.getMigrationReport(),
