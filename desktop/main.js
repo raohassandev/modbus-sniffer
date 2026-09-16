@@ -15,9 +15,18 @@ let quitInProgress = false;
 let allowFinalQuit = false;
 let desktopLogPath = null;
 
+function redactLogSecrets(message) {
+  let text = String(message || '');
+  text = text.replace(/-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY-----[\s\S]*?-----END(?: [A-Z0-9]+)* PRIVATE KEY-----/gi, '[REDACTED PRIVATE KEY]');
+  text = text.replace(/("(?:password|passphrase|client[_-]?secret|api[_-]?key|access[_-]?token|refresh[_-]?token|token|private[_-]?key|key[_-]?path)"\s*:\s*)"(?:\\.|[^"\\])*"/gi, '$1"[REDACTED]"');
+  text = text.replace(/\b(password|passphrase|client[_-]?secret|api[_-]?key|access[_-]?token|refresh[_-]?token|token|private[_-]?key|key[_-]?path)\s*=\s*([^\s,;]+)/gi, '$1=[REDACTED]');
+  return text;
+}
+
 function appendDesktopLog(level, message) {
   if (!desktopLogPath) return;
-  const line = `${new Date().toISOString()} [${String(level || 'INFO').toUpperCase()}] ${String(message || '').replace(/\r?\n/g, ' ')}\n`;
+  const safeMessage = redactLogSecrets(message).replace(/\r?\n/g, ' ');
+  const line = `${new Date().toISOString()} [${String(level || 'INFO').toUpperCase()}] ${safeMessage}\n`;
   fs.appendFile(desktopLogPath, line, () => undefined);
 }
 
@@ -238,4 +247,4 @@ app.on('before-quit', event => {
   });
 });
 
-module.exports = { backendEntry };
+module.exports = { backendEntry, redactLogSecrets };
