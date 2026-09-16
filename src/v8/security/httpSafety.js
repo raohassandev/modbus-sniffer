@@ -13,7 +13,7 @@ class HttpSafetyError extends Error {
 }
 
 function requestOrigin(req) {
-  const protocol = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
+  const protocol = String(req.protocol || 'http').trim();
   const host = String(req.headers.host || '').trim();
   return host ? `${protocol}://${host}` : null;
 }
