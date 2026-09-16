@@ -22,6 +22,7 @@
     "acceptance": "node scripts/acceptance.js",
     "soak": "node scripts/soak.js",
     "soak:v8": "node scripts/soak-v8.js",
+    "release:gate:mac": "bash scripts/release-gate-mac.sh",
     "field-check": "node scripts/field-check.js",
     "discover": "node scripts/discover.js",
     "e2e": "playwright test",
