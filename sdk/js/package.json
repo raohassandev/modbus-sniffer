@@ -1,0 +1,8 @@
+{
+  "name": "@automatrix/modbus-workbench-client",
+  "version": "0.1.0-dev",
+  "private": true,
+  "main": "index.js",
+  "type": "commonjs",
+  "engines": { "node": ">=20" }
+}
