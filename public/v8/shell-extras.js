@@ -37,6 +37,48 @@
     }
   }
 
+  const connectionsBody = document.querySelector('#connectionsBody');
+  function connectionRows() { return connectionsBody ? [...connectionsBody.querySelectorAll('tr[data-connection-id]')] : []; }
+  function syncConnectionRowAccessibility() {
+    for (const row of connectionRows()) {
+      row.tabIndex = 0;
+      row.setAttribute('aria-selected', row.classList.contains('selected') ? 'true' : 'false');
+      row.setAttribute('aria-label', `Connection ${row.dataset.connectionId}`);
+    }
+  }
+  function focusConnectionRow(connectionId) {
+    const row = connectionRows().find((candidate) => candidate.dataset.connectionId === connectionId);
+    row?.focus();
+  }
+  if (connectionsBody) {
+    new MutationObserver(syncConnectionRowAccessibility).observe(connectionsBody, { childList: true });
+    connectionsBody.addEventListener('keydown', (event) => {
+      const row = event.target.closest('tr[data-connection-id]');
+      if (!row || event.target.closest('button, input, select, a')) return;
+      const rows = connectionRows();
+      const currentIndex = rows.indexOf(row);
+      if (['Enter', ' '].includes(event.key)) {
+        event.preventDefault();
+        const connectionId = row.dataset.connectionId;
+        row.click();
+        queueMicrotask(() => focusConnectionRow(connectionId));
+        return;
+      }
+      if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key) || currentIndex < 0) return;
+      event.preventDefault();
+      let nextIndex = currentIndex;
+      if (event.key === 'ArrowUp') nextIndex = Math.max(0, currentIndex - 1);
+      if (event.key === 'ArrowDown') nextIndex = Math.min(rows.length - 1, currentIndex + 1);
+      if (event.key === 'Home') nextIndex = 0;
+      if (event.key === 'End') nextIndex = rows.length - 1;
+      const connectionId = rows[nextIndex]?.dataset.connectionId;
+      if (!connectionId) return;
+      rows[nextIndex].click();
+      queueMicrotask(() => focusConnectionRow(connectionId));
+    });
+    syncConnectionRowAccessibility();
+  }
+
   const tabBar = document.createElement('div');
   tabBar.className = 'document-tabs';
   tabBar.setAttribute('role', 'tablist');
