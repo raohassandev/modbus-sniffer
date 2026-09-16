@@ -101,6 +101,7 @@ async function startV8WorkbenchServer({
   const publicDir = path.join(__dirname, '..', '..', 'public', 'v8');
 
   app.disable('x-powered-by');
+  app.enable('strict routing');
   app.use(express.json({ limit: '1mb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -312,8 +313,9 @@ async function startV8WorkbenchServer({
     try {
       if (runtimes.has(profileKey(req.params.projectId, req.params.connectionId))) throw new V8WorkbenchServerError('CONNECTION_ACTIVE', 'Close this connection before editing its profile.');
       const input = { ...(req.body || {}), connectionId: req.params.connectionId };
+      // Validate the candidate before any project mutation so invalid runtime settings never persist.
+      describeProfileRuntime(input);
       const saved = projects.upsertConnectionProfile(req.params.projectId, input);
-      // Runtime construction validates transport-specific fields without opening hardware.
       describeProfileRuntime(saved);
       broadcast('profiles', { projectId: req.params.projectId, connections: inventory(req.params.projectId) });
       res.json(saved);
@@ -335,6 +337,7 @@ async function startV8WorkbenchServer({
       const newId = String(req.body?.connectionId || '').trim();
       if (!newId) throw new V8WorkbenchServerError('CONNECTION_ID_REQUIRED', 'New connectionId is required.');
       const clone = { ...profile, ...req.body, connectionId: newId, id: newId, sourceChannelId: null, name: req.body?.name || `${profile.name} Copy` };
+      describeProfileRuntime(clone);
       const saved = projects.upsertConnectionProfile(req.params.projectId, clone);
       describeProfileRuntime(saved);
       broadcast('profiles', { projectId: req.params.projectId, connections: inventory(req.params.projectId) });
@@ -355,12 +358,21 @@ async function startV8WorkbenchServer({
     try {
       const list = Array.isArray(req.body) ? req.body : req.body?.connections;
       if (!Array.isArray(list) || list.length > 2000) throw new V8WorkbenchServerError('INVALID_IMPORT', 'connections must be an array with at most 2000 profiles.');
-      const saved = [];
+      const candidates = [];
+      const seen = new Set();
       for (const profile of list) {
         const connectionId = String(profile?.connectionId || profile?.id || '').trim();
         if (!connectionId) throw new V8WorkbenchServerError('INVALID_IMPORT', 'Every imported profile requires connectionId.');
+        if (seen.has(connectionId)) throw new V8WorkbenchServerError('INVALID_IMPORT', `Duplicate connectionId ${connectionId} in import payload.`, { connectionId });
+        seen.add(connectionId);
         if (runtimes.has(profileKey(req.params.projectId, connectionId))) throw new V8WorkbenchServerError('CONNECTION_ACTIVE', `Cannot overwrite active connection ${connectionId}.`);
-        const value = projects.upsertConnectionProfile(req.params.projectId, profile);
+        const candidate = { ...profile, connectionId };
+        describeProfileRuntime(candidate);
+        candidates.push(candidate);
+      }
+      const saved = [];
+      for (const candidate of candidates) {
+        const value = projects.upsertConnectionProfile(req.params.projectId, candidate);
         describeProfileRuntime(value);
         saved.push(value);
       }
@@ -407,7 +419,7 @@ async function startV8WorkbenchServer({
     } catch (error) { res.status(400).json(safeError(error)); }
   });
 
-  app.get('/v8', (_req, res) => res.redirect('/v8/'));
+  app.get(/^\/v8$/, (_req, res) => res.redirect('/v8/'));
   app.use('/v8', express.static(publicDir, { etag: true, maxAge: 0 }));
   app.get('/v8/*path', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 
