@@ -40,6 +40,7 @@ module.exports = Object.freeze({
   ...require('./slave/labVirtualSlaveServer'),
   ...require('./slave/dynamicValueEngine'),
   ...require('./slave/simulatorWorkspaceService'),
+  ...require('./slave/simulatorWorkspaceServiceV8'),
   ...require('./slave/simulatorRoutes'),
   ...require('./traffic/trafficTimelineService'),
   ...require('./traffic/registerLabService'),
