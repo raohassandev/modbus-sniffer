@@ -17,6 +17,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,7 +25,7 @@ jobs:
           node-version: 22
           cache: npm
       - name: Verify release versions
-        run: node scripts/version-sync.js
+        run: npm run version:check
       - name: Install backend runtime dependencies only
         run: npm ci --omit=dev
       - name: Audit backend runtime dependencies
@@ -33,7 +34,7 @@ jobs:
         run: npm --prefix desktop ci
       - name: Build NSIS installer
         run: npm --prefix desktop run dist:win
-      - name: Smoke launch packaged application and v7 backend
+      - name: Smoke launch packaged Workbench and v8 backend
         shell: pwsh
         run: |
           $exe = Get-ChildItem "desktop/dist/win-unpacked" -Filter "*.exe" -File |
@@ -49,11 +50,11 @@ jobs:
             for ($i = 0; $i -lt 45; $i++) {
               Start-Sleep -Milliseconds 500
               try {
-                $response = Invoke-WebRequest -Uri "http://127.0.0.1:18787/api/status" -UseBasicParsing -TimeoutSec 2
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:18787/api/v8/status" -UseBasicParsing -TimeoutSec 2
                 if ($response.StatusCode -eq 200) { $ready = $true; break }
               } catch {}
             }
-            if (-not $ready) { throw "Packaged desktop app did not expose the v7 backend health endpoint." }
+            if (-not $ready) { throw "Packaged desktop app did not expose the v8 Workbench health endpoint." }
           } finally {
             if ($proc -and -not $proc.HasExited) {
               & taskkill /PID $proc.Id /T /F | Out-Null
@@ -65,7 +66,7 @@ jobs:
           $rootVersion = node -p "require('./package.json').version"
           $desktopVersion = node -p "require('./desktop/package.json').version"
           @(
-            "product=Modbus Engineering Analyzer",
+            "product=Modbus Engineering Workbench",
             "root_version=$rootVersion",
             "desktop_version=$desktopVersion",
             "commit=$env:GITHUB_SHA",
@@ -88,6 +89,6 @@ jobs:
           $lines | Set-Content "desktop/dist/SHA256SUMS.txt" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
-          name: modbus-engineering-analyzer-windows
+          name: modbus-engineering-workbench-windows
           path: desktop/dist/*
           if-no-files-found: error
