@@ -14,120 +14,7 @@ env:
   CI: 'true'
 
 jobs:
-  release-metadata-sync:
-    runs-on: [self-hosted, macOS, ARM64, automatrix-ci, automatrix-mac]
-    timeout-minutes: 10
-    permissions:
-      contents: write
-      actions: write
-    outputs:
-      changed: ${{ steps.sync.outputs.changed }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
-          fetch-depth: 0
-          clean: true
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - id: sync
-        name: Synchronize 8.0.0 metadata and restore normal CI
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const fs = require('node:fs');
-          const { execFileSync } = require('node:child_process');
-          const version = '8.0.0';
-          const metadata = [
-            ['package.json', 'modbus-engineering-analyzer'],
-            ['package-lock.json', 'modbus-engineering-analyzer'],
-            ['desktop/package.json', 'modbus-engineering-analyzer-desktop'],
-            ['desktop/package-lock.json', 'modbus-engineering-analyzer-desktop'],
-          ];
-
-          function replaceOnce(text, from, to, label) {
-            const first = text.indexOf(from);
-            if (first < 0) throw new Error(`release metadata sync could not find ${label}`);
-            if (text.indexOf(from, first + from.length) >= 0) throw new Error(`release metadata sync found duplicate ${label}`);
-            return text.slice(0, first) + to + text.slice(first + from.length);
-          }
-
-          for (const [file, name] of metadata) {
-            let text = fs.readFileSync(file, 'utf8');
-            const data = JSON.parse(text);
-            if (!['7.0.0', version].includes(data.version)) throw new Error(`${file}: unexpected top-level version ${data.version}`);
-            if (data.version !== version) {
-              text = replaceOnce(
-                text,
-                `  "name": "${name}",\n  "version": "${data.version}",`,
-                `  "name": "${name}",\n  "version": "${version}",`,
-                `${file} top-level version`
-              );
-            }
-            const rootPackage = data.packages && data.packages[''];
-            if (rootPackage) {
-              if (!['7.0.0', version].includes(rootPackage.version)) throw new Error(`${file}: unexpected root package version ${rootPackage.version}`);
-              if (rootPackage.version !== version) {
-                text = replaceOnce(
-                  text,
-                  `      "name": "${name}",\n      "version": "${rootPackage.version}",`,
-                  `      "name": "${name}",\n      "version": "${version}",`,
-                  `${file} root package version`
-                );
-              }
-            }
-            fs.writeFileSync(file, text);
-            const verify = JSON.parse(fs.readFileSync(file, 'utf8'));
-            if (verify.version !== version || (verify.packages?.[''] && verify.packages[''].version !== version)) throw new Error(`${file}: version verification failed`);
-          }
-
-          const metadataFiles = metadata.map(([file]) => file);
-          const diff = execFileSync('git', ['diff', '--unified=0', '--', ...metadataFiles], { encoding: 'utf8' });
-          const changedLines = diff.split('\n').filter((line) => (/^[+-]/.test(line)) && !line.startsWith('+++') && !line.startsWith('---'));
-          const unsafe = changedLines.filter((line) => !/^[+-]\s*"version": "(?:7\.0\.0|8\.0\.0)"[,]?$/.test(line));
-          if (unsafe.length) throw new Error(`release metadata sync changed non-version content:\n${unsafe.join('\n')}`);
-
-          const workflow = '.github/workflows/test.yml';
-          let workflowText = fs.readFileSync(workflow, 'utf8');
-          const start = workflowText.indexOf('  release-metadata-sync:\n');
-          const end = workflowText.indexOf('  quality:\n', start);
-          if (start < 0 || end < 0) throw new Error('release-metadata-sync block not found');
-          workflowText = workflowText.slice(0, start) + workflowText.slice(end);
-          workflowText = workflowText.replace(/    needs: release-metadata-sync\n    if: needs\.release-metadata-sync\.outputs\.changed != 'true'\n/g, '');
-          fs.writeFileSync(workflow, workflowText);
-          NODE
-          npm run version:check
-          if git diff --quiet -- package.json package-lock.json desktop/package.json desktop/package-lock.json .github/workflows/test.yml; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Commit synchronized release metadata and dispatch exact-head CI
-        if: steps.sync.outputs.changed == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json desktop/package.json desktop/package-lock.json .github/workflows/test.yml
-          git commit -m "chore: finalize Workbench 8.0.0 release metadata"
-          git push origin HEAD:v8-release-completion
-          curl --fail-with-body --silent --show-error \
-            -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/test.yml/dispatches" \
-            -d '{"ref":"v8-release-completion"}'
-
   quality:
-    needs: release-metadata-sync
-    if: needs.release-metadata-sync.outputs.changed != 'true'
     runs-on: [self-hosted, macOS, ARM64, automatrix-ci, automatrix-mac]
     timeout-minutes: 30
     steps:
@@ -142,13 +29,11 @@ jobs:
       - run: npm run version:check
       - run: npm run lint
       - run: npm run check:v8
+      - run: npm run benchmark:v8
       - run: node scripts/benchmark-v7.js --cycles 25000 --min-fps 500 --max-heap-mb 384
-      - name: Runtime dependency audit
-        run: npm audit --omit=dev --audit-level=high
+      - run: npm run audit:runtime
 
   test:
-    needs: release-metadata-sync
-    if: needs.release-metadata-sync.outputs.changed != 'true'
     runs-on: [self-hosted, macOS, ARM64, automatrix-ci, automatrix-mac]
     timeout-minutes: 40
     strategy:
@@ -165,57 +50,24 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      - run: npm run version:check
       - run: npm run check:v8
+      - run: node --check src/index-v8.js
       - run: node --check src/index-v7.js
-      - run: node --check src/intelligenceV7.js
-      - run: node --check src/platformRuntimeStateV7.js
-      - run: node --check src/index-v6.js
-      - run: node --check src/platformWebServerV61.js
-      - run: node --check src/platformRuntimeState.js
-      - run: node --check src/platformRuntimeStateV62.js
-      - run: node --check src/transportIdentity.js
-      - run: node --check src/replayController.js
-      - run: node --check src/exportBundle.js
-      - run: node --check src/discoveryService.js
-      - run: node --check src/activeDiscovery.js
-      - run: node --check src/activeDiscoveryManager.js
-      - run: node --check src/activeDiscoveryRoutes.js
-      - run: node --check src/discoveryAdoption.js
-      - run: node --check src/platformWebServer.js
-      - run: node --check src/workspaceStore.js
-      - run: node --check src/historyStore.js
-      - run: node --check src/engineering.js
-      - run: node --check src/modbusTcpProxy.js
-      - run: node --check src/modbus/tcpParser.js
-      - run: node --check src/modbus/tcpTransactionTracker.js
-      - run: node --check src/deepDiagnostics.js
-      - run: node --check src/reportGenerator.js
-      - run: node --check public/app-v4.js
-      - run: node --check public/platform-v6.js
-      - run: node --check public/platform-v6-main.js
-      - run: node --check public/platform-v62-main.js
-      - run: node --check public/platform-v62-ui.js
-      - run: node --check public/tcp-interface-v62.js
-      - run: node --check public/discovery-v63.js
-      - run: node --check public/active-discovery-v7.js
-      - run: node --check public/intelligence-v7.js
-      - run: node --check public/export-v6.js
       - run: node --check desktop/main.js
       - run: node --check desktop/storage.js
       - run: node --check scripts/smoke.js
-      - run: node --check scripts/discover.js
+      - run: node --check scripts/acceptance.js
       - run: node --check scripts/version-sync.js
       - run: node --check scripts/check-v8-syntax.js
-      - run: node --check scripts/benchmark-v7.js
-      - run: node --check scripts/test-windows-sqlite.js
+      - run: node --check scripts/benchmark-v8.js
+      - run: node --check scripts/soak-v8.js
       - run: node --check playwright.config.js
       - run: npm test
       - run: npm run smoke
       - run: npm run acceptance
 
   browser-e2e:
-    needs: release-metadata-sync
-    if: needs.release-metadata-sync.outputs.changed != 'true'
     runs-on: [self-hosted, macOS, ARM64, automatrix-ci, automatrix-mac]
     timeout-minutes: 30
     steps:
