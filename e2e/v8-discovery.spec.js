@@ -21,11 +21,13 @@ test.describe('v8 Discovery workspace', () => {
 
   test('renders a read-only Discovery workspace and enforces the serial safety interlock', async ({ page, request }) => {
     await page.getByRole('button', { name: 'Discovery' }).click();
-    await expect(page.getByRole('heading', { name: 'Discovery' })).toBeVisible();
-    await expect(page.getByText('READ ONLY', { exact: true }).first()).toBeVisible();
-    await expect(page.locator('#discoveryUnitConnection')).toContainText('Discovery E2E');
-    await expect(page.locator('#discoveryUnitMaintenance')).toBeEnabled();
-    await expect(page.locator('#discoveryUnitExclusive')).toBeEnabled();
+    const workspace = page.locator('#workspace-discovery');
+    await expect(workspace).toHaveClass(/active/);
+    await expect(workspace.getByRole('heading', { name: 'Discovery' })).toBeVisible();
+    await expect(workspace.locator('.status-chip.safe', { hasText: 'READ ONLY' })).toBeVisible();
+    await expect(workspace.locator('#discoveryUnitConnection')).toContainText('Discovery E2E');
+    await expect(workspace.locator('#discoveryUnitMaintenance')).toBeEnabled();
+    await expect(workspace.locator('#discoveryUnitExclusive')).toBeEnabled();
 
     const response = await request.post(`${V8}/api/v8/discovery/unit-scan`, {
       data: { connectionId: 'discovery-e2e', startUnit: 1, endUnit: 1, timeoutMs: 25 },
@@ -40,7 +42,8 @@ test.describe('v8 Discovery workspace', () => {
     const palette = page.locator('.command-palette');
     await palette.locator('#paletteSearch').fill('discovery');
     await palette.getByRole('button', { name: 'Open Discovery' }).click();
-    await expect(page.getByRole('heading', { name: 'Discovery' })).toBeVisible();
+    await expect(page.locator('#workspace-discovery')).toHaveClass(/active/);
+    await expect(page.locator('#workspace-discovery').getByRole('heading', { name: 'Discovery' })).toBeVisible();
     await expect(page.locator('.document-tab', { hasText: 'Discovery' })).toBeVisible();
   });
 });
