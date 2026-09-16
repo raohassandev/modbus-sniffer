@@ -1,6 +1,6 @@
 {
   "name": "modbus-engineering-analyzer",
-  "version": "7.0.0",
+  "version": "8.0.0",
   "description": "All-in-one Modbus Engineering Workbench v8 with RTU/ASCII/TCP/UDP/TLS tooling, Master, Simulator, Discovery, Traffic/Register Lab, history, HMI, automation and engineering handover exports.",
   "main": "src/index-v8.js",
   "type": "commonjs",
