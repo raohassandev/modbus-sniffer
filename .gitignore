@@ -4,6 +4,9 @@ data/
 desktop/node_modules/
 desktop/dist/
 .release-evidence/
+.tmp/
+test-results/
+playwright-report/
 *.csv
 *.log
 *.mbcap
