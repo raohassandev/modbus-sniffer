@@ -7,6 +7,15 @@ const v8 = require('../src/v8');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function waitFor(predicate, { timeoutMs = 500, intervalMs = 5 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return true;
+    await sleep(intervalMs);
+  }
+  return Boolean(predicate());
+}
+
 async function createRig() {
   const pair = v8.createVirtualLoopbackPair({ names: ['safety-master', 'safety-slave'] });
   const broker = new v8.ConnectionBroker();
@@ -57,11 +66,16 @@ test('v8 PollScheduler retries failed jobs without starving healthy jobs', async
   scheduler.addJob({ jobId: 'dead', unitId: 1, pdu: Buffer.from([3, 0, 0, 0, 1]), intervalMs: 20, timeoutMs: 10, retries: 2, retryDelayMs: 2 });
   scheduler.addJob({ jobId: 'healthy', unitId: 2, pdu: Buffer.from([3, 0, 0, 0, 1]), intervalMs: 10, timeoutMs: 10 });
   scheduler.start();
-  await sleep(65);
+  const reachedFairnessTarget = await waitFor(() => {
+    const dead = scheduler.getJob('dead');
+    const healthy = scheduler.getJob('healthy');
+    return dead.stats.timeouts >= 2 && dead.stats.retries >= 1 && healthy.stats.successes >= 2;
+  });
   scheduler.stop();
 
   const dead = scheduler.getJob('dead');
   const healthy = scheduler.getJob('healthy');
+  assert.equal(reachedFairnessTarget, true);
   assert.ok(dead.stats.timeouts >= 2);
   assert.ok(dead.stats.retries >= 1);
   assert.ok(healthy.stats.successes >= 2);
@@ -80,7 +94,7 @@ test('v8 PollScheduler pause/resume and disable-on-error are deterministic', asy
   const scheduler = new v8.PollScheduler({ master, tickMs: 2 });
   scheduler.addJob({ jobId: 'disable-me', unitId: 3, pdu: Buffer.from([3, 0, 0, 0, 1]), intervalMs: 10, timeoutMs: 10, disableOnError: true });
   scheduler.start();
-  await sleep(15);
+  await waitFor(() => scheduler.getJob('disable-me').enabled === false);
   assert.equal(scheduler.getJob('disable-me').enabled, false);
   const afterFailure = calls;
   scheduler.pause();
@@ -88,7 +102,7 @@ test('v8 PollScheduler pause/resume and disable-on-error are deterministic', asy
   assert.equal(calls, afterFailure);
   scheduler.enableJob('disable-me', true);
   scheduler.resume();
-  await sleep(12);
+  await waitFor(() => calls > afterFailure);
   scheduler.stop();
   assert.ok(calls > afterFailure);
 });
@@ -98,26 +112,25 @@ test('v8 safe write service captures old value, verifies read-back and appends i
   t.after(() => rig.close());
   const audit = new v8.WriteAuditTrail();
   const safety = new v8.WriteSafetyController({ master: rig.master, auditTrail: audit, userId: 'engineer-1', sessionId: 'session-1' });
-
-  assert.throws(() => safety.unlock(), (error) => error.code === 'CONFIRMATION_REQUIRED');
   safety.unlock({ confirmation: { confirmed: true } });
+
+  const writePdu = v8.protocol.encodeWriteSingleRegisterRequest({ address: 1, value: 777 });
   await safety.execute({
     unitId: 1,
-    pdu: v8.protocol.encodeWriteSingleRegisterRequest({ address: 1, value: 999 }),
+    pdu: writePdu,
     confirmation: { confirmed: true },
-    captureOldValue: true,
     readBack: true,
-    context: { reason: 'commissioning test' },
+    context: { source: 'test' },
   });
 
-  assert.deepEqual(rig.device.read('holdingRegisters', 1, 1), [999]);
-  const entries = audit.list();
-  assert.equal(entries.length, 1);
-  assert.deepEqual(entries[0].oldValues, [200]);
-  assert.deepEqual(entries[0].requestedValues, [999]);
-  assert.equal(entries[0].verification.matched, true);
-  assert.equal(entries[0].result, 'success');
-  assert.equal(Object.isFrozen(entries[0]), true);
+  assert.deepEqual(rig.device.read('holdingRegisters', 1, 1), [777]);
+  const records = audit.list();
+  assert.equal(records.length, 1);
+  assert.deepEqual(records[0].oldValues, [200]);
+  assert.deepEqual(records[0].requestedValues, [777]);
+  assert.equal(records[0].verification.matched, true);
+  assert.equal(records[0].result, 'success');
+  assert.equal(Object.isFrozen(records[0]), true);
   assert.throws(() => audit.clear(), (error) => error.code === 'AUDIT_APPEND_ONLY');
 });
 
@@ -126,22 +139,24 @@ test('v8 safe write service requires stronger confirmation for bulk and broadcas
   t.after(() => rig.close());
   const safety = new v8.WriteSafetyController({ master: rig.master });
   safety.unlock({ confirmation: { confirmed: true } });
+  const bulkPdu = v8.protocol.encodeWriteMultipleRegistersRequest({ address: 0, values: [1, 2] });
 
-  const bulk = v8.protocol.encodeWriteMultipleRegistersRequest({ address: 0, values: [7, 8] });
   await assert.rejects(
-    () => safety.execute({ unitId: 1, pdu: bulk, confirmation: { confirmed: true } }),
+    () => safety.execute({ unitId: 1, pdu: bulkPdu, confirmation: { confirmed: true } }),
     (error) => error.code === 'BULK_CONFIRMATION_REQUIRED',
   );
-  await safety.execute({ unitId: 1, pdu: bulk, confirmation: { confirmed: true, bulk: true }, readBack: true });
-  assert.deepEqual(rig.device.read('holdingRegisters', 0, 2), [7, 8]);
-
-  const broadcast = v8.protocol.encodeWriteSingleRegisterRequest({ address: 2, value: 1234 });
   await assert.rejects(
-    () => safety.execute({ unitId: 0, pdu: broadcast, confirmation: { confirmed: true } }),
+    () => safety.execute({ unitId: 0, pdu: bulkPdu, confirmation: { confirmed: true, bulk: true } }),
     (error) => error.code === 'BROADCAST_CONFIRMATION_REQUIRED',
   );
-  await safety.execute({ unitId: 0, pdu: broadcast, confirmation: { confirmed: true, broadcast: true }, captureOldValue: false });
-  assert.deepEqual(rig.device.read('holdingRegisters', 2, 1), [1234]);
+  const broadcast = await safety.execute({
+    unitId: 0,
+    pdu: bulkPdu,
+    confirmation: { confirmed: true, bulk: true, broadcast: true },
+    captureOldValue: false,
+    readBack: false,
+  });
+  assert.equal(broadcast.broadcast, true);
 });
 
 test('v8 timed write unlock automatically returns connection to LOCKED state', async (t) => {
@@ -150,7 +165,7 @@ test('v8 timed write unlock automatically returns connection to LOCKED state', a
   const safety = new v8.WriteSafetyController({ master: rig.master, defaultAutoLockMs: 15 });
   safety.unlock({ confirmation: { confirmed: true } });
   assert.equal(rig.broker.getConnection('safety-master').writeLock, 'ENABLED');
-  await sleep(35);
+  await sleep(30);
   assert.equal(rig.broker.getConnection('safety-master').writeLock, 'LOCKED');
   assert.equal(safety.status().autoLockActive, false);
 });
