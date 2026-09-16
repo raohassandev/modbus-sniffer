@@ -22,6 +22,7 @@ test('v8 project clone keeps engineering configuration but drops runtime/evidenc
     channels: { ch1: { channelId: 'ch1', transport: 'RTU' } },
     connections: [{ connectionId: 'meter', sourceChannelId: 'ch1', transport: 'RTU', enabled: true, writesEnabled: true, ownerMode: 'master' }],
     masterJobs: [{ jobId: 'poll-1', connectionId: 'meter', unitId: 1, functionCode: 3, address: 0, quantity: 10 }],
+    hmiTemplates: [{ templateId: 'meter-card', name: 'Meter Card', widgets: [] }],
     captures: [{ captureId: 'runtime-capture' }],
     discoveryRuns: [{ runId: 'runtime-discovery' }],
     history: { samples: [1, 2, 3] },
@@ -31,6 +32,8 @@ test('v8 project clone keeps engineering configuration but drops runtime/evidenc
   assert.equal(result.project.name, 'Plant A Copy');
   assert.equal(result.project.site, 'Plant A');
   assert.equal(result.project.masterJobs.length, 1);
+  assert.equal(result.project.hmiTemplates.length, 1);
+  assert.equal(result.project.hmiTemplates[0].templateId, 'meter-card');
   assert.equal(result.project.connections[0].enabled, false);
   assert.equal(result.project.connections[0].writesEnabled, false);
   assert.equal(result.project.connections[0].ownerMode, 'none');
@@ -46,6 +49,7 @@ test('v8 project templates support preview, safe apply, persistence and removal'
     name: 'Boiler Room',
     charts: [{ documentId: 'load', title: 'Load', series: [] }],
     hmiScreens: [{ screenId: 'main', name: 'Main', widgets: [] }],
+    hmiTemplates: [{ templateId: 'status-card', name: 'Status Card', widgets: [] }],
   });
 
   const template = service.saveTemplate({ projectId: source.id, templateId: 'boiler-template', name: 'Boiler Template' });
@@ -56,6 +60,7 @@ test('v8 project templates support preview, safe apply, persistence and removal'
   assert.equal(preview.project.name, 'Boiler B');
   assert.equal(preview.counts.charts, 1);
   assert.equal(preview.counts.hmiScreens, 1);
+  assert.equal(preview.counts.hmiTemplates, 1);
   assert.equal(preview.project.id, null);
 
   const applied = service.applyTemplate('boiler-template', { name: 'Boiler B', activate: true });
@@ -63,6 +68,7 @@ test('v8 project templates support preview, safe apply, persistence and removal'
   assert.equal(store.getActiveProject().id, applied.project.id);
   assert.equal(applied.project.charts.length, 1);
   assert.equal(applied.project.hmiScreens.length, 1);
+  assert.equal(applied.project.hmiTemplates.length, 1);
 
   const reloaded = new V8ProjectStore({ dataDir: store.dataDir, autoMigrate: false });
   assert.equal(new ProjectLifecycleService({ store: reloaded }).listTemplates().length, 1);
