@@ -86,13 +86,22 @@ test('inactive project handover uses persisted historian configuration without a
   assert.equal(audits, 0);
   assert.equal(trafficQueries, 0);
   assert.equal(historianQueries, 0);
-  assert.deepEqual(model.historianTags, [{
-    tagId: 'inactive-kw',
-    name: 'Power',
-    unit: 'kW',
-    source: { sourceKey: 'grid:kw' },
-    configured: true,
-  }]);
+  assert.deepEqual(model.historianTags, [
+    {
+      tagId: 'inactive-kw',
+      name: 'Power',
+      unit: 'kW',
+      source: { sourceKey: 'grid:kw' },
+      configured: true,
+    },
+    {
+      tagId: 'unspecified',
+      name: 'Voltage',
+      unit: 'V',
+      source: { sourceKey: 'grid:v' },
+      configured: true,
+    },
+  ]);
 });
 
 test('v8 export helpers sanitize filenames and formula-leading text', () => {
