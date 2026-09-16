@@ -36,6 +36,7 @@ class MasterEngine extends EventEmitter {
     broker,
     connectionId,
     ownerId = 'v8-master',
+    ownerMode = 'master',
     framing = 'rtu',
     timeoutMs = 1000,
     maxTcpConcurrency = 8,
@@ -43,12 +44,14 @@ class MasterEngine extends EventEmitter {
     super();
     if (!broker) throw new TypeError('broker is required');
     if (!connectionId) throw new TypeError('connectionId is required');
+    if (!['master', 'test'].includes(ownerMode)) throw new TypeError('ownerMode must be master or test');
     if (!['rtu', 'ascii', 'tcp'].includes(framing)) throw new TypeError('framing must be rtu, ascii or tcp');
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new TypeError('timeoutMs must be > 0');
     if (!Number.isInteger(maxTcpConcurrency) || maxTcpConcurrency < 1 || maxTcpConcurrency > 256) throw new TypeError('maxTcpConcurrency must be 1..256');
     this.broker = broker;
     this.connectionId = connectionId;
     this.ownerId = ownerId;
+    this.ownerMode = ownerMode;
     this.framing = framing;
     this.timeoutMs = timeoutMs;
     this.nextTransactionId = 1;
@@ -58,11 +61,11 @@ class MasterEngine extends EventEmitter {
 
   async open() {
     const status = this.broker.getConnection(this.connectionId);
-    if (status.owner && (status.owner.ownerMode !== 'master' || status.owner.ownerId !== this.ownerId)) {
+    if (status.owner && (status.owner.ownerMode !== this.ownerMode || status.owner.ownerId !== this.ownerId)) {
       throw new MasterRequestError('OWNER_MISMATCH', 'Connection is owned by a different runtime', { connectionId: this.connectionId });
     }
     if (status.state === 'open' && (status.transportState === 'open' || status.transportState === 'unknown')) return status;
-    return this.broker.open(this.connectionId, { ownerMode: 'master', ownerId: this.ownerId });
+    return this.broker.open(this.connectionId, { ownerMode: this.ownerMode, ownerId: this.ownerId });
   }
 
   async close({ release = true } = {}) {
@@ -89,6 +92,7 @@ class MasterEngine extends EventEmitter {
     return Object.freeze({
       connectionId: this.connectionId,
       ownerId: this.ownerId,
+      ownerMode: this.ownerMode,
       framing: this.framing,
       timeoutMs: this.timeoutMs,
       tcpConcurrency: this.tcpConcurrency.snapshot(),
@@ -297,9 +301,9 @@ class MasterEngine extends EventEmitter {
   _emit(type, unitId, functionCode, raw, details) {
     this.emit('event', createWorkbenchEvent({
       type,
-      source: 'master-engine',
+      source: this.ownerMode === 'test' ? 'test-center' : 'master-engine',
       connectionId: this.connectionId,
-      ownerMode: 'master',
+      ownerMode: this.ownerMode,
       direction: type === 'traffic.tx' ? 'tx' : type === 'traffic.rx' ? 'rx' : null,
       unitId,
       functionCode,
