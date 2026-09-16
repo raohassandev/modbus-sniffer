@@ -8,7 +8,7 @@ const DEFAULT_FLAGS = Object.freeze({
   simulatorWorkspace: true,
   trafficWorkspace: true,
   registerLabWorkspace: true,
-  testCenterWorkspace: false,
+  testCenterWorkspace: true,
   chartsWorkspace: false,
   historianWorkspace: false,
   automationWorkspace: false,
