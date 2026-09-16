@@ -2,7 +2,7 @@
 
 const { WebSocket } = require('ws');
 const { startV8WorkbenchServer } = require('./workbenchServer');
-const { ConnectionCenterServiceV8 } = require('./connectionCenterServiceV8');
+const { ConnectionCenterServiceV8 } = require('./connectionCenterServiceRelease');
 const { assertFeature } = require('./featureFlags');
 const { MasterWorkspaceService } = require('./master/masterWorkspaceServiceHardened');
 const { mountMasterWorkspaceRoutes } = require('./master/masterWorkspaceRoutes');
