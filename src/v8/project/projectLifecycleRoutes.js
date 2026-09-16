@@ -24,7 +24,11 @@ function assertProjectSwitchSafe(broker) {
   }
 }
 
-function mountProjectLifecycleRoutes({ app, store, broker, broadcast = () => {} } = {}) {
+function syncActivatedProject(connectionCenter, projectId) {
+  if (connectionCenter && typeof connectionCenter.sync === 'function') connectionCenter.sync(projectId);
+}
+
+function mountProjectLifecycleRoutes({ app, store, broker, connectionCenter = null, broadcast = () => {} } = {}) {
   if (!app) throw new TypeError('app is required');
   if (!store) throw new TypeError('store is required');
   if (!broker) throw new TypeError('broker is required');
@@ -41,6 +45,7 @@ function mountProjectLifecycleRoutes({ app, store, broker, broadcast = () => {} 
     const options = req.body && typeof req.body === 'object' ? req.body : {};
     if (options.activate) assertProjectSwitchSafe(broker);
     const result = service.cloneProject(req.params.projectId, options);
+    if (result.active) syncActivatedProject(connectionCenter, result.project.id);
     broadcast({ type: 'project.cloned', projectId: result.project.id, sourceProjectId: req.params.projectId, active: result.active });
     res.status(201).json({ ok: true, ...result });
   }));
@@ -69,6 +74,7 @@ function mountProjectLifecycleRoutes({ app, store, broker, broadcast = () => {} 
     const options = req.body && typeof req.body === 'object' ? req.body : {};
     if (options.activate) assertProjectSwitchSafe(broker);
     const result = service.applyTemplate(req.params.templateId, options);
+    if (result.active) syncActivatedProject(connectionCenter, result.project.id);
     broadcast({ type: 'project-template.applied', templateId: req.params.templateId, projectId: result.project.id, active: result.active });
     res.status(201).json({ ok: true, ...result });
   }));
@@ -79,4 +85,5 @@ function mountProjectLifecycleRoutes({ app, store, broker, broadcast = () => {} 
 module.exports = {
   mountProjectLifecycleRoutes,
   assertProjectSwitchSafe,
+  syncActivatedProject,
 };
