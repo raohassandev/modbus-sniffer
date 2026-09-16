@@ -73,6 +73,7 @@
           <div class="metric-card"><span class="metric-label">Open</span><strong id="metricOpen">0</strong></div>
           <div class="metric-card"><span class="metric-label">Serial</span><strong id="metricSerial">0</strong></div>
           <div class="metric-card"><span class="metric-label">TCP</span><strong id="metricTcp">0</strong></div>
+          <div class="metric-card"><span class="metric-label">UDP</span><strong id="metricUdp">0</strong></div>
           <div class="metric-card"><span class="metric-label">Write enabled</span><strong id="metricWrites">0</strong></div>
         </div>
 
@@ -100,7 +101,7 @@
           <div id="connectionsEmpty" class="empty-state" hidden>
             <div class="empty-icon">↔</div>
             <h2>No connection profiles</h2>
-            <p>Create a serial, TCP client/server, or virtual profile to begin.</p>
+            <p>Create a serial, TCP, UDP, or virtual profile to begin.</p>
             <button class="button primary" data-action="new-connection" type="button">Create profile</button>
           </div>
         </div>
@@ -154,12 +155,13 @@
       <div class="form-grid">
         <label class="field"><span>Connection ID</span><input id="connectionId" class="text-input" required maxlength="120" placeholder="plant-meter-1"></label>
         <label class="field"><span>Name</span><input id="connectionName" class="text-input" required maxlength="200" placeholder="Plant Meter 1"></label>
-        <label class="field"><span>Transport</span><select id="connectionTransport"><option value="serial-rtu">Serial RTU</option><option value="serial-ascii">Serial ASCII</option><option value="tcp-client">TCP Client</option><option value="tcp-server">TCP Server</option><option value="virtual">Virtual</option></select></label>
+        <label class="field"><span>Transport</span><select id="connectionTransport"><option value="serial-rtu">Serial RTU</option><option value="serial-ascii">Serial ASCII</option><option value="tcp-client">TCP Client</option><option value="tcp-server">TCP Server</option><option value="udp-client">UDP Client</option><option value="udp-server">UDP Server</option><option value="virtual">Virtual</option></select></label>
         <label class="field serial-field"><span>Serial port</span><div class="input-action"><select id="serialPath"></select><button id="reloadPorts" class="button secondary" type="button">Scan</button></div></label>
         <label class="field serial-field"><span>Baud rate</span><select id="serialBaud"><option>1200</option><option>2400</option><option>4800</option><option selected>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label>
         <label class="field serial-field"><span>Parity</span><select id="serialParity"><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option></select></label>
         <label class="field tcp-field"><span>Host / listen IP</span><input id="tcpHost" class="text-input" value="127.0.0.1"></label>
         <label class="field tcp-field"><span>Port</span><input id="tcpPort" class="text-input" type="number" min="0" max="65535" value="502"></label>
+        <label class="field udp-field"><span>IP family</span><select id="udpFamily"><option value="4">IPv4</option><option value="6">IPv6</option></select></label>
         <label class="field tcp-client-field"><span>Local interface</span><select id="tcpLocalAddress"><option value="">Automatic</option></select></label>
       </div>
       <div id="dialogError" class="form-error" role="alert"></div>
