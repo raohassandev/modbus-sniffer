@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Modbus Engineering Workbench v8 Preview</title>
+  <link rel="stylesheet" href="/v8/styles.css">
+</head>
+<body>
+  <div class="app-shell" id="appShell">
+    <header class="app-bar">
+      <div class="brand" aria-label="Product">
+        <span class="brand-mark" aria-hidden="true">M8</span>
+        <span><strong>Modbus Engineering Workbench</strong><small>v8 preview · v7 remains stable</small></span>
+      </div>
+      <div class="app-context">
+        <label class="compact-field">Project
+          <select id="projectSelect" aria-label="Active project"></select>
+        </label>
+        <div class="status-chip" id="activeModeChip" data-state="neutral"><span class="dot" aria-hidden="true"></span><span>NO MODE</span></div>
+        <div class="status-chip" id="activeConnectionChip" data-state="neutral"><span class="dot" aria-hidden="true"></span><span>NO CONNECTION</span></div>
+        <div class="status-chip write-state" id="writeStateChip" data-state="safe"><span aria-hidden="true">🔒</span><span>WRITES LOCKED</span></div>
+      </div>
+      <div class="app-actions">
+        <label class="compact-field">Theme
+          <select id="themeSelect" aria-label="Theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+        </label>
+        <label class="compact-field">Density
+          <select id="densitySelect" aria-label="Data density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option><option value="dense">Dense</option></select>
+        </label>
+        <button class="icon-button" id="commandButton" title="Command palette (Ctrl/Cmd+K)" aria-label="Open command palette">⌘K</button>
+      </div>
+    </header>
+
+    <aside class="primary-nav" aria-label="Primary navigation">
+      <button class="nav-item active" data-workspace="connections"><span aria-hidden="true">◉</span><span>Connections</span></button>
+      <button class="nav-item" data-workspace="master" disabled title="Coming in the next vertical slice"><span aria-hidden="true">↗</span><span>Master</span><small>soon</small></button>
+      <button class="nav-item" data-workspace="simulator" disabled><span aria-hidden="true">▦</span><span>Simulator</span><small>soon</small></button>
+      <button class="nav-item" data-workspace="traffic" disabled><span aria-hidden="true">≋</span><span>Traffic</span><small>soon</small></button>
+      <button class="nav-item" data-workspace="registers" disabled><span aria-hidden="true">#</span><span>Register Lab</span><small>soon</small></button>
+      <button class="nav-item" data-workspace="test" disabled><span aria-hidden="true">✓</span><span>Test Center</span><small>soon</small></button>
+      <div class="nav-spacer"></div>
+      <button class="nav-item" id="toggleInspector"><span aria-hidden="true">▤</span><span>Inspector</span></button>
+    </aside>
+
+    <main class="workspace" id="workspace" tabindex="-1">
+      <section class="workspace-heading">
+        <div>
+          <p class="eyebrow">CONNECTION CENTER</p>
+          <h1>Connections</h1>
+          <p class="muted">Saved configuration and exact live ownership state. Opening a profile never arms writes.</p>
+        </div>
+        <div class="heading-actions">
+          <label class="compact-field">Open as
+            <select id="ownerModeSelect" aria-label="Runtime owner mode">
+              <option value="master">Master</option>
+              <option value="analyzer">Analyzer</option>
+              <option value="slave">Slave</option>
+              <option value="discovery">Discovery</option>
+            </select>
+          </label>
+          <button class="button secondary" id="refreshButton">Refresh</button>
+          <button class="button primary" id="newConnectionButton">New connection</button>
+        </div>
+      </section>
+
+      <section class="summary-grid" aria-label="Connection summary">
+        <article class="summary-card"><span>Profiles</span><strong id="profileCount">0</strong><small>saved configuration</small></article>
+        <article class="summary-card"><span>Open</span><strong id="openCount">0</strong><small>active runtime owners</small></article>
+        <article class="summary-card"><span>Serial ports</span><strong id="serialCount">—</strong><small>detected locally</small></article>
+        <article class="summary-card"><span>Interfaces</span><strong id="networkCount">—</strong><small>local IP addresses</small></article>
+      </section>
+
+      <section class="panel connections-panel">
+        <div class="panel-toolbar">
+          <div class="search-wrap"><span aria-hidden="true">⌕</span><input id="connectionSearch" type="search" placeholder="Filter profiles, ports, hosts…" aria-label="Filter connection profiles"></div>
+          <div class="toolbar-actions">
+            <button class="button ghost" id="importButton">Import</button>
+            <button class="button ghost" id="exportButton">Export</button>
+            <input id="importFile" type="file" accept="application/json,.json" hidden>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Status</th><th>Name</th><th>Transport</th><th>Endpoint</th><th>Mode</th><th>Write state</th><th class="actions-col">Actions</th></tr></thead>
+            <tbody id="connectionsBody"></tbody>
+          </table>
+          <div class="empty-state" id="emptyState" hidden>
+            <div class="empty-icon" aria-hidden="true">◎</div>
+            <h2>No connection profiles</h2>
+            <p>Create a serial, TCP, or virtual profile. Runtime ownership remains separate from saved configuration.</p>
+            <button class="button primary" id="emptyNewButton">Create first connection</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="context-inspector" id="inspector" aria-label="Context inspector">
+      <div class="inspector-header"><div><p class="eyebrow">INSPECTOR</p><h2 id="inspectorTitle">No selection</h2></div><button class="icon-button" id="closeInspector" aria-label="Close inspector">×</button></div>
+      <div id="inspectorContent" class="inspector-content">
+        <div class="inspector-empty">Select a connection to inspect its saved configuration, broker ownership, transport state and diagnostics.</div>
+      </div>
+    </aside>
+
+    <footer class="engineering-status" aria-label="Engineering status bar">
+      <span id="serverState"><span class="status-led ok" aria-hidden="true"></span>Preview API connected</span>
+      <span id="schemaState">Schema v—</span>
+      <span id="projectState">Project —</span>
+      <span id="eventState" class="event-message">Ready</span>
+      <span class="footer-safety"><span aria-hidden="true">🔒</span> Writes default locked</span>
+    </footer>
+  </div>
+
+  <dialog id="connectionDialog" class="dialog">
+    <form method="dialog" id="connectionForm">
+      <div class="dialog-header"><div><p class="eyebrow">PROFILE EDITOR</p><h2 id="dialogTitle">New connection</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div>
+      <div class="dialog-body form-grid">
+        <label>Connection ID<input id="profileId" name="connectionId" required maxlength="120" autocomplete="off"><small>Stable project identifier; cannot contain runtime state.</small></label>
+        <label>Name<input id="profileName" name="name" required maxlength="200" autocomplete="off"></label>
+        <label>Transport<select id="transportKind" name="transportKind"><option value="serial-rtu">Serial RTU</option><option value="serial-ascii">Serial ASCII</option><option value="tcp-client">TCP Client</option><option value="tcp-server">TCP Server</option><option value="virtual-rtu">Virtual RTU</option></select></label>
+        <label>Description<input id="profileDescription" name="description" maxlength="300" autocomplete="off"></label>
+
+        <div class="form-section serial-fields" id="serialFields">
+          <h3>Serial settings</h3>
+          <label>Port<input id="serialPath" list="serialPortsList" placeholder="COM3 or /dev/ttyUSB0"><datalist id="serialPortsList"></datalist></label>
+          <label>Baud rate<input id="baudRate" type="number" min="50" max="12000000" value="9600"></label>
+          <label>Parity<select id="parity"><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option><option value="mark">Mark</option><option value="space">Space</option></select></label>
+          <label>Data bits<select id="dataBits"><option>8</option><option>7</option><option>6</option><option>5</option></select></label>
+          <label>Stop bits<select id="stopBits"><option value="1">1</option><option value="2">2</option><option value="1.5">1.5</option></select></label>
+          <label class="check-label"><input id="echoSuppression" type="checkbox"> Echo suppression</label>
+        </div>
+
+        <div class="form-section tcp-fields" id="tcpFields" hidden>
+          <h3>TCP settings</h3>
+          <label>Host / listen IP<input id="tcpHost" list="networkInterfacesList" placeholder="192.168.1.10"><datalist id="networkInterfacesList"></datalist></label>
+          <label>Port<input id="tcpPort" type="number" min="0" max="65535" value="502"></label>
+          <label id="localAddressLabel">Local interface<input id="localAddress" list="networkInterfacesList" placeholder="Automatic"></label>
+          <label>Connect timeout ms<input id="connectTimeout" type="number" min="1" value="3000"></label>
+        </div>
+
+        <div class="safety-note"><span aria-hidden="true">🔒</span><div><strong>Persistence safety</strong><p>Owner, live state, write latch and fault-injection state are never saved in this profile.</p></div></div>
+        <div id="formError" class="form-error" role="alert" hidden></div>
+      </div>
+      <div class="dialog-footer"><button class="button secondary" value="cancel">Cancel</button><button class="button primary" id="saveProfileButton" value="default">Save profile</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="commandDialog" class="dialog command-dialog">
+    <div class="command-box"><input id="commandInput" type="search" placeholder="Type a command…" aria-label="Command search"><div id="commandList" class="command-list"></div></div>
+  </dialog>
+
+  <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <script src="/v8/app.js"></script>
+</body>
+</html>
