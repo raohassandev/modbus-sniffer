@@ -13,6 +13,8 @@ const { mountSimulatorRoutes } = require('./slave/simulatorRoutes');
 const { TrafficTimelineService } = require('./traffic/trafficTimelineService');
 const { RegisterLabService } = require('./traffic/registerLabService');
 const { mountTrafficRegisterRoutes } = require('./traffic/trafficRoutes');
+const { DigitalTwinService } = require('./digitalTwin/digitalTwinService');
+const { mountDigitalTwinRoutes } = require('./digitalTwin/digitalTwinRoutes');
 const { TestCenterWorkspaceService } = require('./testCenter/testCenterWorkspaceService');
 const { mountTestCenterRoutes } = require('./testCenter/testCenterRoutes');
 
@@ -42,6 +44,7 @@ async function startV8ProductServer(options = {}) {
   });
   const timeline = new TrafficTimelineService({ maxEvents: 20000 });
   const registerLab = new RegisterLabService({ store: options.store, broker: options.broker });
+  const digitalTwin = new DigitalTwinService({ store: options.store, registerLab, simulator });
 
   const broadcast = (event) => {
     const payload = JSON.stringify({ at: Date.now(), ...event });
@@ -54,6 +57,7 @@ async function startV8ProductServer(options = {}) {
   mountDiscoveryRoutes({ app: web.app, discovery, flags: options.flags, assertFeature, broadcast });
   mountSimulatorRoutes({ app: web.app, simulator, flags: options.flags, assertFeature, broadcast });
   mountTrafficRegisterRoutes({ app: web.app, timeline, registerLab, flags: options.flags, assertFeature, broadcast });
+  mountDigitalTwinRoutes({ app: web.app, digitalTwin, flags: options.flags, assertFeature, broadcast });
   mountTestCenterRoutes({ app: web.app, testCenter, flags: options.flags, assertFeature, broadcast });
 
   const capture = (event) => {
@@ -65,11 +69,13 @@ async function startV8ProductServer(options = {}) {
     capture(event);
     broadcast({ type: 'runtime.event', event });
   };
+  const twinRelay = (event) => broadcast({ type: 'runtime.event', event });
   const onBrokerEvent = (event) => capture(event);
   masterWorkspace.on('event', relay);
   discovery.on('event', relay);
   simulator.on('event', relay);
   testCenter.on('event', relay);
+  digitalTwin.on('event', twinRelay);
   options.broker.on('event', onBrokerEvent);
 
   const baseClose = web.close;
@@ -81,8 +87,10 @@ async function startV8ProductServer(options = {}) {
     testCenter,
     timeline,
     registerLab,
+    digitalTwin,
     async close() {
       options.broker.off('event', onBrokerEvent);
+      digitalTwin.off('event', twinRelay);
       testCenter.off('event', relay);
       simulator.off('event', relay);
       discovery.off('event', relay);

@@ -25,6 +25,19 @@ function validateSize(value, field) {
   return value;
 }
 
+function normalizeWritableAreas(value = {}) {
+  if (value == null) value = {};
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new VirtualDeviceError('INVALID_WRITE_POLICY', 'writableAreas must be an object', 3);
+  }
+  return Object.freeze({
+    coils: value.coils == null ? true : Boolean(value.coils),
+    discreteInputs: false,
+    holdingRegisters: value.holdingRegisters == null ? true : Boolean(value.holdingRegisters),
+    inputRegisters: false,
+  });
+}
+
 class MemoryArea {
   constructor({ name, size, bit = false, writable = true }) {
     this.name = name;
@@ -104,6 +117,7 @@ class VirtualDevice {
     unitId,
     sizes = {},
     identity = {},
+    writableAreas = {},
   }) {
     this.unitId = validateUnitId(unitId);
     const defaults = {
@@ -113,10 +127,11 @@ class VirtualDevice {
       inputRegisters: 1024,
     };
     const configured = { ...defaults, ...sizes };
+    this.writableAreas = normalizeWritableAreas(writableAreas);
     this.areas = Object.freeze({
-      coils: new MemoryArea({ name: 'coils', size: configured.coils, bit: true, writable: true }),
+      coils: new MemoryArea({ name: 'coils', size: configured.coils, bit: true, writable: this.writableAreas.coils }),
       discreteInputs: new MemoryArea({ name: 'discreteInputs', size: configured.discreteInputs, bit: true, writable: false }),
-      holdingRegisters: new MemoryArea({ name: 'holdingRegisters', size: configured.holdingRegisters, bit: false, writable: true }),
+      holdingRegisters: new MemoryArea({ name: 'holdingRegisters', size: configured.holdingRegisters, bit: false, writable: this.writableAreas.holdingRegisters }),
       inputRegisters: new MemoryArea({ name: 'inputRegisters', size: configured.inputRegisters, bit: false, writable: false }),
     });
     this.identity = new Map();
@@ -184,4 +199,5 @@ module.exports = {
   MemoryArea,
   VirtualDevice,
   VirtualDeviceError,
+  normalizeWritableAreas,
 };

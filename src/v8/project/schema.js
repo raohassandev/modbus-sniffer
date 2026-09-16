@@ -16,6 +16,7 @@ const COLLECTION_LIMITS = Object.freeze({
   testRecipes: 10000,
   charts: 10000,
   loggerProfiles: 10000,
+  digitalTwins: 1000,
   automation: 10000,
   hmiScreens: 10000,
   discoveryRuns: 100,
@@ -29,6 +30,7 @@ const V8_ARRAY_FIELDS = Object.freeze([
   'testRecipes',
   'charts',
   'loggerProfiles',
+  'digitalTwins',
   'automation',
   'hmiScreens',
 ]);

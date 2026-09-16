@@ -125,6 +125,8 @@ function normalizeDefinition(input, existing = null) {
 class RegisterLabService extends EventEmitter {
   constructor({ store = null, broker = null, maxPoints = 100000, maxPending = 4096 } = {}) {
     super();
+    if (!Number.isInteger(maxPoints) || maxPoints < 1) throw new TypeError('maxPoints must be a positive integer');
+    if (!Number.isInteger(maxPending) || maxPending < 1) throw new TypeError('maxPending must be a positive integer');
     this.store = store;
     this.broker = broker;
     this.maxPoints = maxPoints;
@@ -151,7 +153,8 @@ class RegisterLabService extends EventEmitter {
     const unitId = filters.unitId == null || filters.unitId === '' ? null : Number(filters.unitId);
     const area = filters.area == null || filters.area === '' ? null : String(filters.area);
     const text = String(filters.text || '').trim().toLowerCase();
-    const limit = Math.max(1, Math.min(10000, Number(filters.limit) || 1000));
+    const requestedLimit = Number(filters.limit);
+    const limit = Math.max(1, Math.min(this.maxPoints, Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.floor(requestedLimit) : 1000));
     const rows = [];
     for (const point of this.points.values()) {
       if (connectionId && point.connectionId !== connectionId) continue;
