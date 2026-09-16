@@ -56,6 +56,8 @@ module.exports = Object.freeze({
   ...require('./history/sqliteHistorian'),
   ...require('./history/historyWorkspaceService'),
   ...require('./history/historyRoutes'),
+  ...require('./hmi/hmiBuilderService'),
+  ...require('./hmi/hmiRoutes'),
   ...require('./automation/workbenchClient'),
   ...require('./project'),
 });

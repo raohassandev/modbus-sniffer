@@ -9,6 +9,7 @@
   loadScript('/v8/traffic-register.js');
   loadScript('/v8/diagnostics-workspace.js');
   loadScript('/v8/history-workspace.js');
+  loadScript('/v8/hmi-workspace.js');
 
   const workspaceLabels = new Map([
     ['connections', 'Connections'], ['master', 'Master'], ['simulator', 'Simulator'], ['traffic', 'Traffic'],
