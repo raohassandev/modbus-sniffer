@@ -43,5 +43,8 @@ module.exports = Object.freeze({
   ...require('./testCenter/recipeEngine'),
   ...require('./testCenter/testCenterWorkspaceService'),
   ...require('./testCenter/testCenterRoutes'),
+  ...require('./history/chartService'),
+  ...require('./history/loggerService'),
+  ...require('./history/sqliteHistorian'),
   ...require('./project'),
 });
