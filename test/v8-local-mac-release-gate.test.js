@@ -39,10 +39,12 @@ test('v8 local Mac release gate is the npm-exposed deterministic exact-head gate
   assert.doesNotMatch(script, /--untracked-files=no/);
 });
 
-test('release evidence and deterministic browser runtime artifacts are ignored without weakening clean-tree checks', () => {
+test('release evidence and deterministic browser runtime artifacts are ignored and stale test state is cleared safely', () => {
   for (const entry of ['.release-evidence/', '.tmp/', 'test-results/', 'playwright-report/']) {
     assert.match(gitignore, new RegExp(`^${entry.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
   }
+  assert.match(script, /rm -rf "\$ROOT\/\.tmp" "\$ROOT\/test-results" "\$ROOT\/playwright-report"/);
+  assert.doesNotMatch(script, /rm -rf[^\n]*(?:"\$ROOT\/data"|"\$ROOT\/logs")/);
 });
 
 test('v8 local Mac release gate requires Node 20, 22 and 24 full validation', () => {
