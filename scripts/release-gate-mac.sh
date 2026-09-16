@@ -158,8 +158,8 @@ if [ "$(git rev-parse HEAD)" != "$START_HEAD" ]; then
   echo "ERROR: repository HEAD changed while the release gate was running." >&2
   exit 5
 fi
-if [ "$ALLOW_DIRTY" != "1" ] && [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-  echo "ERROR: tracked files changed while the release gate was running." >&2
+if [ "$ALLOW_DIRTY" != "1" ] && [ -n "$(git status --porcelain)" ]; then
+  echo "ERROR: working tree changed while the release gate was running." >&2
   git status --short
   exit 5
 fi
