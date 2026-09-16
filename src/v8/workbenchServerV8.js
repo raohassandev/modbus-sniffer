@@ -15,39 +15,23 @@ const { RegisterLabService } = require('./traffic/registerLabService');
 const { mountTrafficRegisterRoutes } = require('./traffic/trafficRoutes');
 const { TestCenterWorkspaceService } = require('./testCenter/testCenterWorkspaceService');
 const { mountTestCenterRoutes } = require('./testCenter/testCenterRoutes');
+const { HistoryWorkspaceService } = require('./history/historyWorkspaceService');
+const { mountHistoryRoutes } = require('./history/historyRoutes');
 
 async function startV8ProductServer(options = {}) {
   const connectionCenter = options.connectionCenter || new ConnectionCenterServiceV8({ store: options.store, broker: options.broker });
   const web = await startV8WorkbenchServer({ ...options, connectionCenter });
-  const masterWorkspace = new MasterWorkspaceService({
-    store: options.store,
-    broker: options.broker,
-    connectionCenter: web.center,
-  });
-  const discovery = new DiscoveryScanService({
-    store: options.store,
-    broker: options.broker,
-    connectionCenter: web.center,
-    masterWorkspace,
-  });
-  const simulator = new SimulatorWorkspaceService({
-    store: options.store,
-    broker: options.broker,
-    connectionCenter: web.center,
-  });
-  const testCenter = new TestCenterWorkspaceService({
-    store: options.store,
-    broker: options.broker,
-    connectionCenter: web.center,
-  });
+  const masterWorkspace = new MasterWorkspaceService({ store: options.store, broker: options.broker, connectionCenter: web.center });
+  const discovery = new DiscoveryScanService({ store: options.store, broker: options.broker, connectionCenter: web.center, masterWorkspace });
+  const simulator = new SimulatorWorkspaceService({ store: options.store, broker: options.broker, connectionCenter: web.center });
+  const testCenter = new TestCenterWorkspaceService({ store: options.store, broker: options.broker, connectionCenter: web.center });
   const timeline = new TrafficTimelineService({ maxEvents: 20000 });
   const registerLab = new RegisterLabService({ store: options.store, broker: options.broker });
+  const history = new HistoryWorkspaceService({ store: options.store, registerLab, dataDir: options.store?.dataDir });
 
   const broadcast = (event) => {
     const payload = JSON.stringify({ at: Date.now(), ...event });
-    for (const client of web.wss.clients) {
-      if (client.readyState === WebSocket.OPEN) client.send(payload);
-    }
+    for (const client of web.wss.clients) if (client.readyState === WebSocket.OPEN) client.send(payload);
   };
 
   mountMasterWorkspaceRoutes({ app: web.app, masterWorkspace, flags: options.flags, assertFeature, broadcast });
@@ -55,6 +39,7 @@ async function startV8ProductServer(options = {}) {
   mountSimulatorRoutes({ app: web.app, simulator, flags: options.flags, assertFeature, broadcast });
   mountTrafficRegisterRoutes({ app: web.app, timeline, registerLab, flags: options.flags, assertFeature, broadcast });
   mountTestCenterRoutes({ app: web.app, testCenter, flags: options.flags, assertFeature, broadcast });
+  mountHistoryRoutes({ app: web.app, history, flags: options.flags, assertFeature, broadcast });
 
   const capture = (event) => {
     const normalized = timeline.ingest(event);
@@ -66,10 +51,14 @@ async function startV8ProductServer(options = {}) {
     broadcast({ type: 'runtime.event', event });
   };
   const onBrokerEvent = (event) => capture(event);
+  const onHistoryEvent = (event) => broadcast({ type: 'runtime.event', event });
+  const onHistoryError = (error) => broadcast({ type: 'history.error', error: { code: error?.code || null, message: String(error?.message || error) } });
   masterWorkspace.on('event', relay);
   discovery.on('event', relay);
   simulator.on('event', relay);
   testCenter.on('event', relay);
+  history.on('event', onHistoryEvent);
+  history.on('error', onHistoryError);
   options.broker.on('event', onBrokerEvent);
 
   const baseClose = web.close;
@@ -81,12 +70,16 @@ async function startV8ProductServer(options = {}) {
     testCenter,
     timeline,
     registerLab,
+    history,
     async close() {
       options.broker.off('event', onBrokerEvent);
+      history.off('event', onHistoryEvent);
+      history.off('error', onHistoryError);
       testCenter.off('event', relay);
       simulator.off('event', relay);
       discovery.off('event', relay);
       masterWorkspace.off('event', relay);
+      history.shutdown();
       await testCenter.shutdown();
       await simulator.shutdown();
       await discovery.shutdown();
@@ -96,6 +89,4 @@ async function startV8ProductServer(options = {}) {
   });
 }
 
-module.exports = {
-  startV8ProductServer,
-};
+module.exports = { startV8ProductServer };
