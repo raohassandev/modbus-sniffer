@@ -18,6 +18,7 @@ function fakeFetch(log, payload = { ok: true }) {
 
 test('v8 automation client is loopback-only unless remote access is explicitly enabled', () => {
   assert.equal(normalizeBaseUrl('http://127.0.0.1:8088').hostname, '127.0.0.1');
+  assert.ok(normalizeBaseUrl('http://[::1]:8088').hostname.includes('::1'));
   assert.throws(() => normalizeBaseUrl('http://192.168.1.50:8088'), (error) => error.code === 'REMOTE_API_DISABLED');
   assert.equal(normalizeBaseUrl('https://192.168.1.50:8443', { allowRemote: true }).protocol, 'https:');
 });
