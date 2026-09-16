@@ -6,6 +6,7 @@ module.exports = Object.freeze({
   ...require('./featureFlags'),
   ...require('./connectionProfiles'),
   ...require('./projectSchema'),
+  ...require('./projectStore'),
   ...require('./connectionBroker'),
   ...require('./connectionBrokerSafety'),
   ...require('./transports/virtualLoopback'),
