@@ -37,20 +37,54 @@ jobs:
           const fs = require('node:fs');
           const { execFileSync } = require('node:child_process');
           const version = '8.0.0';
-          const metadataFiles = [
-            'package.json',
-            'package-lock.json',
-            'desktop/package.json',
-            'desktop/package-lock.json',
+          const metadata = [
+            ['package.json', 'modbus-engineering-analyzer'],
+            ['package-lock.json', 'modbus-engineering-analyzer'],
+            ['desktop/package.json', 'modbus-engineering-analyzer-desktop'],
+            ['desktop/package-lock.json', 'modbus-engineering-analyzer-desktop'],
           ];
 
-          for (const file of metadataFiles) {
-            const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-            data.version = version;
-            if (data.packages && data.packages['']) data.packages[''].version = version;
-            fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+          function replaceOnce(text, from, to, label) {
+            const first = text.indexOf(from);
+            if (first < 0) throw new Error(`release metadata sync could not find ${label}`);
+            if (text.indexOf(from, first + from.length) >= 0) {
+              throw new Error(`release metadata sync found duplicate ${label}`);
+            }
+            return text.slice(0, first) + to + text.slice(first + from.length);
           }
 
+          for (const [file, name] of metadata) {
+            let text = fs.readFileSync(file, 'utf8');
+            const data = JSON.parse(text);
+            if (!['7.0.0', version].includes(data.version)) {
+              throw new Error(`${file}: unexpected top-level version ${data.version}`);
+            }
+            if (data.version !== version) {
+              const from = `  "name": "${name}",\n  "version": "${data.version}",`;
+              const to = `  "name": "${name}",\n  "version": "${version}",`;
+              text = replaceOnce(text, from, to, `${file} top-level version`);
+            }
+
+            const rootPackage = data.packages && data.packages[''];
+            if (rootPackage) {
+              if (!['7.0.0', version].includes(rootPackage.version)) {
+                throw new Error(`${file}: unexpected root package version ${rootPackage.version}`);
+              }
+              if (rootPackage.version !== version) {
+                const from = `      "name": "${name}",\n      "version": "${rootPackage.version}",`;
+                const to = `      "name": "${name}",\n      "version": "${version}",`;
+                text = replaceOnce(text, from, to, `${file} root package version`);
+              }
+            }
+
+            fs.writeFileSync(file, text);
+            const verify = JSON.parse(fs.readFileSync(file, 'utf8'));
+            if (verify.version !== version || (verify.packages?.[''] && verify.packages[''].version !== version)) {
+              throw new Error(`${file}: version verification failed`);
+            }
+          }
+
+          const metadataFiles = metadata.map(([file]) => file);
           const diff = execFileSync('git', ['diff', '--unified=0', '--', ...metadataFiles], { encoding: 'utf8' });
           const changedLines = diff.split('\n').filter((line) =>
             (/^[+-]/.test(line)) && !line.startsWith('+++') && !line.startsWith('---')
@@ -63,13 +97,13 @@ jobs:
           }
 
           const workflow = '.github/workflows/test.yml';
-          let text = fs.readFileSync(workflow, 'utf8');
-          const start = text.indexOf('  release-metadata-sync:\n');
-          const end = text.indexOf('  quality:\n', start);
+          let workflowText = fs.readFileSync(workflow, 'utf8');
+          const start = workflowText.indexOf('  release-metadata-sync:\n');
+          const end = workflowText.indexOf('  quality:\n', start);
           if (start < 0 || end < 0) throw new Error('release-metadata-sync block not found');
-          text = text.slice(0, start) + text.slice(end);
-          text = text.replace(/    needs: release-metadata-sync\n    if: needs\.release-metadata-sync\.outputs\.changed != 'true'\n/g, '');
-          fs.writeFileSync(workflow, text);
+          workflowText = workflowText.slice(0, start) + workflowText.slice(end);
+          workflowText = workflowText.replace(/    needs: release-metadata-sync\n    if: needs\.release-metadata-sync\.outputs\.changed != 'true'\n/g, '');
+          fs.writeFileSync(workflow, workflowText);
           NODE
           npm run version:check
           if git diff --quiet -- package.json package-lock.json desktop/package.json desktop/package-lock.json .github/workflows/test.yml; then
