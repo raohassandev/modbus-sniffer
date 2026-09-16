@@ -165,7 +165,7 @@ class TestCenterWorkspaceService extends EventEmitter {
 
     const profile = this.connectionCenter.listProfiles(projectId).find((entry) => entry.connectionId === connectionId);
     if (!profile) throw new TestCenterWorkspaceError('PROFILE_NOT_FOUND', `Connection profile ${connectionId} was not found`, { connectionId, projectId });
-    if (!this._eligible(profile)) throw new TestCenterWorkspaceError('TEST_TRANSPORT_UNSUPPORTED', 'Test Center requires serial RTU/ASCII, TCP client or virtual transport', { connectionId, transportKind: profile.transportKind });
+    if (!this._eligible(profile)) throw new TestCenterWorkspaceError('TEST_TRANSPORT_UNSUPPORTED', 'Test Center requires serial RTU/ASCII, TCP/UDP client or virtual transport', { connectionId, transportKind: profile.transportKind });
     const framing = this._framing(profile);
     const ownerId = `v8-ui:test:${connectionId}`;
     await this.connectionCenter.activate(connectionId, { ownerMode: 'test', ownerId }, projectId);
@@ -221,13 +221,13 @@ class TestCenterWorkspaceService extends EventEmitter {
   }
 
   _eligible(profile) {
-    return ['serial-rtu', 'serial-ascii', 'tcp-client', 'virtual'].includes(String(profile?.transportKind || '').toLowerCase());
+    return ['serial-rtu', 'serial-ascii', 'tcp-client', 'udp-client', 'virtual'].includes(String(profile?.transportKind || '').toLowerCase());
   }
 
   _framing(profile) {
     const kind = String(profile?.transportKind || '').toLowerCase();
     if (kind === 'serial-ascii') return 'ascii';
-    if (kind === 'tcp-client') return 'tcp';
+    if (kind === 'tcp-client' || kind === 'udp-client') return 'tcp';
     return 'rtu';
   }
 
