@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: node-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -15,6 +16,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      actions: write
     outputs:
       changed: ${{ steps.sync.outputs.changed }}
     steps:
@@ -75,9 +77,11 @@ jobs:
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Commit synchronized release metadata and normal CI
+      - name: Commit synchronized release metadata and dispatch exact-head CI
         if: steps.sync.outputs.changed == 'true'
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -85,6 +89,7 @@ jobs:
           git add package.json package-lock.json desktop/package.json desktop/package-lock.json .github/workflows/test.yml
           git commit -m "chore: finalize Workbench 8.0.0 release metadata"
           git push origin HEAD:v8-release-completion
+          gh workflow run test.yml --ref v8-release-completion
 
   quality:
     needs: release-metadata-sync
