@@ -12,6 +12,8 @@ const { mountSimulatorRoutes } = require('./slave/simulatorRoutes');
 const { TrafficTimelineService } = require('./traffic/trafficTimelineService');
 const { RegisterLabService } = require('./traffic/registerLabService');
 const { mountTrafficRegisterRoutes } = require('./traffic/trafficRoutes');
+const { TestCenterWorkspaceService } = require('./testCenter/testCenterWorkspaceService');
+const { mountTestCenterRoutes } = require('./testCenter/testCenterRoutes');
 
 async function startV8ProductServer(options = {}) {
   const web = await startV8WorkbenchServer(options);
@@ -31,6 +33,11 @@ async function startV8ProductServer(options = {}) {
     broker: options.broker,
     connectionCenter: web.center,
   });
+  const testCenter = new TestCenterWorkspaceService({
+    store: options.store,
+    broker: options.broker,
+    connectionCenter: web.center,
+  });
   const timeline = new TrafficTimelineService({ maxEvents: 20000 });
   const registerLab = new RegisterLabService({ store: options.store, broker: options.broker });
 
@@ -41,57 +48,26 @@ async function startV8ProductServer(options = {}) {
     }
   };
 
-  mountMasterWorkspaceRoutes({
-    app: web.app,
-    masterWorkspace,
-    flags: options.flags,
-    assertFeature,
-    broadcast,
-  });
-  mountDiscoveryRoutes({
-    app: web.app,
-    discovery,
-    flags: options.flags,
-    assertFeature,
-    broadcast,
-  });
-  mountSimulatorRoutes({
-    app: web.app,
-    simulator,
-    flags: options.flags,
-    assertFeature,
-    broadcast,
-  });
-  mountTrafficRegisterRoutes({
-    app: web.app,
-    timeline,
-    registerLab,
-    flags: options.flags,
-    assertFeature,
-    broadcast,
-  });
+  mountMasterWorkspaceRoutes({ app: web.app, masterWorkspace, flags: options.flags, assertFeature, broadcast });
+  mountDiscoveryRoutes({ app: web.app, discovery, flags: options.flags, assertFeature, broadcast });
+  mountSimulatorRoutes({ app: web.app, simulator, flags: options.flags, assertFeature, broadcast });
+  mountTrafficRegisterRoutes({ app: web.app, timeline, registerLab, flags: options.flags, assertFeature, broadcast });
+  mountTestCenterRoutes({ app: web.app, testCenter, flags: options.flags, assertFeature, broadcast });
 
   const capture = (event) => {
     const normalized = timeline.ingest(event);
     registerLab.ingest(normalized);
     return normalized;
   };
-  const onMasterEvent = (event) => {
-    capture(event);
-    broadcast({ type: 'runtime.event', event });
-  };
-  const onDiscoveryEvent = (event) => {
-    capture(event);
-    broadcast({ type: 'runtime.event', event });
-  };
-  const onSimulatorEvent = (event) => {
+  const relay = (event) => {
     capture(event);
     broadcast({ type: 'runtime.event', event });
   };
   const onBrokerEvent = (event) => capture(event);
-  masterWorkspace.on('event', onMasterEvent);
-  discovery.on('event', onDiscoveryEvent);
-  simulator.on('event', onSimulatorEvent);
+  masterWorkspace.on('event', relay);
+  discovery.on('event', relay);
+  simulator.on('event', relay);
+  testCenter.on('event', relay);
   options.broker.on('event', onBrokerEvent);
 
   const baseClose = web.close;
@@ -100,13 +76,16 @@ async function startV8ProductServer(options = {}) {
     masterWorkspace,
     discovery,
     simulator,
+    testCenter,
     timeline,
     registerLab,
     async close() {
       options.broker.off('event', onBrokerEvent);
-      simulator.off('event', onSimulatorEvent);
-      discovery.off('event', onDiscoveryEvent);
-      masterWorkspace.off('event', onMasterEvent);
+      testCenter.off('event', relay);
+      simulator.off('event', relay);
+      discovery.off('event', relay);
+      masterWorkspace.off('event', relay);
+      await testCenter.shutdown();
       await simulator.shutdown();
       await discovery.shutdown();
       await masterWorkspace.shutdown();
