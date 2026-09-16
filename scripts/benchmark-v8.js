@@ -60,6 +60,23 @@ async function main() {
   assert(scheduler.listJobs().every((job) => job.stats.successes === 1), 'Every scale poll job must complete once');
   scheduler.stop();
 
+  const simulator = new v8.VirtualSlaveServer({
+    broker: new v8.ConnectionBroker(),
+    connectionId: 'scale-simulator',
+    ownerId: 'scale-simulator-owner',
+    framing: 'rtu',
+  });
+  for (let unitId = 1; unitId <= devices; unitId += 1) {
+    simulator.addDevice({
+      unitId,
+      sizes: { coils: 8, discreteInputs: 8, holdingRegisters: registersPerDevice, inputRegisters: 8 },
+      identity: { vendorName: 'Automatrix', productCode: 'V8-SCALE', revision: '8.0.0', modelName: `Scale Device ${unitId}` },
+    });
+  }
+  const simulatorSnapshot = simulator.snapshot();
+  assert(simulatorSnapshot.unitIds.length === devices, `Expected ${devices} simulated Unit IDs`);
+  assert(simulatorSnapshot.unitIds[0] === 1 && simulatorSnapshot.unitIds.at(-1) === devices, 'Simulator Unit-ID range mismatch');
+
   const lab = new v8.RegisterLabService({ maxPoints: devices * registersPerDevice + 100 });
   for (let unitId = 1; unitId <= devices; unitId += 1) {
     const connectionId = `scale-line-${unitId}`;
@@ -109,10 +126,11 @@ async function main() {
 
   console.log('\n=== Modbus Engineering Workbench v8 Scale Benchmark ===');
   console.log(`PASS  poll jobs              : ${pollJobs}`);
+  console.log(`PASS  simulated Unit IDs     : ${devices}`);
   console.log(`PASS  isolated devices       : ${devices}`);
   console.log(`PASS  Register Lab points    : ${expectedPoints.toLocaleString()}`);
   console.log(`PASS  Traffic events         : ${trafficEvents.toLocaleString()}`);
-  console.log(`PASS  bounded Traffic query  : 5,000 rows`);
+  console.log('PASS  bounded Traffic query  : 5,000 rows');
   console.log(`INFO  elapsed                : ${elapsedMs.toFixed(1)} ms / ${maxElapsedMs} ms`);
   console.log(`INFO  heap used              : ${heapMb.toFixed(1)} MB / ${maxHeapMb} MB`);
   console.log('\nV8 SCALE BENCHMARK: PASS\n');
