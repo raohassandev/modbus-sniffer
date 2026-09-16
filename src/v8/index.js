@@ -39,5 +39,8 @@ module.exports = Object.freeze({
   ...require('./traffic/trafficTimelineService'),
   ...require('./traffic/registerLabService'),
   ...require('./traffic/trafficRoutes'),
+  ...require('./history/chartService'),
+  ...require('./history/loggerService'),
+  ...require('./history/sqliteHistorian'),
   ...require('./project'),
 });
