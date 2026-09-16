@@ -1,15 +1,15 @@
 # v8 Implementation Status and Deep-Audit Record
 
-**Last audited:** 2026-09-15  
+**Last audited:** 2026-09-16  
 **Stable product release:** 7.0.0  
-**v8 development state:** foundation/runtime work in progress on `main`  
+**v8 development state:** vertically integrated preview work in progress behind the stable v7 runtime  
 **Status source of truth:** this document for implemented state; `V8_MASTER_TODO.md` remains the full target-scope roadmap.
 
 ## Why the repository still says v7
 
-The default application entry point, browser product surface and Windows desktop launcher intentionally remain on the accepted v7 runtime while v8 is built behind `src/v8/`. Keeping `package.json`, the desktop package and `npm start` on 7.0.0 is therefore a release boundary, not a version-sync defect.
+The default application entry point and Windows desktop launcher intentionally remain on the accepted v7 runtime while v8 is built behind `src/v8/`. `npm start`, `package.json` and the stable desktop product therefore remain 7.0.0 by design.
 
-Do not label the product v8 or change the default launcher until the v8 shell, runtime integration and applicable release gates are complete. A v8 source module being present on `main` does not by itself make that capability production-exposed.
+The v8 vertical slices are launched separately with `npm run v8:preview`. Do not change the default launcher/product version until the Master, Simulator, Traffic/Register Lab and applicable release gates are complete. A v8 preview surface being present on `main` does not by itself make v8 the released product.
 
 ## Implemented v8 foundation
 
@@ -21,6 +21,7 @@ The following work is present with automated coverage:
 - WP-04: real serial RTU/ASCII transport foundation, timing/framing, serial enumeration, echo suppression and RTS direction support.
 - WP-05: cyclic poll scheduler, write safety/read-back/audit service and canonical address notation.
 - WP-06: v8 project schema v3, explicit/idempotent v7 schema-2 migration, separate `workbench-v8.json` persistence, atomic writes/backups, migration evidence, corrupt-primary recovery and safe configuration-only connection profiles.
+- WP-07: professional v8 preview shell and Connection Center vertically wired to the v8 project store and Connection Broker. It includes the persistent app bar, primary navigation, context inspector, engineering status bar, System/Light/Dark themes, Comfortable/Compact/Dense data density, command palette, saved profile workflows, exact runtime ownership/state, serial/network enumeration, safe Test Connection, open/close lifecycle, duplicate/import/export, live WebSocket state and browser acceptance coverage.
 - Deep-audit hardening: FC22 Mask Write Register end-to-end support, serial Unit-ID validation, correct RTU/ASCII broadcast behavior, immutable broker-level transmission evidence, reopen write-lock hardening, strict simulator seed validation, serialized serial transmit execution and explicit handling of indeterminate driver-write outcomes.
 
 ## Project migration guarantees
@@ -33,6 +34,17 @@ The following work is present with automated coverage:
 - Same Unit IDs on different channels stay distinct because channel-scoped device keys are preserved and validated.
 - The v8 store writes atomically, keeps a last-known-good backup and preserves a corrupt primary file before restoring that backup.
 
+## Connection Center guarantees
+
+- Saved profile configuration is validated before project mutation; invalid serial/TCP/runtime configuration is not persisted.
+- TCP server listen addresses must belong to the local machine (or an explicit wildcard), so a device/remote IP cannot be silently used as the local listener.
+- Serial ports keep exclusive broker ownership; active profiles cannot be edited or deleted until explicitly closed.
+- Project switching is blocked while a v8 runtime connection is active.
+- Test Connection only opens/closes the transport under read-only discovery ownership and never sends a Modbus request or arms writes.
+- Live owner mode, transport state, transmit capability and write-lock status come from the Connection Broker, not from optimistic UI state.
+- Browser mutations enforce same-origin checks and the preview defaults to loopback-only binding.
+- Restart restores saved configuration but never restores live ownership, write permission or fault-injection state.
+
 ## Deep-audit findings closed
 
 | Severity | Finding | Resolution |
@@ -44,12 +56,13 @@ The following work is present with automated coverage:
 | P0 | RTU/ASCII one-shot Master accepted Unit IDs 248..255 | Serial Master now enforces 0..247 while the transport-neutral/TCP codec retains byte-wide Unit IDs |
 | P0 | FC23 could be treated as a no-response Unit-0 serial broadcast even though it contains a read operation | Unit-0 serial broadcast is restricted to FC05/06/15/16; unsupported broadcast functions are rejected before transmit |
 | P0 | ASCII virtual Slave did not implement the same Unit-0 broadcast semantics as RTU | RTU and ASCII now share the same supported serial broadcast path |
+| P0 | Connection Center could have persisted a transport-invalid profile before runtime validation failed | Candidate runtime configuration is now validated before save/duplicate/import; batch import pre-validates the full payload before mutation |
 | P1 | FC22 was in the v8 target but absent from shared codec/Master/Slave/write-safety layers | Added one shared FC22 codec and end-to-end Master/Slave/read-back support |
 | P1 | Failed/timeout writes could lose transmitted request bytes in the enriched write audit | Master/transport errors retain request evidence and write audit uses that evidence on failures; indeterminate low-level writes are separately marked in broker evidence |
 | P1 | Simulator `seed()` could silently wrap invalid values through typed arrays | Seed operations now use the same strict bit/register value validation as live writes while still allowing initialization of read-only areas |
 | P1 | CI syntax gates explicitly covered older runtime files but not the whole v8 source tree | Added recursive `npm run check:v8` syntax gate and wired it into CI |
 | P1 | v8 had a planned schema but no executable, safe v7-to-v8 migration boundary | Added schema v3, validation, idempotent migration, source backup/reporting and a separate v8 store so v7 data is never silently overwritten |
-| P2 | README/version state made v8 commits look inconsistent with a v7 package | Documentation now explicitly separates stable v7 release surfaces from the in-progress v8 foundation |
+| P2 | README/version state made v8 commits look inconsistent with a v7 package | Documentation explicitly separates stable v7 release surfaces from in-progress v8 preview/foundation surfaces |
 
 ## Safety invariants currently enforced in code
 
@@ -64,24 +77,25 @@ The following work is present with automated coverage:
 - Every confirmed low-level write/raw/test transmission gets bounded append-only process-lifetime evidence containing timestamp, connection, owner, transport, intent and exact transmitted HEX; indeterminate writes also get an `outcome: unknown` audit record with the error code.
 - The richer write audit additionally records user/session, address/quantity, requested values, old value when available, response, verification and result.
 - Persisted v8 connection profiles contain configuration only and always normalize to manual/inactive/unowned/transmit-disabled/write-locked/fault-disabled state.
+- The v8 shell displays actual broker ownership/capability/write state and does not infer an active mode from saved configuration.
 
 ## What is intentionally still not complete
 
 These are roadmap items, not hidden completion claims:
 
-- v8 application shell, Connection Center UI, Master UI and Simulator UI.
-- persistence/editing of Master documents/jobs, Slave maps/generators, Test recipes, chart/logger definitions and HMI pages on top of the new schema.
+- Master Workstation browser integration (documents/jobs/results/write drawer) on top of the already-tested Master runtime, Poll Scheduler and Write Safety service.
+- Simulator browser integration (device tree/memory editor/generators/fault lab) on top of the already-tested virtual Slave runtime.
 - unified v8 Traffic/Register Lab browser integration.
 - address/unit scanning through the shared Master engine.
 - Test Center/raw-frame studio and recipe engine.
 - UDP/tunnelling, IPv6 completion and Modbus/TCP Security/TLS.
 - charts/logger/SQLite historian, capture-to-digital-twin, automation APIs/CLI/SDK and HMI Builder.
-- complete accessibility/keyboard/performance/security hardening for the new v8 product shell.
+- the remaining tab/split-view framework and full accessibility/keyboard/performance/security hardening across future workspaces.
 - 24-hour v8 combined workload soak, third-party interoperability matrix and real-device/site acceptance.
 - switching the default runtime/desktop launcher/product version from v7 to v8.
 
 ## Release interpretation
 
-`main` can be green while v8 is still incomplete because the stable v7 runtime remains the default product and v8 foundation modules are being introduced behind it with regression tests. The next product-completion work should integrate the tested broker/transports/Master/Slave/project schema vertically into the v8 application shell and Connection Center rather than prematurely changing the release version.
+`main` can be green while v8 is still incomplete because the stable v7 runtime remains the default product and v8 vertical slices are introduced behind the separate preview launcher with regression tests. The next product-completion work should integrate the already-tested Master runtime vertically into the v8 shell rather than prematurely changing the release version.
 
 A future v8 release candidate should only be declared after the applicable P0/P1 work in `V8_MASTER_TODO.md` is reconciled, the default entry point moves to v8, migration is tested, browser/desktop acceptance passes, and no open P0 remains. Real RS485 electrical/site qualification stays an external field gate even after software release-candidate status.
