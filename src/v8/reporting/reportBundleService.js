@@ -58,6 +58,19 @@ function objectRows(input, keyName) {
   return Object.entries(input || {}).map(([key, value]) => ({ [keyName]: key, ...(value && typeof value === 'object' ? value : { value }) }));
 }
 
+function configuredHistorianTags(project) {
+  return (project.loggerProfiles || [])
+    .filter((profile) => profile?.historian !== false)
+    .map((profile) => ({
+      tagId: String(profile.streamId || ''),
+      name: String(profile.label || profile.streamId || ''),
+      unit: profile.unit == null ? null : String(profile.unit),
+      source: { sourceKey: String(profile.sourceKey || '') },
+      configured: true,
+    }))
+    .filter((tag) => tag.tagId);
+}
+
 class ReportBundleService {
   constructor({ store, masterWorkspace = null, timeline = null, history = null } = {}) {
     if (!store) throw new TypeError('store is required');
@@ -73,16 +86,16 @@ class ReportBundleService {
     const active = this.store.getActiveProject()?.id === projectId;
     let master = null;
     let writeAudit = [];
-    let historianTags = [];
+    let historianTags = configuredHistorianTags(project);
 
-    // Master sessions and the unified Traffic timeline are live-runtime evidence.
-    // They belong to the active project only; never attach them to an inactive
-    // project's handover merely because the same service instance is running.
+    // Master sessions, Traffic and live Historian state belong to the active
+    // project only. Inactive handovers use persisted configuration and never
+    // instantiate cached logger/SQLite runtimes merely to build a report.
     if (active) {
       try { master = this.masterWorkspace?.snapshot(projectId) || null; } catch { master = null; }
       try { writeAudit = this.masterWorkspace?.audit({ limit: 10000 }) || []; } catch { writeAudit = []; }
+      try { historianTags = this.history?.historianTags(projectId) || historianTags; } catch { /* keep configured tags */ }
     }
-    try { historianTags = this.history?.historianTags(projectId) || []; } catch { historianTags = []; }
     const traffic = active && this.timeline ? this.timeline.query({ limit: 5000 }) : [];
     return { generatedAt: new Date().toISOString(), schemaVersion: this.store.exportAll().schemaVersion, project, active, master, writeAudit, historianTags, traffic };
   }
@@ -132,4 +145,4 @@ class ReportBundleService {
   }
 }
 
-module.exports = { ReportBundleError, ReportBundleService, safeName, spreadsheetSafeText, csv, autoCsv, sha256 };
+module.exports = { ReportBundleError, ReportBundleService, safeName, spreadsheetSafeText, csv, autoCsv, sha256, configuredHistorianTags };
