@@ -9,8 +9,8 @@ const DEFAULT_FLAGS = Object.freeze({
   trafficWorkspace: true,
   registerLabWorkspace: true,
   testCenterWorkspace: true,
-  chartsWorkspace: false,
-  historianWorkspace: false,
+  chartsWorkspace: true,
+  historianWorkspace: true,
   automationWorkspace: false,
   hmiWorkspace: false,
 });
