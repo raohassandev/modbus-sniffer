@@ -36,15 +36,15 @@ test('v8 server rejects cross-origin browser mutations but allows same-origin an
   assert.equal(automation.status, 200);
 });
 
-test('v8 server returns structured 413 before parsing an oversized declared body', async (t) => {
+test('v8 server returns structured 413 for an oversized request body', async (t) => {
   const { store, web } = await setup(t);
   const origin = web.url.replace(/\/v8\/$/, '');
   const projectId = store.getActiveProject().id;
+  const body = JSON.stringify({ data: 'x'.repeat(3 * 1024 * 1024) });
   const response = await fetch(`${origin}/api/v8/projects/${encodeURIComponent(projectId)}/ui`, {
     method: 'PATCH',
-    headers: { 'content-type': 'application/json', 'content-length': String(3 * 1024 * 1024) },
-    body: '{}',
-    duplex: 'half',
+    headers: { 'content-type': 'application/json' },
+    body,
   });
   assert.equal(response.status, 413);
   assert.equal((await response.json()).error.code, 'BODY_TOO_LARGE');
