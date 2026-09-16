@@ -5,7 +5,7 @@
 **Audience:** commissioning engineers, controls engineers, test engineers, support engineers and trained operators  
 **Safety rule:** use live writes, raw transmission and LAB/fault-injection functions only on equipment and networks where you are authorized to transmit.
 
-This guide is the operational companion to `V8_IMPLEMENTATION_STATUS.md`, `SECURITY.md`, `AUTOMATION_SAFETY.md`, `DIGITAL_TWIN_SAFETY.md` and `SITE_ACCEPTANCE.md`.
+This guide is the operational companion to `V8_IMPLEMENTATION_STATUS.md`, `SECURITY.md`, `AUTOMATION_SAFETY.md`, `DIGITAL_TWIN_SAFETY.md`, `LOCAL_MAC_RELEASE_GATE.md` and `SITE_ACCEPTANCE.md`.
 
 ## 1. Getting started
 
@@ -22,7 +22,7 @@ npm start
 npm run v7
 ```
 
-Useful validation commands before commissioning are:
+Useful development/commissioning validation commands are:
 
 ```bash
 npm run version:check
@@ -32,6 +32,14 @@ npm run smoke
 npm run acceptance
 npm run e2e
 ```
+
+For the exact software release gate on a clean Mac checkout, use:
+
+```bash
+npm run release:gate:mac
+```
+
+That command is stricter than the individual development checks: it validates Node 20/22/24, quality/audit, bounded scale/soak, browser E2E and exact-head integrity and retains evidence under `.release-evidence/`.
 
 For CLI automation, inspect the supported commands first:
 
@@ -128,7 +136,7 @@ Live writes are deliberately harder than reads.
 - Closing/reopening or restarting returns the connection to the locked state.
 - Replay/offline sources cannot execute live writes.
 - Bulk/write-sensitive functions require stronger confirmation.
-- HMI FC16 operations require explicit bulk confirmation as well as the normal operator confirmation.
+- HMI operations that resolve to effective FC16/multi-register writes require explicit bulk confirmation as well as the normal operator confirmation.
 - Confirmed write/test transmissions produce audit evidence with target, channel/connection, timestamp and raw Tx/Rx evidence where applicable.
 
 If a serial write is transmitted but the outcome cannot be determined, the Workbench reports `TRANSMISSION_OUTCOME_UNKNOWN`, places the connection into an error/safety state and re-locks writes until the connection is closed/reopened.
@@ -139,7 +147,7 @@ Never use a production plant write as an exploratory probe when a virtual simula
 
 Discovery is read-only and cannot inherit Master write permission.
 
-Use the FC43/device-identification path first where supported, then controlled fallback scans. Configure range, rate and timeout to match the bus. On RTU, use the maintenance/exclusive-bus interlock before active scanning a production-connected serial line.
+Use the FC43/device-identification path first where supported, then controlled read-only fallback scans. Configure range, rate and timeout to match the bus. On RTU, use the maintenance/exclusive-bus interlock before active scanning a production-connected serial line.
 
 Important classification rule: **silence is not proof of a device**. Preserve exception, timeout and raw evidence when deciding whether an address is confirmed.
 
@@ -159,6 +167,8 @@ Use it for:
 
 Fault injection is a separate **LAB** capability. It can model delay/jitter, dropped responses, exceptions, disconnects and malformed/truncated/late behaviors. LAB fault injection must never be enabled through a production proxy/passive channel.
 
+Dynamic generator definitions are resource-bounded and formulas use the restricted expression parser rather than arbitrary JavaScript execution.
+
 ## 9. Traffic and Register Lab
 
 Traffic is the evidence layer. Use filters to isolate connection, direction, device, function, error or test context without changing captured protocol bytes.
@@ -173,13 +183,15 @@ When troubleshooting, follow this sequence:
 
 This avoids treating a datatype/scaling mistake as a communication failure or vice versa.
 
+Traffic and Register Lab use bounded/virtualized presentation so large retained datasets do not require one rendered DOM row per retained item.
+
 ## 10. Test Center and recipes
 
 Use normal validated requests for ordinary device testing. Raw/custom frames are intentionally separated from validated production requests.
 
 Raw/LAB transmission requires explicit operator awareness because malformed bytes can trigger unexpected behavior in third-party devices.
 
-Recipes provide repeatable engineering tests with variables, reads, guarded writes, delays/waits, assertions, repeats/conditions and evidence. A recipe failure should retain enough Traffic evidence to reproduce the failing step.
+Recipes provide repeatable engineering tests with variables, reads, guarded writes, delays/waits, assertions, repeats/conditions and evidence. Recipe nesting and expanded execution are bounded before connection/session acquisition so imported recipes cannot create unbounded execution work before safety validation.
 
 Before executing a recipe against live plant equipment:
 
@@ -195,7 +207,7 @@ Charts are for operator visibility; raw Traffic remains the protocol evidence so
 
 Use bounded time windows/decimation for long histories. Logger/Historian profiles should be sized for the intended sampling interval and retention period. Storage errors must be treated as data-quality issues rather than silently ignored.
 
-The SQLite historian is opened lazily so projects that do not configure historian use do not create unnecessary database handles.
+The SQLite historian is opened lazily so projects that do not configure historian use do not create unnecessary database handles. Historian is enabled by default for a logger profile unless that profile explicitly sets `historian: false`.
 
 For handover, export the required bounded history range instead of copying a live database file while it is actively being written.
 
@@ -205,7 +217,8 @@ HMI screens provide operator views/actions on top of the same project/runtime mo
 
 - Live reads use project bindings.
 - Write widgets use the central Master write-lock/audit path.
-- Bulk writes require the same explicit confirmation policy as equivalent Master operations.
+- Effective multi-register/FC16 writes require the same explicit bulk confirmation policy as equivalent Master operations.
+- Unsaved HMI edits must be saved before entering Run mode so the browser/runtime cannot act on a definition different from the persisted backend screen.
 - Leaving run/active views stops workspace polling where applicable.
 
 Before handing an HMI screen to an operator, verify every write binding, Unit ID, address, datatype and engineering scale against a controlled source.
@@ -222,13 +235,15 @@ Verify:
 - client certificate/key where required
 - mutual-TLS policy for server mode
 
-Private-key material must not be copied into reports, normal logs or project handover bundles. External TLS interoperability still requires testing against representative endpoints/certificate policies used at the customer site.
+Private-key material must not be copied into reports, normal logs or project handover bundles. Persistent desktop diagnostics and handover exports redact known credential/private-key material; engineering path/reference identity is retained where needed.
+
+External TLS interoperability still requires testing against representative endpoints/certificate policies used at the customer site.
 
 ## 14. Automation, REST/WebSocket, CLI and SDK
 
 Automation follows the same ownership/write/audit policy as the UI. It is not a privileged bypass.
 
-Prefer loopback/local access unless remote automation is explicitly engineered and secured. Browser mutation requests are same-origin protected and bounded by rate/body limits; legitimate non-browser CLI/SDK calls without a browser Origin header remain supported by the local API policy.
+Prefer loopback/local access unless remote automation is explicitly engineered and secured. Browser mutation requests are same-origin protected and bounded by rate/body limits; browser realtime WebSocket handshakes are same-origin and bounded by client/payload limits. Legitimate non-browser local SDK/automation calls without a browser Origin header remain supported by the local API policy.
 
 Before scripting a write workflow, prove the equivalent operation manually against a simulator or controlled device, then preserve the resulting audit/evidence expectations in the automation.
 
@@ -238,7 +253,7 @@ Project clone/Save As and templates copy engineering configuration, not live arm
 
 v7-to-v8 migration is explicit and preserves the original source/backup/report path rather than silently rewriting legacy data. After migration, verify the exact connection/channel identity of devices that shared Unit IDs across different physical/logical channels.
 
-Connection import is preflighted as a complete set. A failed import rolls back instead of leaving a partially applied connection inventory.
+Connection import is preflighted as a complete set. A failed import rolls back instead of leaving a partially applied connection inventory. Imported metadata/options are sanitized so credential/private-key material is not persisted as arbitrary profile data; legitimate certificate/key path references remain configuration references.
 
 ## 16. Reports and engineering handover
 
@@ -251,6 +266,7 @@ Release/handover protections include:
 - channel/device/register identity preservation
 - spreadsheet formula-injection protection
 - Windows-safe generated filenames
+- known credential/private-key redaction while preserving engineering identity/typed evidence
 
 Always review the manifest and project identity before delivering a bundle to another site/customer.
 
@@ -265,40 +281,56 @@ Always review the manifest and project identity before delivering a bundle to an
 | Write control unavailable | live connection state, owner mode, write latch, replay/offline state, safety re-lock after unknown outcome |
 | Discovery finds nothing | FC43 support, scan range/rate, exclusive-bus condition, exceptions vs silence |
 | Historian has gaps | logger profile, storage/disk errors, retention, sampling interval, connection quality |
-| HMI write rejected | central write lock, confirmation, FC16 bulk confirmation, binding/address validity |
+| HMI write rejected | saved screen state, central write lock, confirmation, effective FC16 bulk confirmation, binding/address validity |
 | TLS connection fails | CA trust, hostname/SNI, expiry, client cert/key, mTLS policy; do not downgrade to TCP |
 | Imported project/profile rejected | schema/version, size/count bounds, duplicate IDs, unsupported source channel/transport |
 
 ## 18. Release and field acceptance boundary
 
-Software release validation for this repository is intended to run on the existing Automatrix self-hosted Apple-silicon Mac runner and includes:
+The primary software release validation path is a direct local Mac execution from a clean checkout of the exact release head:
 
+```bash
+npm run release:gate:mac
+```
+
+The gate requires and records:
+
+- exact starting/ending Git SHA equality
+- clean repository state before and after validation
 - version consistency
 - lint and recursive v8 syntax checks
 - runtime dependency audit
-- Node 20 / 22 / 24 test suites
-- smoke and acceptance suites
+- Node 20 / 22 / 24 full test/smoke/acceptance suites
+- bounded v8 scale benchmark
+- v7 compatibility benchmark
+- bounded concurrent v8 soak
 - Chromium browser E2E
+- lockfile SHA-256 evidence
 
-The following remain separate target/field evidence and must not be claimed from software CI alone:
+A PASS is valid only for the exact head that produced it. Any later source commit requires the complete gate to run again.
+
+GitHub Actions validation is manual-only and optional. The existing Automatrix Mac runner documented in another repository is repository-scoped there and cannot run this repository unless a separate/organization-scoped runner registration is configured.
+
+The following remain separate target/field evidence and must not be claimed from the local software gate alone:
 
 - real RS485 electrical/noise/termination acceptance
 - representative PLC/inverter/meter interoperability
 - representative external TLS/certificate interoperability
-- long-duration plant soak under actual load
+- 24-hour/long-duration plant or virtual soak evidence
 - clean Windows installer execution and customer driver/security-policy acceptance
 - production code signing when a real signing certificate/private key is supplied
 
-Use `SITE_ACCEPTANCE.md` for the field evidence procedure.
+Use `LOCAL_MAC_RELEASE_GATE.md` for exact software evidence and `SITE_ACCEPTANCE.md` for field evidence.
 
 ## 19. Minimum handover checklist
 
 Before declaring a software build ready for controlled site acceptance:
 
 - exact release commit identified
-- release/version check passes
-- locked dependencies installed with `npm ci`
-- quality/test/smoke/acceptance/browser gates pass on the release runner
+- root/desktop package and lockfile version surfaces are 8.0.0
+- local Mac `summary.txt` reports `status=PASS`
+- local Mac `start_head == end_head == current release head`
+- no later commit supersedes the PASS evidence
 - no known open P0 software defect
 - write state confirmed locked by default
 - required project/profile/report bundle exported and manifest reviewed
