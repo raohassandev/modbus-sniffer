@@ -26,7 +26,8 @@ The following work has landed on `main` with automated coverage unless a narrowe
 - **WP-09 — read-only Discovery:** FC43-first Unit/Slave scan with read-only fallback, adaptive FC01-04 address scanning, cancellation/progress, persistent scan evidence/export, confirmed-device handoff into Master jobs, REST/WebSocket integration and serial maintenance/exclusive-bus interlocks.
 - **WP-10 — Slave/Server Simulator:** persistent simulator/server/device configuration, memory editor, dynamic value generators, request/write evidence, isolated LAB fault injection, REST/WebSocket integration and browser Simulator workspace.
 - **WP-11 — unified Traffic + Register Lab:** bounded live Traffic timeline, filtering/search/bookmarks/evidence inspection/error navigation/freeze controls, plus Register Lab interpretation with datatype/order, engineering definitions, scale/offset, units, enum/bitfield/limits, provenance and safe write-readiness state.
-- **WP-12 — Test Center/Recipe runtime:** guarded Raw Frame Studio, exact evidence, explicit LAB/raw confirmation, validated-write safety, repeat sends and versioned Recipe Engine with connect/disconnect, read/write/raw/delay/set/assert/repeat, pause/resume/stop, variables, timeouts/cancellation and pass/fail evidence. The dedicated browser Test Center surface is tracked separately as WP-12B until its browser gate merges.
+- **WP-12 — Test Center/Recipe runtime:** guarded Raw Frame Studio, exact evidence, explicit LAB/raw confirmation, validated-write safety, repeat sends and versioned Recipe Engine with connect/disconnect, read/write/raw/delay/set/assert/repeat, pause/resume/stop, variables, timeouts/cancellation and pass/fail evidence.
+- **WP-12B — Test Center browser workspace:** client-visible exclusive test sessions, Raw Frame Studio controls, separate LAB and write interlocks, recipe controls/results and audit evidence. Its browser gate includes cross-workspace Simulator/Test Center/Traffic lifecycle isolation and is merged on `main`.
 - **WP-13 — Charts/Logger/Historian:** bounded chart service, rotating JSONL logger and conditional SQLite historian with regression coverage.
 - **WP-14 — Modbus UDP transport:** bounded UDP client/server transports, explicit server reply routing, IPv4/IPv6 transport support, queue/datagram limits and shared Master/Virtual-Slave coverage.
 - **Deep-audit hardening:** FC22 end-to-end support, serial Unit-ID validation, correct RTU/ASCII Unit-0 broadcast behavior, immutable broker-level transmission evidence, reopen write-lock hardening, strict simulator seed validation, cyclic-poll write exclusion, serialized serial transmit execution and explicit handling of indeterminate driver-write outcomes.
@@ -59,6 +60,7 @@ The following work has landed on `main` with automated coverage unless a narrowe
 | P1 | v8 had no executable safe v7-to-v8 persistence boundary | Added schema v3 validation/migration/source backup/reporting and a separate v8 store |
 | P1 | Connection Center lacked a vertical browser/runtime integration | Added v8 shell, runtime/profile API, WebSocket updates, safe UI preferences and browser acceptance coverage |
 | P1 | Discovery risked becoming a second active-Master path | Discovery has dedicated read-only ownership; writes cannot be armed and serial scans require two explicit safety confirmations |
+| P1 | Browser acceptance leaked Simulator-owned state into later Test Center/Traffic specs | Test Center browser cleanup now tears down Simulator runtimes first, disconnects only actual Test Center ownership and performs after-each cleanup; the full browser workflow is green |
 | P2 | README/version state made v8 commits look inconsistent with a v7 package | Documentation separates stable v7 release surfaces from the in-progress v8 workbench |
 
 ## Safety invariants currently enforced
@@ -83,13 +85,12 @@ The following work has landed on `main` with automated coverage unless a narrowe
 
 The major remaining software/release work after WP-14 is:
 
-- Merge and validate the **WP-12B Test Center browser workspace** without cross-workspace lifecycle leakage.
-- Reconcile `V8_MASTER_TODO.md` checkboxes against the capabilities already proven by WP-01 through WP-14; the roadmap currently understates completion.
+- Reconcile `V8_MASTER_TODO.md` checkboxes against the capabilities already proven by WP-01 through WP-14/WP-12B; the roadmap currently understates completion.
 - Complete remaining Master professional workflow polish where not yet covered: richer representation/stale/change states, batch/order workflow, encoded write preview, templates and cross-workspace shortcuts.
 - Add **RTU/ASCII tunnelling** modes that remain explicitly distinct from native Modbus TCP/UDP.
 - Add **Modbus/TCP Security/TLS** client/server, certificate/key validation, trust configuration, mutual TLS and fail-closed diagnostics.
 - Finish IPv6 qualification across all applicable UI/profile/runtime paths, not merely low-level transport support.
-- Add capture-to-digital-twin workflows and the remaining advanced simulator/test tooling.
+- Add capture-to-digital-twin workflows and remaining advanced simulator/test tooling.
 - Build automation API/CLI/SDK surfaces and HMI Builder workspaces.
 - Complete accessibility, keyboard, performance and security hardening across the final v8 product shell.
 - Complete combined long-duration soak, third-party interoperability matrix and real-device/site acceptance.
