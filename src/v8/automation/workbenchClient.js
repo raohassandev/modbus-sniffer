@@ -13,10 +13,11 @@ class WorkbenchClientError extends Error {
 }
 
 function isLoopback(hostname) {
-  if (hostname === 'localhost') return true;
-  const ip = net.isIP(hostname);
-  if (ip === 4) return hostname.startsWith('127.');
-  if (ip === 6) return hostname === '::1' || hostname === '0:0:0:0:0:0:0:1';
+  const host = String(hostname || '').replace(/^\[|\]$/g, '').toLowerCase();
+  if (host === 'localhost') return true;
+  const ip = net.isIP(host);
+  if (ip === 4) return host.startsWith('127.');
+  if (ip === 6) return host === '::1' || host === '0:0:0:0:0:0:0:1';
   return false;
 }
 
@@ -71,7 +72,7 @@ class WorkbenchApiClient {
   testConnection(connectionId) { return this.request('POST', `/api/v8/connections/${encodeURIComponent(connectionId)}/test`, {}); }
   read(spec) { return this.request('POST', '/api/v8/master/read', spec); }
 
-  write(spec, { confirmed = false, bulk = false, broadcast = false } = {}) {
+  async write(spec, { confirmed = false, bulk = false, broadcast = false } = {}) {
     if (confirmed !== true) throw new WorkbenchClientError('CONFIRMATION_REQUIRED', 'Automation writes require explicit confirmed=true');
     const functionCode = Number(spec?.functionCode);
     const isBulk = [15, 16, 23].includes(functionCode);
@@ -94,7 +95,7 @@ class WorkbenchApiClient {
   runRecipe(recipe, options = {}) { return this.request('POST', '/api/v8/test-center/recipe/run', { recipe, ...options }); }
   listDigitalTwins() { return this.request('GET', '/api/v8/digital-twins'); }
   applyDigitalTwin(twinId, options = {}) { return this.request('POST', `/api/v8/digital-twins/${encodeURIComponent(twinId)}/apply`, options); }
-  approveDigitalTwin(twinId, { confirmed = false } = {}) {
+  async approveDigitalTwin(twinId, { confirmed = false } = {}) {
     if (!confirmed) throw new WorkbenchClientError('CONFIRMATION_REQUIRED', 'Digital twin approval requires explicit confirmation');
     return this.request('POST', `/api/v8/digital-twins/${encodeURIComponent(twinId)}/approve`, { confirmed: true });
   }
