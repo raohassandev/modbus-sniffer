@@ -21,6 +21,7 @@ const files = collectJs(sourceRoot);
 for (const extra of [
   path.join(root, 'src', 'index-v8.js'),
   path.join(root, 'public', 'v8', 'app.js'),
+  path.join(root, 'public', 'v8', 'shell-extras.js'),
 ]) {
   if (fs.existsSync(extra)) files.push(extra);
 }
