@@ -1,0 +1,115 @@
+name: v8 release metadata bootstrap
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: v8-release-metadata-bootstrap-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'v8-release-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          fetch-depth: 0
+          clean: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Synchronize only 8.0.0 release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { execFileSync } = require('node:child_process');
+          const version = '8.0.0';
+          const metadata = [
+            ['package.json', 'modbus-engineering-analyzer'],
+            ['package-lock.json', 'modbus-engineering-analyzer'],
+            ['desktop/package.json', 'modbus-engineering-analyzer-desktop'],
+            ['desktop/package-lock.json', 'modbus-engineering-analyzer-desktop'],
+          ];
+
+          function replaceOnce(text, from, to, label) {
+            const first = text.indexOf(from);
+            if (first < 0) throw new Error(`release metadata bootstrap could not find ${label}`);
+            if (text.indexOf(from, first + from.length) >= 0) throw new Error(`release metadata bootstrap found duplicate ${label}`);
+            return text.slice(0, first) + to + text.slice(first + from.length);
+          }
+
+          for (const [file, name] of metadata) {
+            let text = fs.readFileSync(file, 'utf8');
+            const before = text;
+            const data = JSON.parse(text);
+            if (!['7.0.0', version].includes(data.version)) throw new Error(`${file}: unexpected top-level version ${data.version}`);
+            if (data.version !== version) {
+              text = replaceOnce(
+                text,
+                `  "name": "${name}",\n  "version": "${data.version}",`,
+                `  "name": "${name}",\n  "version": "${version}",`,
+                `${file} top-level version`
+              );
+            }
+            const rootPackage = data.packages && data.packages[''];
+            if (rootPackage) {
+              if (!['7.0.0', version].includes(rootPackage.version)) throw new Error(`${file}: unexpected root package version ${rootPackage.version}`);
+              if (rootPackage.version !== version) {
+                text = replaceOnce(
+                  text,
+                  `      "name": "${name}",\n      "version": "${rootPackage.version}",`,
+                  `      "name": "${name}",\n      "version": "${version}",`,
+                  `${file} root package version`
+                );
+              }
+            }
+            fs.writeFileSync(file, text);
+            const verify = JSON.parse(fs.readFileSync(file, 'utf8'));
+            if (verify.version !== version || (verify.packages?.[''] && verify.packages[''].version !== version)) throw new Error(`${file}: version verification failed`);
+            if (before !== text) {
+              const beforeLines = before.split('\n');
+              const afterLines = text.split('\n');
+              if (beforeLines.length !== afterLines.length) throw new Error(`${file}: line count changed unexpectedly`);
+              for (let i = 0; i < beforeLines.length; i += 1) {
+                if (beforeLines[i] === afterLines[i]) continue;
+                if (!/^\s*"version": "7\.0\.0"[,]?$/.test(beforeLines[i]) || !/^\s*"version": "8\.0\.0"[,]?$/.test(afterLines[i])) {
+                  throw new Error(`${file}: non-version content changed at line ${i + 1}`);
+                }
+              }
+            }
+          }
+
+          const workflow = '.github/workflows/test.yml';
+          let workflowText = fs.readFileSync(workflow, 'utf8');
+          const start = workflowText.indexOf('  release-metadata-sync:\n');
+          const end = workflowText.indexOf('  quality:\n', start);
+          if (start < 0 || end < 0) throw new Error('release-metadata-sync block not found');
+          workflowText = workflowText.slice(0, start) + workflowText.slice(end);
+          workflowText = workflowText.replace(/    needs: release-metadata-sync\n    if: needs\.release-metadata-sync\.outputs\.changed != 'true'\n/g, '');
+          if (workflowText.includes('release-metadata-sync')) throw new Error('release-metadata-sync references remain');
+          fs.writeFileSync(workflow, workflowText);
+
+          fs.rmSync('.github/workflows/v8-release-metadata-bootstrap.yml');
+          execFileSync(process.execPath, ['scripts/version-sync.js'], { stdio: 'inherit' });
+          execFileSync('git', ['diff', '--check'], { stdio: 'inherit' });
+          NODE
+      - name: Commit synchronized metadata and self-remove
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json desktop/package.json desktop/package-lock.json .github/workflows/test.yml .github/workflows/v8-release-metadata-bootstrap.yml
+          git diff --cached --stat
+          git commit -m "chore: finalize Workbench 8.0.0 release metadata"
+          git push origin HEAD:v8-release-completion
