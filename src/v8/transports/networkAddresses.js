@@ -45,9 +45,56 @@ function assertLocalAddress(address, { allowWildcard = false, field = 'address' 
   return normalized;
 }
 
+function ipv4ToInt(address) {
+  if (net.isIP(address) !== 4) return null;
+  return address.split('.').reduce((acc, part) => ((acc << 8) | Number(part)) >>> 0, 0) >>> 0;
+}
+
+function ipv4SameSubnet(target, cidr) {
+  if (typeof cidr !== 'string') return false;
+  const [local, prefixText] = cidr.split('/');
+  const prefix = Number(prefixText);
+  const targetInt = ipv4ToInt(target);
+  const localInt = ipv4ToInt(local);
+  if (targetInt == null || localInt == null || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) return false;
+  const mask = prefix === 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
+  return (targetInt & mask) === (localInt & mask);
+}
+
+function recommendLocalAddress(targetAddress, addresses = listLocalAddresses()) {
+  const target = typeof targetAddress === 'string' ? targetAddress.trim() : '';
+  const familyNumber = net.isIP(target);
+  if (!familyNumber) return null;
+  const family = familyNumber === 6 ? 'IPv6' : 'IPv4';
+  const candidates = (addresses || []).filter((entry) => entry?.address && entry.family === family);
+  if (!candidates.length) return null;
+
+  let selected = null;
+  let reason = 'family-match';
+  if (familyNumber === 4) {
+    selected = candidates.find((entry) => !entry.internal && ipv4SameSubnet(target, entry.cidr))
+      || candidates.find((entry) => ipv4SameSubnet(target, entry.cidr));
+    if (selected) reason = 'same-subnet';
+  }
+  selected ||= candidates.find((entry) => !entry.internal) || candidates[0];
+
+  return Object.freeze({
+    targetAddress: target,
+    address: selected.address,
+    interfaceName: selected.interfaceName || null,
+    family: selected.family,
+    cidr: selected.cidr || null,
+    internal: Boolean(selected.internal),
+    reason,
+  });
+}
+
 module.exports = {
   assertIpAddress,
   assertLocalAddress,
   isWildcardAddress,
+  ipv4SameSubnet,
+  ipv4ToInt,
   listLocalAddresses,
+  recommendLocalAddress,
 };
