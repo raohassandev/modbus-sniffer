@@ -14,9 +14,10 @@ The authoritative release-state documents are now:
 
 1. `V8_IMPLEMENTATION_STATUS.md` — implemented work packages and enforced safety invariants.
 2. **This file** — release closure evidence and the exact remaining acceptance boundary.
-3. `V8_OPERATOR_GUIDE.md` — supported operator/commissioning workflow.
-4. `DESKTOP_DIAGNOSTICS.md` — desktop data, upgrade and support diagnostics.
-5. `SITE_ACCEPTANCE.md` — real equipment/field evidence that software CI cannot manufacture.
+3. `LOCAL_MAC_RELEASE_GATE.md` — exact local Mac software gate and evidence procedure.
+4. `V8_OPERATOR_GUIDE.md` — supported operator/commissioning workflow.
+5. `DESKTOP_DIAGNOSTICS.md` — desktop data, upgrade and support diagnostics.
+6. `SITE_ACCEPTANCE.md` — real equipment/field evidence that software validation cannot manufacture.
 
 Unchecked items in the historical master TODO must therefore be reconciled against this ledger before being called a missing product feature.
 
@@ -36,9 +37,9 @@ Implemented software areas include:
 - unified Traffic timeline and Register Lab
 - Test Center/raw-frame workflow and recipes
 - Charts, rotating logger and SQLite Historian
-- capture-to-Digital-Twin draft/approval flow
+- capture-to-Digital-Twin draft/approval flow with conflict-safe atomic apply
 - REST/WebSocket/CLI/SDK automation surfaces
-- HMI Builder with central write-safety integration
+- HMI Builder with central write-safety integration and effective bulk-write confirmation
 - project migration, clone/Save As and templates
 - reports/handover bundles with identity preservation, SHA-256 manifests, spreadsheet/filename protection and credential redaction
 - v8 default runtime and Electron desktop shell
@@ -52,7 +53,7 @@ The following invariants are software-enforced and regression covered:
 - Serial resources have exclusive active ownership through the Connection Broker.
 - Live write permission is per connection, locked by default and not restored armed after restart/import/reopen.
 - Raw/Test/LAB workflows remain separate from normal validated production requests.
-- Strong confirmation is required for bulk/write-sensitive operations; HMI FC16 has explicit bulk confirmation.
+- Strong confirmation is required for bulk/write-sensitive operations; HMI effective FC16 has explicit bulk confirmation.
 - Confirmed transmissions retain bounded evidence/audit context.
 - Indeterminate serial writes re-lock the connection and surface `TRANSMISSION_OUTCOME_UNKNOWN`.
 - Import applies as a validated set and rolls back on failure rather than leaving partial runtime state.
@@ -67,10 +68,11 @@ The following invariants are software-enforced and regression covered:
 - Raw-frame repeat remains explicitly bounded.
 - Simulator formulas use a restricted parser/RPN evaluator rather than arbitrary JavaScript execution.
 - Simulator dynamic generators are bounded by generator count, schedule-step count and formula length.
+- Digital Twin apply refuses unrelated target-server collisions and restores the previous generated topology if a partial apply fails.
 
 ## UI / accessibility closure
 
-The release candidate now includes:
+The release candidate includes:
 
 - command palette / quick-open
 - semantic workspace document tabs with ARIA tab roles
@@ -85,6 +87,8 @@ The release candidate now includes:
 - HiDPI browser configuration and document-level horizontal-overflow assertion
 - virtualized Traffic row rendering using a scroll spacer/window
 - Register Lab 10,000-point query support with virtualized visible-window rendering and keyboard navigation across the virtual window
+- HMI Run-mode prevention when the screen has unsaved edits
+- UI/backend agreement on effective multi-register FC16 confirmation
 
 ## Scale / performance closure
 
@@ -95,7 +99,7 @@ The release candidate now includes:
 - 100 isolated device channels
 - 10,000 Register Lab points created from real v8 RTU request/response codec paths
 - 100,000 retained Traffic events
-- bounded 5,000-row Traffic query
+- bounded Traffic query
 - Traffic error filtering
 - elapsed-time and heap ceilings
 
@@ -118,11 +122,11 @@ Master Tx/Rx evidence feeds Traffic and Register Lab, while Register Lab point u
 
 A short form is included in `npm test` through `test/v8-concurrent-soak.test.js`. The same harness accepts a long `--seconds` value for extended local execution.
 
-A **24-hour execution result is not claimed by source code alone**. That is an extended acceptance run and must retain actual run evidence.
+A **24-hour execution result is not claimed by source code alone**. That remains extended acceptance evidence.
 
 ## Desktop / packaging closure
 
-Source-level desktop release work now includes:
+Source-level desktop release work includes:
 
 - v8 backend entry point and `/api/v8/status` readiness
 - loopback-only local backend binding
@@ -137,7 +141,57 @@ Source-level desktop release work now includes:
 - release provenance file and SHA-256 checksum generation
 - Workbench v8 artifact naming
 
-Actual NSIS execution, clean-Windows launch, Defender/firewall behavior and code signing remain target-Windows acceptance rather than Mac software-CI claims.
+The Windows packaging workflow is **manual-only**. It does not run automatically on merge and therefore cannot silently consume GitHub-hosted runner minutes. Actual NSIS execution, clean-Windows launch, Defender/firewall behavior and code signing remain target-Windows acceptance.
+
+## Release metadata closure
+
+The release metadata is synchronized to **8.0.0** across:
+
+- root `package.json`
+- root `package-lock.json`
+- desktop `package.json`
+- desktop `package-lock.json`
+- `src/v8/version.js`
+
+The lockfile synchronization commit changed only the four intended root-version lines. The temporary hosted bootstrap and self-modifying release helper have been removed. Unrelated lockfile dependencies, integrity hashes and package metadata must not be regenerated merely for release version closure.
+
+## Exact software release gate
+
+The authoritative gate is executed directly on the MacBook:
+
+```bash
+npm run release:gate:mac
+```
+
+The script creates ignored evidence under `.release-evidence/` and validates the exact starting Git SHA. It requires:
+
+- clean macOS checkout
+- Node.js 20 full tests/smoke/acceptance
+- Node.js 22 full tests/smoke/acceptance
+- Node.js 24 full tests/smoke/acceptance
+- 8.0.0 version consistency
+- lint
+- recursive v8 syntax checks
+- bounded v8 scale benchmark
+- v7 compatibility benchmark
+- runtime dependency audit
+- bounded concurrent v8 soak
+- Chromium browser E2E
+- unchanged exact HEAD through completion
+- unchanged tracked files through completion
+- lockfile SHA-256 evidence
+
+A release gate is valid only if `summary.txt` reports `status=PASS`, its `start_head` equals `end_head`, and that same SHA is still the current PR #31 head. A new commit invalidates older evidence and requires a complete rerun.
+
+`docs/LOCAL_MAC_RELEASE_GATE.md` is the detailed execution procedure.
+
+## GitHub Actions boundary
+
+`.github/workflows/test.yml` is retained only as a **manual optional self-hosted** validation path. It has no automatic push or pull-request trigger.
+
+The existing `automatrix-macbook-01` runner from the `automatrix-engineering` project is repository-scoped to `raohassandev/automatrix-engineering`. Matching labels (`self-hosted`, `macOS`, `ARM64`, `automatrix-ci`, `automatrix-mac`) do not make it available to `modbus-sniffer`.
+
+If GitHub self-hosted execution is wanted later, a runner must be registered for `raohassandev/modbus-sniffer` or at an organization scope that permits this repository. That is optional and is not required to execute the local Mac gate.
 
 ## Operator/documentation closure
 
@@ -163,34 +217,13 @@ Actual NSIS execution, clean-Windows launch, Defender/firewall behavior and code
 
 `DESKTOP_DIAGNOSTICS.md` documents desktop data migration, support logs and Windows acceptance evidence.
 
-## Exact software release gate
+## Remaining software release evidence
 
-The repository release validation is configured for the existing Automatrix Apple-silicon self-hosted runner labels:
+The source-side release metadata and release-gate implementation are complete. The remaining software release evidence is an **actual PASS execution** of `npm run release:gate:mac` on the exact final PR head.
 
-```text
-self-hosted
-macOS
-ARM64
-automatrix-ci
-automatrix-mac
-```
+PR #31 must not be merged on `mergeable=true` alone because `main` has no branch-protection gate enforcing this local evidence.
 
-The **exact final PR head** must pass:
-
-- 8.0.0 version consistency
-- lint
-- recursive v8 syntax checks
-- runtime dependency audit
-- Node.js 20 full test/smoke/acceptance suite
-- Node.js 22 full test/smoke/acceptance suite
-- Node.js 24 full test/smoke/acceptance suite
-- bounded v8 scale regression included in `npm test`
-- bounded concurrent v8 soak regression included in `npm test`
-- Chromium browser E2E including desktop viewport/keyboard checks
-
-PR #31 must not be merged on `mergeable=true` alone because `main` has no branch-protection gate enforcing these checks.
-
-At the current release-candidate stage, the remaining repository release-metadata action is the exact four lockfile root-version fields (`package-lock.json` and `desktop/package-lock.json`). The temporary release-metadata job performs a guarded version-only replacement and removes itself before the final exact-head validation. It must run on the configured self-hosted Mac runner; unrelated lockfile dependency metadata must not be regenerated or rewritten merely to close this version gate.
+No local Mac PASS is claimed by this document until the actual evidence set exists and matches the exact PR head.
 
 ## Remaining extended / external acceptance
 
@@ -229,6 +262,6 @@ These items are intentionally **not** described as missing source implementation
 
 ## Release decision
 
-Once the guarded release metadata sync completes and the exact final release head passes the configured self-hosted Mac software gate, the source/software release candidate can be merged to `main`.
+Once the **exact final PR head** has a valid local Mac release-gate PASS evidence set, the source/software release candidate can be merged to `main`.
 
-The extended and external items above remain explicitly tracked as acceptance evidence. They must not be silently converted into software-CI passes, and they do not justify reopening already-implemented core work packages unless their real execution finds a defect.
+The extended and external items above remain explicitly tracked as acceptance evidence. They must not be silently converted into software-validation passes, and they do not justify reopening already-implemented core work packages unless their real execution finds a defect.
