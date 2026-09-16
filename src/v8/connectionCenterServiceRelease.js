@@ -37,10 +37,20 @@ class ConnectionCenterServiceV8 extends base.ConnectionCenterServiceV8 {
 
     const original = this.store.listConnectionProfiles(projectId);
     try {
-      const results = normalized.map((profile) => this.saveProfile(profile, projectId));
-      return results;
+      return normalized.map((profile) => this.saveProfile(profile, projectId));
     } catch (error) {
+      // Restore persistence first, then remove any inactive definitions created/replaced
+      // during this import so sync() must rebuild them from the original profiles.
       this.store.updateProject(projectId, { connections: original });
+      for (const connectionId of seen) {
+        if (!this._hasRuntime(connectionId)) continue;
+        const runtime = this.broker.getConnection(connectionId);
+        if (runtime.owner || ['open', 'opening', 'closing'].includes(runtime.state)) continue;
+        try {
+          this.broker.removeConnection(connectionId);
+          this.transports.delete(connectionId);
+        } catch { /* preserve the original import error and continue rollback */ }
+      }
       try { this.sync(projectId); } catch { /* retain original import error */ }
       throw error;
     }
