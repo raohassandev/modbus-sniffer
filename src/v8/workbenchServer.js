@@ -6,6 +6,7 @@ const express = require('express');
 const { WebSocketServer, WebSocket } = require('ws');
 const { ConnectionCenterService } = require('./connectionCenterService');
 const { loadFeatureFlags, assertFeature } = require('./featureFlags');
+const { PRODUCT_VERSION } = require('./version');
 const { sameOriginMutationGuard, createMutationRateLimiter, createBodyLengthGuard } = require('./security/httpSafety');
 
 function httpErrorStatus(error) {
@@ -60,18 +61,15 @@ function startV8WorkbenchServer({
   });
 
   const route = (handler) => async (req, res) => {
-    try {
-      await handler(req, res);
-    } catch (error) {
-      res.status(httpErrorStatus(error)).json(errorPayload(error));
-    }
+    try { await handler(req, res); }
+    catch (error) { res.status(httpErrorStatus(error)).json(errorPayload(error)); }
   };
 
   app.get('/api/v8/status', route(async (_req, res) => {
     const db = store.exportAll();
     res.json({
       ok: true,
-      version: '8-dev',
+      version: PRODUCT_VERSION,
       schemaVersion: db.schemaVersion,
       activeProjectId: db.activeProjectId,
       activeProject: store.getActiveProject(),
@@ -209,10 +207,7 @@ function startV8WorkbenchServer({
 
   server.on('upgrade', (request, socket, head) => {
     const pathname = new URL(request.url || '/', 'http://localhost').pathname;
-    if (pathname !== '/ws/v8') {
-      socket.destroy();
-      return;
-    }
+    if (pathname !== '/ws/v8') { socket.destroy(); return; }
     wss.handleUpgrade(request, socket, head, (ws) => wss.emit('connection', ws, request));
   });
 
