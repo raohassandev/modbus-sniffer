@@ -27,7 +27,7 @@ test('v8 ChartService keeps multiple series isolated, applies engineering scalin
   const pf = charts.querySeries('power', 'pf', { from: 10000, to: 20000 });
   assert.ok(grid.length <= 25);
   assert.equal(grid[0].value, 0);
-  assert.equal(grid.at(-1).value, 19.9);
+  assert.ok(Math.abs(grid.at(-1).value - 19.9) < 1e-12);
   assert.equal(pf.length, 11);
   assert.equal(charts.getDocument('power').series.find((series) => series.seriesId === 'pf').axis, 'right');
   assert.match(charts.exportCsv('power'), /grid/);
@@ -92,8 +92,13 @@ test('v8 SQLite historian stores indexed samples/events, preserves exact non-num
 });
 
 test('v8 SQLite historian fails explicitly rather than silently degrading when node:sqlite is unavailable', { skip: v8.sqliteAvailable() }, () => {
-  assert.throws(
-    () => new v8.SqliteHistorian({ filePath: path.join(tempDir('modbus-v8-no-sqlite-'), 'history.sqlite') }),
-    (error) => error.code === 'SQLITE_UNAVAILABLE',
-  );
+  const directory = tempDir('modbus-v8-no-sqlite-');
+  try {
+    assert.throws(
+      () => new v8.SqliteHistorian({ filePath: path.join(directory, 'history.sqlite') }),
+      (error) => error.code === 'SQLITE_UNAVAILABLE',
+    );
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
