@@ -1,103 +1,92 @@
-# v8 Implementation Status and Deep-Audit Record
+# v8 Implementation Status and Release-Candidate Audit
 
 **Last audited:** 2026-09-16  
-**Stable product release:** 7.0.0  
-**v8 development state:** tested vertical workspaces continue behind the separate v8 launcher  
-**Status source of truth:** this document records implemented state; `V8_MASTER_TODO.md` remains the full target-scope roadmap.
+**Release-candidate version:** 8.0.0  
+**Release branch:** `v8-release-completion`  
+**Integration PR:** #31  
+**Compatibility runtime:** v7 remains available through the explicit `npm run v7` command.
 
-## Release boundary
+## Current release boundary
 
-The default application entry point and Windows desktop launcher remain on the accepted v7 runtime while v8 is completed behind a separate development launcher. Keeping `package.json`, the desktop package and `npm start` on 7.0.0 is intentional. The v8 shell is launched with `npm run v8` until the v8 release gates are complete.
+The v8 all-in-one Modbus Engineering Workbench is now the default runtime on the release-candidate branch. `npm start`, the package entry point, and the Windows desktop launcher use `src/index-v8.js`. The desktop shell opens the v8 UI and checks `/api/v8/status`. v7 is retained only as an explicit compatibility path.
 
-A v8 module being present on `main` does not by itself make that capability the stable released product. The release switch happens only after the applicable P0/P1 work, migration, browser/desktop acceptance and release gates pass.
+This document records implemented software state on PR #31. A feature is not considered released on `main` until the exact PR head passes the complete CI matrix and is merged. Real RS485 electrical behavior and third-party device interoperability remain field/hardware acceptance gates and cannot be manufactured by software CI.
 
 ## Implemented v8 work packages
 
-The following work has landed on `main` with automated coverage unless a narrower qualification is stated.
+- **WP-01 — shared foundation:** canonical protocol/framing core, normalized events, Connection Broker ownership model and virtual loopback transport.
+- **WP-02 — Master/Slave foundation:** one-shot Master engine, virtual Slave memory/server, exceptions, broadcast handling and write-lock enforcement.
+- **WP-03 — TCP:** bounded TCP client/server transports, stream framing, multi-client routing and Transaction-ID-safe concurrency.
+- **WP-04 — serial RTU/ASCII:** serial transports, timing, enumeration, echo suppression, flow-control/direction options and driver-independent regression coverage.
+- **WP-05 — Master safety/runtime:** fair cyclic scheduler, strict serialization, write safety, read-back, immutable audit evidence and canonical addressing.
+- **WP-06 — schema/migration:** v8 schema v3, explicit/idempotent v7 migration, source backup, migration report, atomic writes, last-known-good backup and corrupt-primary recovery.
+- **WP-07 — shell/Connection Center:** v8 browser shell, app/status bars, themes/density, command palette, persistent safe preferences, connection profiles, serial/network enumeration, interface recommendation, open/close/test actions and WebSocket state.
+- **WP-08 — protocol + Master Workstation:** shared FC01/02/03/04/05/06/07/08/11/12/15/16/17/20/21/22/23/24/43 support, unknown/vendor PDU preservation, 16/32/64-bit exact decoding, floats, strings/BCD/timestamps, persistent poll jobs and guarded writes.
+- **WP-09 — Discovery:** read-only FC43-first discovery, fallback scans, adaptive address scanning, progress/cancel, evidence export, Master handoff and serial maintenance/exclusive-bus interlocks.
+- **WP-10 — Simulator:** persistent server/device models, memory editor, dynamic generators, request/write evidence, isolated LAB fault injection and browser workspace.
+- **WP-11 — Traffic + Register Lab:** bounded unified timeline, filters/search/bookmarks/evidence/error navigation and datatype/order/engineering interpretation with provenance.
+- **WP-12 / 12B — Test Center:** guarded raw-frame studio, validated writes, repeat sends, versioned recipes, variables/assertions/repeat/pause/resume/stop, evidence and browser workflow isolation.
+- **WP-13 — Charts/Logger/Historian:** bounded chart service, backend decimation, rotating JSONL logging, optional SQLite historian and browser history workspaces.
+- **WP-14 — UDP:** bounded Modbus UDP client/server transports with explicit reply routing and IPv4/IPv6 low-level coverage.
+- **WP-15 — tunnelling/TLS:** RTU/ASCII over TCP/UDP transport modes plus TLS client/server, certificate/key loading, trust configuration, mutual-TLS options and fail-closed behavior.
+- **WP-16 — Digital Twin + Automation:** capture/Register-Lab-to-Simulator draft workflow with approval boundary, loopback-first automation client, CLI, JavaScript SDK and Python example client.
+- **WP-17 — HMI Builder:** persistent screens/templates, edit/preview/run modes, snap grid, layers/properties, live reads, guarded writes through the shared Master safety path, recipe/screen actions and bulk-write confirmation.
+- **WP-18 — Projects/Reports/Release hardening:** project clone/Save As, reusable project templates with preview, project-switch live-connection interlock, engineering handover ZIP, SHA-256 manifest, identity-aware exports, formula-injection/filename protection, strict connection import preflight/rollback, same-origin mutation protection, bounded mutation rate/body handling and v8 default/desktop promotion.
 
-- **WP-01 — shared foundation:** protocol/framing foundation, Connection Broker ownership model, normalized event envelope and virtual loopback transport.
-- **WP-02 — Master/Slave foundation:** one-shot Master engine, virtual Slave memory/server behavior, write-lock enforcement, exceptions, serial broadcast safety and FC43 identity round-trip.
-- **WP-03 — TCP transport:** bounded TCP client/server transports, stream framing, multi-client server routing and Transaction-ID-safe Master concurrency.
-- **WP-04 — serial transport:** real Serial RTU/ASCII transport foundation, frame timing, enumeration, echo suppression, flow-control/direction support and hardware-independent injected-driver coverage.
-- **WP-05 — Master runtime safety:** fair cyclic poll scheduler, write safety/read-back/audit service and canonical address notation.
-- **WP-06 — project schema/migration:** v8 project schema v3, explicit/idempotent v7 schema-2 migration, separate `workbench-v8.json` persistence, atomic writes/backups, migration evidence, corrupt-primary recovery and safe configuration-only connection profiles.
-- **WP-07 — shell/Connection Center:** dedicated v8 browser shell, persistent app bar/navigation/status, safe project UI preferences, System/Light/Dark themes, density modes, context inspector, document tabs, command palette, feature flags, profile create/delete/duplicate/import/export, serial/network enumeration, target-subnet interface recommendation, open/close/test actions, live diagnostics and WebSocket runtime state.
-- **WP-08 — protocol completion + Master Workstation:** standard FC codecs for FC01/02/03/04/05/06/07/08/11/12/15/16/17/20/21/22/23/24/43, unknown/vendor-PDU preservation, shared integer/float/ASCII/BCD/timestamp permutations, one-shot reads, persistent cyclic poll jobs, scheduler controls, guarded writes/read-back and exact evidence in the browser Master workspace.
-- **WP-09 — read-only Discovery:** FC43-first Unit/Slave scan with read-only fallback, adaptive FC01-04 address scanning, cancellation/progress, persistent scan evidence/export, confirmed-device handoff into Master jobs, REST/WebSocket integration and serial maintenance/exclusive-bus interlocks.
-- **WP-10 — Slave/Server Simulator:** persistent simulator/server/device configuration, memory editor, dynamic value generators, request/write evidence, isolated LAB fault injection, REST/WebSocket integration and browser Simulator workspace.
-- **WP-11 — unified Traffic + Register Lab:** bounded live Traffic timeline, filtering/search/bookmarks/evidence inspection/error navigation/freeze controls, plus Register Lab interpretation with datatype/order, engineering definitions, scale/offset, units, enum/bitfield/limits, provenance and safe write-readiness state.
-- **WP-12 — Test Center/Recipe runtime:** guarded Raw Frame Studio, exact evidence, explicit LAB/raw confirmation, validated-write safety, repeat sends and versioned Recipe Engine with connect/disconnect, read/write/raw/delay/set/assert/repeat, pause/resume/stop, variables, timeouts/cancellation and pass/fail evidence.
-- **WP-12B — Test Center browser workspace:** client-visible exclusive test sessions, Raw Frame Studio controls, separate LAB and write interlocks, recipe controls/results and audit evidence. Its browser gate includes cross-workspace Simulator/Test Center/Traffic lifecycle isolation and is merged on `main`.
-- **WP-13 — Charts/Logger/Historian:** bounded chart service, rotating JSONL logger and conditional SQLite historian with regression coverage.
-- **WP-14 — Modbus UDP transport:** bounded UDP client/server transports, explicit server reply routing, IPv4/IPv6 transport support, queue/datagram limits and shared Master/Virtual-Slave coverage.
-- **Deep-audit hardening:** FC22 end-to-end support, serial Unit-ID validation, correct RTU/ASCII Unit-0 broadcast behavior, immutable broker-level transmission evidence, reopen write-lock hardening, strict simulator seed validation, cyclic-poll write exclusion, serialized serial transmit execution and explicit handling of indeterminate driver-write outcomes.
+## Safety invariants enforced
 
-## Project migration guarantees
+- Passive Analyzer/replay ownership has no implicit transmit capability.
+- Discovery is read-only and cannot inherit Master write permission.
+- Serial resources have exclusive active ownership through the Connection Broker.
+- Writes are per-connection, off by default, require a live connection, and re-lock on close/reopen/restart.
+- Strong confirmation is enforced for bulk/write-sensitive operations; HMI FC16 requires explicit bulk confirmation as well as operator confirmation.
+- Unit-0 serial broadcast is limited to supported write functions; read-bearing FC23 cannot be treated as no-response broadcast.
+- Raw/Test/LAB capabilities are distinct from normal validated production requests.
+- Fault injection exists only in the Simulator LAB path and is disabled by default.
+- Every confirmed low-level write/raw/test transmission retains bounded audit evidence with connection, owner, transport, timestamp and transmitted HEX.
+- Indeterminate serial writes are reported as `TRANSMISSION_OUTCOME_UNKNOWN`, force an error state and re-lock writes until close/reopen.
+- Connection imports are bounded and preflighted as a complete set; failure rolls back rather than leaving a partial import.
+- Browser cross-site mutation requests are rejected; mutation rate/body sizes are bounded while legitimate non-browser CLI/SDK calls without an Origin header remain supported.
+- Persisted/imported connection state is configuration-only: no owner, write latch or fault-injection state can be restored armed.
+- Project switching is blocked while any connection is active.
 
-- The original v7 `workspaces.json` is left unchanged during automatic v8 migration and is copied to a timestamped v7 backup first.
-- v7 channels, devices, channel-scoped `deviceKey` identities, register mappings, discovery evidence, Legacy / Unassigned data, profiles and available capture/history/adoption metadata are preserved in schema v3.
-- A migrated channel becomes a saved configuration profile only. It is inactive, manually activated, unowned, transmit-disabled, write-locked and fault-injection-disabled after migration.
-- Project-level or imported runtime ownership/write/fault state is removed during normalization and never persisted as armed.
-- Running migration again on schema v3 is idempotent and does not duplicate connection profiles.
-- Same Unit IDs on different channels stay distinct because channel-scoped device keys are preserved and validated.
-- The v8 store writes atomically, keeps a last-known-good backup and preserves a corrupt primary file before restoring that backup.
+## Project and handover guarantees
 
-## Deep-audit findings closed
+- Original v7 source data is not silently rewritten during migration and a source backup/report is created.
+- Same Unit IDs on different channels remain distinct through channel-scoped identity.
+- Project JSON is validated and atomically persisted with backup/recovery behavior.
+- Project clone/template creation strips live/armed runtime state.
+- Engineering handover bundles include a manifest with product/version/schema metadata and SHA-256 hashes.
+- Export surfaces retain channel/device/register identity where applicable.
+- CSV text is protected against spreadsheet formula injection and generated filenames are sanitized.
+- Handover content includes project configuration plus bounded Master/write-audit/Traffic/Simulator/Recipe/Historian/Chart/Logger/HMI/Digital-Twin evidence where available.
 
-| Severity | Finding | Resolution |
-| --- | --- | --- |
-| P0 | A Master/Test connection could be write-armed before it was live and retain the armed state into `open()` | Enabling writes requires an open transport; every real open/reopen resets writes and fault state to locked/off |
-| P0 | Direct Master writes could bypass the richer `WriteSafetyController` audit | Connection Broker records immutable low-level evidence for every write/raw/test transmission independent of the high-level wrapper |
-| P0 | A serial write/drain timeout could be reported as an ordinary failure even though bytes may already have reached the device | Public serial transport reports `TRANSMISSION_OUTCOME_UNKNOWN`, latches error, requires close/reopen, preserves exact evidence and causes the broker write state to re-lock |
-| P0 | Concurrent low-level serial sends could overlap RTS/echo/write/drain handling | Public serial transport serializes transmit attempts internally |
-| P0 | RTU/ASCII one-shot Master accepted Unit IDs 248..255 | Serial Master enforces 0..247 while TCP/transport-neutral codecs retain byte-wide Unit IDs |
-| P0 | FC23 could be treated as a no-response Unit-0 serial broadcast despite containing a read | Unit-0 serial broadcast is restricted to FC05/06/15/16 and unsupported broadcasts are rejected before transmit |
-| P0 | ASCII virtual Slave lacked the RTU Unit-0 broadcast semantics | RTU and ASCII share the same supported serial broadcast path |
-| P1 | FC22 was planned but absent from shared codec/Master/Slave/write-safety layers | Added one shared FC22 codec and end-to-end Master/Slave/read-back support |
-| P1 | Failed/timeout writes could lose transmitted request evidence | Master/transport errors retain request evidence; enriched write audit consumes it and indeterminate sends are separately marked |
-| P1 | Simulator `seed()` could silently wrap invalid typed-array values | Seed operations use strict bit/register value validation while still allowing initialization of read-only areas |
-| P1 | CI syntax gates explicitly covered older files but not the whole v8 source tree | Added recursive v8 syntax coverage and expanded it to v8 launcher/browser surfaces |
-| P1 | v8 had no executable safe v7-to-v8 persistence boundary | Added schema v3 validation/migration/source backup/reporting and a separate v8 store |
-| P1 | Connection Center lacked a vertical browser/runtime integration | Added v8 shell, runtime/profile API, WebSocket updates, safe UI preferences and browser acceptance coverage |
-| P1 | Discovery risked becoming a second active-Master path | Discovery has dedicated read-only ownership; writes cannot be armed and serial scans require two explicit safety confirmations |
-| P1 | Browser acceptance leaked Simulator-owned state into later Test Center/Traffic specs | Test Center browser cleanup now tears down Simulator runtimes first, disconnects only actual Test Center ownership and performs after-each cleanup; the full browser workflow is green |
-| P2 | README/version state made v8 commits look inconsistent with a v7 package | Documentation separates stable v7 release surfaces from the in-progress v8 workbench |
+## Windows / SQLite hardening
 
-## Safety invariants currently enforced
+The SQLite historian is activated lazily so product-server tests that do not configure historian streams do not open unnecessary database handles. Windows Node 22/24 CI isolates SQLite historian tests deterministically instead of skipping them or forcing process termination. CI also uses pull-request concurrency so obsolete heads do not block the current release candidate indefinitely.
 
-- Analyzer/replay ownership has no transmit intent.
-- Discovery is read-only; proxy is forward-only.
-- Master/Test write intent requires a per-connection live write latch.
-- Reopened connections return to `LOCKED` regardless of prior ownership state.
-- Serial resource ownership is exclusive through the Connection Broker.
-- Serial Unit 0 is only treated as broadcast for explicitly supported write functions.
-- Public serial transmit calls are internally serialized across direction control, echo handling, driver write and drain.
-- If a serial driver write has been attempted but completion cannot be proven, the result is explicitly indeterminate, the transport enters error, writes are re-locked and close/reopen is required before further traffic.
-- Every confirmed low-level write/raw/test transmission has bounded append-only process-lifetime evidence containing timestamp, connection, owner, transport, intent and exact transmitted HEX; indeterminate writes carry `outcome: unknown` evidence.
-- The richer write audit records user/session, address/quantity, requested values, old value when available, response, verification and result.
-- Persisted v8 connection profiles contain configuration only and normalize to manual/inactive/unowned/transmit-disabled/write-locked/fault-disabled state.
-- UI mode/write labels are driven by live Connection Broker state rather than persisted flags.
-- Discovery serial scans cannot start unless maintenance-window and exclusive-bus access are both explicitly confirmed.
-- Simulator fault injection is a separate LAB capability and is disabled by default.
-- Test Center LAB/raw and validated-write latches are separate and disabled by default.
+## Release-candidate gate
 
-## Remaining product work
+PR #31 may be merged only when its **exact current head** passes all configured gates:
 
-The major remaining software/release work after WP-14 is:
+- version consistency
+- lint and recursive v8 syntax checks
+- runtime dependency audit
+- Linux + Windows Node 20/22/24 tests
+- Windows SQLite historian isolation coverage
+- smoke and acceptance suites
+- Chromium browser E2E
 
-- Reconcile `V8_MASTER_TODO.md` checkboxes against the capabilities already proven by WP-01 through WP-14/WP-12B; the roadmap currently understates completion.
-- Complete remaining Master professional workflow polish where not yet covered: richer representation/stale/change states, batch/order workflow, encoded write preview, templates and cross-workspace shortcuts.
-- Add **RTU/ASCII tunnelling** modes that remain explicitly distinct from native Modbus TCP/UDP.
-- Add **Modbus/TCP Security/TLS** client/server, certificate/key validation, trust configuration, mutual TLS and fail-closed diagnostics.
-- Finish IPv6 qualification across all applicable UI/profile/runtime paths, not merely low-level transport support.
-- Add capture-to-digital-twin workflows and remaining advanced simulator/test tooling.
-- Build automation API/CLI/SDK surfaces and HMI Builder workspaces.
-- Complete accessibility, keyboard, performance and security hardening across the final v8 product shell.
-- Complete combined long-duration soak, third-party interoperability matrix and real-device/site acceptance.
-- Promote v8 to the default browser/desktop runtime and product version only after release gates pass.
+The release branch is intentionally not described as merged/released until those checks complete successfully.
 
-## Release interpretation
+## External acceptance still required
 
-`main` can remain green while v8 is incomplete because stable v7 stays the default product and v8 modules are introduced behind a separate launcher/feature flags. Each completed v8 package must pass its applicable unit/integration/browser gates before being counted complete.
+These are not missing software implementations; they require real equipment or field time:
 
-A v8 release candidate should be declared only after applicable P0/P1 items in `V8_MASTER_TODO.md` are reconciled, the default entry point moves to v8, migration is tested, browser/desktop acceptance passes, and no open P0 remains. Real RS485 electrical/site qualification remains an external field gate even after software release-candidate status.
+- real RS485 transceiver/termination/noise/timing qualification
+- representative third-party PLC/inverter/meter interoperability
+- TLS interoperability against representative external endpoints/certificates
+- long-duration site soak under actual traffic/load
+- final Windows installer execution on clean target machines
+
+`docs/SITE_ACCEPTANCE.md` remains the field evidence procedure for those gates.
