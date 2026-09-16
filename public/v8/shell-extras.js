@@ -22,7 +22,7 @@
   document.head.appendChild(trafficRegisterScript);
 
   const testCenterScript = document.createElement('script');
-  testCenterScript.src = '/v8/test-center.js';
+  testCenterScript.src = '/v8/diagnostics-workspace.js';
   testCenterScript.defer = true;
   document.head.appendChild(testCenterScript);
 
