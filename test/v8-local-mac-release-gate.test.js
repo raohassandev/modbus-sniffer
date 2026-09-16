@@ -26,6 +26,7 @@ test('v8 local Mac release gate shell syntax is valid', { skip: process.platform
 test('v8 local Mac release gate is the npm-exposed deterministic exact-head gate', () => {
   assert.equal(pkg.scripts['release:gate:mac'], 'bash scripts/release-gate-mac.sh');
   includesAll(script, [
+    /export CI=true/,
     /uname -s/,
     /Darwin/,
     /git rev-parse HEAD/,
@@ -56,8 +57,9 @@ test('v8 local Mac release gate requires Node 20, 22 and 24 full validation', ()
   ]);
 });
 
-test('v8 local Mac release gate retains release quality, soak and browser evidence', () => {
+test('v8 local Mac release gate retains release quality, bounded soak and browser evidence', () => {
   includesAll(script, [
+    /RELEASE_GATE_SOAK_SECONDS must be an integer from 1 to 86400/,
     /npm run lint/,
     /npm run benchmark:v8/,
     /benchmark-v7\.js/,
