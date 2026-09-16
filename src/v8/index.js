@@ -54,5 +54,6 @@ module.exports = Object.freeze({
   ...require('./history/chartService'),
   ...require('./history/loggerService'),
   ...require('./history/sqliteHistorian'),
+  ...require('./automation/workbenchClient'),
   ...require('./project'),
 });
