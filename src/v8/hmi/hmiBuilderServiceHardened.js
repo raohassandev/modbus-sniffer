@@ -107,6 +107,15 @@ class HmiBuilderService extends base.HmiBuilderService {
     return super.saveTemplate(prepareTemplateInput(input), projectId);
   }
 
+  async writeWidget(screenId, widgetId, { value, confirmation = null } = {}, projectId = null) {
+    const screen = this.get(screenId, projectId);
+    const widget = screen.widgets.find((entry) => entry.widgetId === widgetId);
+    if (widget?.write?.functionCode === 16 && confirmation?.bulk !== true) {
+      throw new base.HmiBuilderError('BULK_CONFIRMATION_REQUIRED', 'FC16 HMI write requires an explicit bulk confirmation', { screenId, widgetId });
+    }
+    return super.writeWidget(screenId, widgetId, { value, confirmation }, projectId);
+  }
+
   _emit(type, details) {
     const ownerMode = ['hmi.widget-write', 'hmi.recipe-triggered'].includes(type) ? 'master' : null;
     this.emit('event', createWorkbenchEvent({ type, source: 'hmi-builder', ownerMode, details }));
