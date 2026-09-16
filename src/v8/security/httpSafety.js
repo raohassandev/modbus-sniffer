@@ -37,6 +37,18 @@ function sameOriginMutationGuard(req, res, next) {
   return next();
 }
 
+function webSocketOriginAllowed(request) {
+  const rawOrigin = request?.headers?.origin;
+  // Non-browser local SDK/automation clients generally do not send Origin.
+  if (rawOrigin == null || rawOrigin === '') return true;
+  const supplied = originOf(rawOrigin);
+  if (!supplied) return false;
+  const host = String(request?.headers?.host || '').trim();
+  if (!host) return false;
+  const protocol = request?.socket?.encrypted ? 'https' : 'http';
+  return supplied === `${protocol}://${host}`;
+}
+
 function createMutationRateLimiter({ windowMs = 60000, max = 240, maxEntries = 10000 } = {}) {
   if (!Number.isInteger(windowMs) || windowMs < 1000) throw new TypeError('windowMs must be >= 1000');
   if (!Number.isInteger(max) || max < 1) throw new TypeError('max must be positive');
@@ -80,7 +92,10 @@ function createBodyLengthGuard({ maxBytes = 2 * 1024 * 1024 } = {}) {
 module.exports = {
   MUTATION_METHODS,
   HttpSafetyError,
+  requestOrigin,
+  originOf,
   sameOriginMutationGuard,
+  webSocketOriginAllowed,
   createMutationRateLimiter,
   createBodyLengthGuard,
 };
