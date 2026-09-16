@@ -74,8 +74,14 @@ class ReportBundleService {
     let master = null;
     let writeAudit = [];
     let historianTags = [];
-    try { master = this.masterWorkspace?.snapshot(projectId) || null; } catch { master = null; }
-    try { writeAudit = this.masterWorkspace?.audit({ limit: 10000 }) || []; } catch { writeAudit = []; }
+
+    // Master sessions and the unified Traffic timeline are live-runtime evidence.
+    // They belong to the active project only; never attach them to an inactive
+    // project's handover merely because the same service instance is running.
+    if (active) {
+      try { master = this.masterWorkspace?.snapshot(projectId) || null; } catch { master = null; }
+      try { writeAudit = this.masterWorkspace?.audit({ limit: 10000 }) || []; } catch { writeAudit = []; }
+    }
     try { historianTags = this.history?.historianTags(projectId) || []; } catch { historianTags = []; }
     const traffic = active && this.timeline ? this.timeline.query({ limit: 5000 }) : [];
     return { generatedAt: new Date().toISOString(), schemaVersion: this.store.exportAll().schemaVersion, project, active, master, writeAudit, historianTags, traffic };
@@ -87,7 +93,7 @@ class ReportBundleService {
     const devices = objectRows(model.project.devices, 'deviceKey');
     const registers = objectRows(model.project.registers, 'registerKey');
     files.set('project/project.json', Buffer.from(json(model.project)));
-    files.set('reports/master-summary.json', Buffer.from(json(model.master || { available: false })));
+    files.set('reports/master-summary.json', Buffer.from(json(model.master || { available: false, reason: model.active ? 'runtime unavailable' : 'project is not active' })));
     files.set('reports/write-audit.json', Buffer.from(json(model.writeAudit)));
     files.set('reports/write-audit.csv', Buffer.from(autoCsv(model.writeAudit, ['timestamp','auditId','connectionId','unitId','functionCode','address','quantity','result','requestRawHex','responseRawHex'])));
     files.set('reports/traffic.json', Buffer.from(json(model.traffic)));
