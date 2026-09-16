@@ -3,6 +3,7 @@ logs/
 data/
 desktop/node_modules/
 desktop/dist/
+.release-evidence/
 *.csv
 *.log
 *.mbcap
