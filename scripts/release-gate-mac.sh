@@ -13,10 +13,6 @@ if ! command -v git >/dev/null 2>&1; then
   echo "ERROR: git is required." >&2
   exit 2
 fi
-if ! command -v npm >/dev/null 2>&1; then
-  echo "ERROR: npm is required." >&2
-  exit 2
-fi
 
 START_HEAD="$(git rev-parse HEAD)"
 START_BRANCH="$(git branch --show-current 2>/dev/null || true)"
@@ -77,7 +73,8 @@ if [ "$ALLOW_DIRTY" != "1" ] && [ -n "$(git status --porcelain)" ]; then
   exit 3
 fi
 
-# Load common Node version managers when available.
+# Load common Node version managers when available. The gate never silently
+# skips a requested Node major; unavailable majors fail explicitly.
 if [ -n "${NVM_DIR:-}" ] && [ -s "$NVM_DIR/nvm.sh" ]; then
   # shellcheck disable=SC1090
   . "$NVM_DIR/nvm.sh"
@@ -91,6 +88,10 @@ if command -v fnm >/dev/null 2>&1; then
 fi
 
 node_major() {
+  if ! command -v node >/dev/null 2>&1; then
+    echo 0
+    return
+  fi
   node -p "Number(process.versions.node.split('.')[0])" 2>/dev/null || echo 0
 }
 
@@ -99,15 +100,12 @@ use_node() {
   CURRENT_STEP="select-node-$target"
 
   if command -v node >/dev/null 2>&1 && [ "$(node_major)" = "$target" ]; then
-    echo "Using existing Node $(node --version)"
-    return 0
-  fi
-
-  if type nvm >/dev/null 2>&1; then
-    nvm install "$target" --no-progress
+    :
+  elif type nvm >/dev/null 2>&1; then
+    nvm install "$target"
     nvm use "$target"
   elif command -v fnm >/dev/null 2>&1; then
-    fnm install "$target" --skip-shell
+    fnm install "$target"
     fnm use "$target"
   else
     echo "ERROR: Node $target is required but is unavailable. Install nvm or fnm, or make Node $target current before running the gate." >&2
@@ -116,6 +114,10 @@ use_node() {
 
   if [ "$(node_major)" != "$target" ]; then
     echo "ERROR: requested Node $target but active version is $(node --version 2>/dev/null || echo unavailable)." >&2
+    return 4
+  fi
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "ERROR: npm is unavailable under Node $target." >&2
     return 4
   fi
   echo "Using Node $(node --version), npm $(npm --version)"
