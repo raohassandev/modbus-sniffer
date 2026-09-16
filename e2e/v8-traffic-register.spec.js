@@ -102,9 +102,11 @@ test.describe('v8 Unified Traffic and Register Lab', () => {
     await expect(traffic.getByRole('heading', { name: 'Unified Traffic' })).toBeVisible();
     await traffic.locator('#trafficConnection').fill('gate5-client');
     await traffic.locator('#trafficText').fill('traffic.');
-    await expect.poll(async () => traffic.locator('#trafficWindow .traffic-row').count()).toBeGreaterThanOrEqual(2);
-    const firstRow = traffic.locator('#trafficWindow .traffic-row').first();
-    await firstRow.click();
+    const filteredRows = traffic.locator('#trafficWindow .traffic-row');
+    await expect.poll(async () => filteredRows.count()).toBeGreaterThanOrEqual(2);
+    await expect(filteredRows.first()).toContainText('gate5-client');
+    await expect(filteredRows.first()).toContainText('traffic.');
+    await filteredRows.first().click();
     await expect(traffic.locator('#trafficSelectedLabel')).toContainText('traffic.');
     await expect(traffic.locator('#trafficInspectorBody')).toContainText('gate5-client');
     await traffic.locator('#trafficWindow .bookmark-button').first().click();
@@ -144,6 +146,7 @@ test.describe('v8 Unified Traffic and Register Lab', () => {
     const traffic = page.locator('#workspace-traffic');
     await traffic.locator('#trafficConnection').fill('traffic-e2e');
     await expect.poll(async () => traffic.locator('#trafficWindow .traffic-row').count()).toBeGreaterThan(0);
+    await expect(traffic.locator('#trafficWindow .traffic-row').first()).toContainText('traffic-e2e');
     await traffic.locator('#trafficText').fill('connection');
     await expect.poll(async () => traffic.locator('#trafficWindow .traffic-row').count()).toBeGreaterThan(0);
     await traffic.locator('#trafficBookmarksOnly').check();
