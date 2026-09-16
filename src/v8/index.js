@@ -36,5 +36,8 @@ module.exports = Object.freeze({
   ...require('./slave/dynamicValueEngine'),
   ...require('./slave/simulatorWorkspaceService'),
   ...require('./slave/simulatorRoutes'),
+  ...require('./traffic/trafficTimelineService'),
+  ...require('./traffic/registerLabService'),
+  ...require('./traffic/trafficRoutes'),
   ...require('./project'),
 });
