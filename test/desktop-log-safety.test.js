@@ -16,6 +16,17 @@ test('desktop log sanitizer redacts JSON and key=value credentials', () => {
   assert.match(safe, /host=127\.0\.0\.1/);
 });
 
+test('desktop log sanitizer redacts Authorization and Cookie headers', () => {
+  const input = 'Authorization: Bearer super-token\nCookie: session=abc123; csrf=def456\nSet-Cookie: refresh=xyz789; HttpOnly';
+  const safe = redactLogSecrets(input);
+  assert.equal(safe.includes('super-token'), false);
+  assert.equal(safe.includes('abc123'), false);
+  assert.equal(safe.includes('def456'), false);
+  assert.equal(safe.includes('xyz789'), false);
+  assert.match(safe, /Authorization: \[REDACTED\]/);
+  assert.match(safe, /Cookie: \[REDACTED\]/);
+});
+
 test('desktop log sanitizer removes accidental PEM private-key blocks', () => {
   const input = 'before -----BEGIN PRIVATE KEY-----\nABCDEF123456\n-----END PRIVATE KEY----- after';
   const safe = redactLogSecrets(input);
