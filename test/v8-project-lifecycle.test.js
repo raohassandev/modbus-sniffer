@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { V8ProjectStore, ProjectLifecycleService, assertProjectSwitchSafe } = require('../src/v8/project');
+const { V8ProjectStore, ProjectLifecycleService, assertProjectSwitchSafe, syncActivatedProject } = require('../src/v8/project');
 
 function setup(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modbus-v8-project-lifecycle-'));
@@ -76,4 +76,11 @@ test('project activation safety refuses switching while any runtime connection i
     (error) => error.code === 'CONNECTION_ACTIVE' && error.details.connectionId === 'grid',
   );
   assert.doesNotThrow(() => assertProjectSwitchSafe({ listConnections: () => [{ connectionId: 'grid', owner: null, state: 'closed' }] }));
+});
+
+test('activated lifecycle projects immediately reconcile Connection Center definitions', () => {
+  const calls = [];
+  syncActivatedProject({ sync(projectId) { calls.push(projectId); } }, 'project-new');
+  assert.deepEqual(calls, ['project-new']);
+  assert.doesNotThrow(() => syncActivatedProject(null, 'project-new'));
 });
