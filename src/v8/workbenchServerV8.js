@@ -2,12 +2,13 @@
 
 const { WebSocket } = require('ws');
 const { startV8WorkbenchServer } = require('./workbenchServer');
+const { ConnectionCenterServiceV8 } = require('./connectionCenterServiceV8');
 const { assertFeature } = require('./featureFlags');
 const { MasterWorkspaceService } = require('./master/masterWorkspaceServiceHardened');
 const { mountMasterWorkspaceRoutes } = require('./master/masterWorkspaceRoutes');
 const { DiscoveryScanService } = require('./discovery/discoveryScanService');
 const { mountDiscoveryRoutes } = require('./discovery/discoveryRoutes');
-const { SimulatorWorkspaceService } = require('./slave/simulatorWorkspaceService');
+const { SimulatorWorkspaceService } = require('./slave/simulatorWorkspaceServiceV8');
 const { mountSimulatorRoutes } = require('./slave/simulatorRoutes');
 const { TrafficTimelineService } = require('./traffic/trafficTimelineService');
 const { RegisterLabService } = require('./traffic/registerLabService');
@@ -16,7 +17,8 @@ const { TestCenterWorkspaceService } = require('./testCenter/testCenterWorkspace
 const { mountTestCenterRoutes } = require('./testCenter/testCenterRoutes');
 
 async function startV8ProductServer(options = {}) {
-  const web = await startV8WorkbenchServer(options);
+  const connectionCenter = options.connectionCenter || new ConnectionCenterServiceV8({ store: options.store, broker: options.broker });
+  const web = await startV8WorkbenchServer({ ...options, connectionCenter });
   const masterWorkspace = new MasterWorkspaceService({
     store: options.store,
     broker: options.broker,

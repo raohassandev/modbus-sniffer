@@ -9,6 +9,7 @@
     activeWorkspace: 'connections',
     socket: null,
     reconnectTimer: null,
+    realtimeRefreshTimer: null,
     serialPorts: [],
     networkInterfaces: [],
   };
@@ -42,9 +43,8 @@
     setTimeout(() => node.remove(), 3500);
   }
 
-  function setMessage(message = '') {
-    $('#connectionMessage').textContent = message;
-  }
+  function setMessage(message = '') { $('#connectionMessage').textContent = message; }
+  function capitalize(value) { return String(value || '').charAt(0).toUpperCase() + String(value || '').slice(1); }
 
   function runtimeStateClass(runtime) {
     if (runtime?.state === 'open') return 'active';
@@ -53,21 +53,31 @@
     return 'neutral';
   }
 
-  function writesClass(runtime) {
-    return runtime?.writeLock === 'ENABLED' ? 'danger' : 'safe';
+  function writesClass(runtime) { return runtime?.writeLock === 'ENABLED' ? 'danger' : 'safe'; }
+
+  function transportOptions(profile, group) {
+    const direct = profile?.[group];
+    if (direct && typeof direct === 'object') return direct;
+    return profile?.metadata?.transportOptions?.[group] || {};
   }
+
+  function isNetworkKind(kind) { return kind !== 'virtual' && !kind.startsWith('serial-'); }
+  function isClientKind(kind) { return kind.endsWith('-client'); }
+  function isTlsKind(kind) { return kind === 'tls-client' || kind === 'tls-server'; }
 
   function endpointText(profile) {
     const kind = String(profile?.transportKind || '').toLowerCase();
-    if (kind.startsWith('serial')) {
+    if (kind.startsWith('serial-')) {
       const serial = profile.serial || {};
       return `${serial.path || profile.endpoint || '—'} · ${serial.baudRate || 9600} · ${String(serial.parity || 'none').toUpperCase()}`;
     }
-    if (kind.startsWith('tcp')) {
-      const tcp = profile.tcp || {};
-      return `${tcp.host || profile.endpoint || '—'}:${tcp.port ?? 502}`;
-    }
-    return profile.endpoint || 'virtual';
+    if (kind === 'virtual') return profile.endpoint || 'virtual';
+    let options = profile.tcp || {};
+    if (kind.startsWith('udp-') || kind.includes('-udp-')) options = { ...transportOptions(profile, 'udp'), ...transportOptions(profile, 'tunnel') };
+    else if (kind.startsWith('tls-')) options = transportOptions(profile, 'tls');
+    else if (kind.includes('-tcp-')) options = { ...(profile.tcp || {}), ...transportOptions(profile, 'tunnel') };
+    const defaultPort = kind.startsWith('tls-') ? 802 : 502;
+    return `${options.host || profile.endpoint || '—'}:${options.port ?? defaultPort}`;
   }
 
   function transportLabel(profile) {
@@ -75,11 +85,34 @@
     const labels = {
       'serial-rtu': 'Serial RTU',
       'serial-ascii': 'Serial ASCII',
-      'tcp-client': 'TCP Client',
-      'tcp-server': 'TCP Server',
+      'tcp-client': 'Modbus TCP Client',
+      'tcp-server': 'Modbus TCP Server',
+      'udp-client': 'Modbus UDP Client',
+      'udp-server': 'Modbus UDP Server',
+      'tls-client': 'Modbus TCP Security / TLS Client',
+      'tls-server': 'Modbus TCP Security / TLS Server',
+      'rtu-tcp-client': 'RTU over TCP Client',
+      'rtu-tcp-server': 'RTU over TCP Server',
+      'ascii-tcp-client': 'ASCII over TCP Client',
+      'ascii-tcp-server': 'ASCII over TCP Server',
+      'rtu-udp-client': 'RTU over UDP Client',
+      'rtu-udp-server': 'RTU over UDP Server',
+      'ascii-udp-client': 'ASCII over UDP Client',
+      'ascii-udp-server': 'ASCII over UDP Server',
       virtual: 'Virtual',
     };
     return labels[kind] || kind || 'Unknown';
+  }
+
+  function actionButton(label, action, connectionId, kind, disabled = false) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `button small ${kind}`;
+    button.dataset.action = action;
+    button.dataset.connectionId = connectionId;
+    button.textContent = label;
+    button.disabled = disabled;
+    return button;
   }
 
   function connectionRow(item) {
@@ -100,7 +133,6 @@
 
     const transportCell = document.createElement('td');
     transportCell.textContent = transportLabel(profile);
-
     const endpointCell = document.createElement('td');
     endpointCell.className = 'mono';
     endpointCell.textContent = endpointText(profile);
@@ -135,20 +167,8 @@
       actionButton('Delete', 'delete', profile.connectionId, 'destructive', isOpen),
     );
     actions.appendChild(wrap);
-
     tr.append(profileCell, transportCell, endpointCell, runtimeCell, ownerCell, writesCell, actions);
     return tr;
-  }
-
-  function actionButton(label, action, connectionId, kind, disabled = false) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `button small ${kind}`;
-    button.dataset.action = action;
-    button.dataset.connectionId = connectionId;
-    button.textContent = label;
-    button.disabled = disabled;
-    return button;
   }
 
   function renderConnections() {
@@ -156,10 +176,7 @@
     const visible = state.connections.filter((item) => {
       if (!filter) return true;
       return [item.profile.name, item.profile.connectionId, item.profile.transportKind, endpointText(item.profile)]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(filter);
+        .filter(Boolean).join(' ').toLowerCase().includes(filter);
     });
     const body = $('#connectionsBody');
     body.replaceChildren(...visible.map(connectionRow));
@@ -167,13 +184,13 @@
     $('.table-wrap').hidden = state.connections.length === 0;
 
     const open = state.connections.filter((item) => item.runtime?.state === 'open');
-    const serial = state.connections.filter((item) => String(item.profile.transportKind).startsWith('serial'));
-    const tcp = state.connections.filter((item) => String(item.profile.transportKind).startsWith('tcp'));
+    const serial = state.connections.filter((item) => String(item.profile.transportKind).startsWith('serial-'));
+    const network = state.connections.filter((item) => isNetworkKind(String(item.profile.transportKind || '').toLowerCase()));
     const writes = state.connections.filter((item) => item.runtime?.writeLock === 'ENABLED');
     $('#metricProfiles').textContent = String(state.connections.length);
     $('#metricOpen').textContent = String(open.length);
     $('#metricSerial').textContent = String(serial.length);
-    $('#metricTcp').textContent = String(tcp.length);
+    $('#metricTcp').textContent = String(network.length);
     $('#metricWrites').textContent = String(writes.length);
 
     const firstOpen = open[0];
@@ -183,7 +200,6 @@
     $('#activeModeChip').className = `status-chip ${firstOpen ? 'active' : 'neutral'}`;
     $('#writeStateChip').textContent = firstOpen?.runtime?.writeLock === 'ENABLED' ? 'WRITES ENABLED' : 'WRITES LOCKED';
     $('#writeStateChip').className = `status-chip ${firstOpen?.runtime?.writeLock === 'ENABLED' ? 'danger' : 'safe'}`;
-
     renderInspector();
   }
 
@@ -218,7 +234,6 @@
       details.appendChild(row);
     }
     identity.appendChild(details);
-
     const diagnostics = document.createElement('div');
     diagnostics.className = 'inspector-block';
     diagnostics.innerHTML = '<h3>Diagnostics</h3>';
@@ -253,11 +268,7 @@
     $('#densityButton').textContent = `Density: ${capitalize(density)}`;
     $('#settingsTheme').value = theme;
     $('#settingsDensity').value = density;
-    if (ui.layout?.inspectorCollapsed) $('#contextInspector').classList.add('collapsed');
-  }
-
-  function capitalize(value) {
-    return String(value || '').charAt(0).toUpperCase() + String(value || '').slice(1);
+    $('#contextInspector').classList.toggle('collapsed', Boolean(ui.layout?.inspectorCollapsed));
   }
 
   async function persistPreferences(patch) {
@@ -268,16 +279,10 @@
       ...current,
       theme: document.documentElement.dataset.theme || 'system',
       density: document.documentElement.dataset.density || 'comfortable',
-      layout: {
-        ...(current.layout || {}),
-        inspectorCollapsed: $('#contextInspector').classList.contains('collapsed'),
-      },
+      layout: { ...(current.layout || {}), inspectorCollapsed: $('#contextInspector').classList.contains('collapsed') },
       ...patch,
     };
-    const response = await api(`/api/v8/projects/${encodeURIComponent(projectId)}/ui`, {
-      method: 'PATCH',
-      body: JSON.stringify(next),
-    });
+    const response = await api(`/api/v8/projects/${encodeURIComponent(projectId)}/ui`, { method: 'PATCH', body: JSON.stringify(next) });
     if (state.status?.activeProject) state.status.activeProject.ui = response.ui;
     applyPreferences(response.ui);
   }
@@ -285,9 +290,7 @@
   async function refresh({ quiet = false } = {}) {
     try {
       const [status, projects, connections] = await Promise.all([
-        api('/api/v8/status'),
-        api('/api/v8/projects'),
-        api('/api/v8/connections'),
+        api('/api/v8/status'), api('/api/v8/projects'), api('/api/v8/connections'),
       ]);
       state.status = status;
       state.projects = projects.projects || [];
@@ -321,34 +324,32 @@
 
   function workspaceLabel(name) {
     const labels = {
-      master: 'Master Workstation',
-      simulator: 'Slave / Server Simulator',
-      traffic: 'Traffic',
-      registerLab: 'Register Lab',
-      testCenter: 'Test Center',
-      charts: 'Charts & Logger',
-      historian: 'Historian',
-      discovery: 'Discovery',
-      automation: 'Automation',
-      hmi: 'HMI Builder',
+      master: 'Master Workstation', simulator: 'Slave / Server Simulator', traffic: 'Traffic', registerLab: 'Register Lab',
+      testCenter: 'Test Center', charts: 'Charts & Logger', historian: 'Historian', discovery: 'Discovery', automation: 'Automation', hmi: 'HMI Builder',
     };
     return labels[name] || capitalize(name);
   }
 
   function updateTransportFields() {
     const kind = $('#connectionTransport').value;
-    const serial = kind.startsWith('serial');
-    const tcp = kind.startsWith('tcp');
+    const serial = kind.startsWith('serial-');
+    const network = isNetworkKind(kind);
+    const client = network && isClientKind(kind);
+    const tls = isTlsKind(kind);
     $$('.serial-field').forEach((node) => node.classList.toggle('hidden', !serial));
-    $$('.tcp-field').forEach((node) => node.classList.toggle('hidden', !tcp));
-    $$('.tcp-client-field').forEach((node) => node.classList.toggle('hidden', kind !== 'tcp-client'));
-    if (kind === 'tcp-server' && $('#tcpHost').value === '') $('#tcpHost').value = '127.0.0.1';
+    $$('.network-field').forEach((node) => node.classList.toggle('hidden', !network));
+    $$('.network-client-field').forEach((node) => node.classList.toggle('hidden', !client));
+    $$('.tls-field').forEach((node) => node.classList.toggle('hidden', !tls));
+    $$('.tls-client-field').forEach((node) => node.classList.toggle('hidden', kind !== 'tls-client'));
+    $$('.tls-server-field').forEach((node) => node.classList.toggle('hidden', kind !== 'tls-server'));
+    if (network && !client && $('#tcpHost').value === '') $('#tcpHost').value = '127.0.0.1';
+    $('#tcpPort').value = kind.startsWith('tls-') ? '802' : ($('#tcpPort').dataset.lastKind === 'tls' ? '502' : $('#tcpPort').value || '502');
+    $('#tcpPort').dataset.lastKind = kind.startsWith('tls-') ? 'tls' : 'other';
   }
 
   async function loadSystemOptions() {
     const [portsResult, interfacesResult] = await Promise.allSettled([
-      api('/api/v8/system/serial-ports'),
-      api('/api/v8/system/network-interfaces'),
+      api('/api/v8/system/serial-ports'), api('/api/v8/system/network-interfaces'),
     ]);
     state.serialPorts = portsResult.status === 'fulfilled' ? portsResult.value.ports || [] : [];
     state.networkInterfaces = interfacesResult.status === 'fulfilled' ? interfacesResult.value.interfaces || [] : [];
@@ -390,10 +391,44 @@
     $('#serialParity').value = 'none';
     $('#tcpHost').value = '127.0.0.1';
     $('#tcpPort').value = '502';
+    $('#tcpPort').dataset.lastKind = 'other';
+    $('#tlsVerifyServer').checked = true;
+    $('#tlsRequestClient').checked = false;
+    $('#tlsVerifyClient').checked = false;
     $('#dialogError').textContent = '';
     updateTransportFields();
     await loadSystemOptions();
     $('#connectionDialog').showModal();
+  }
+
+  function networkPayload(kind, host, port) {
+    const localAddress = $('#tcpLocalAddress').value || null;
+    if (kind === 'tcp-client' || kind === 'tcp-server') {
+      return { tcp: { host, port, ...(kind === 'tcp-client' && localAddress ? { localAddress } : {}) } };
+    }
+    if (kind === 'udp-client' || kind === 'udp-server') {
+      return { udp: { host, port, ...(kind === 'udp-client' && localAddress ? { localAddress } : {}) } };
+    }
+    if (kind === 'tls-client' || kind === 'tls-server') {
+      return {
+        tls: {
+          host,
+          port,
+          ...(kind === 'tls-client' && localAddress ? { localAddress } : {}),
+          caPath: $('#tlsCaPath').value.trim() || null,
+          certPath: $('#tlsCertPath').value.trim() || null,
+          keyPath: $('#tlsKeyPath').value.trim() || null,
+          servername: kind === 'tls-client' ? ($('#tlsServername').value.trim() || null) : null,
+          rejectUnauthorized: kind === 'tls-client' ? $('#tlsVerifyServer').checked : $('#tlsVerifyClient').checked,
+          requestCert: kind === 'tls-server' ? $('#tlsRequestClient').checked : false,
+          minVersion: 'TLSv1.2',
+        },
+      };
+    }
+    if (kind.includes('-tcp-') || kind.includes('-udp-')) {
+      return { tunnel: { host, port, ...(localAddress && isClientKind(kind) ? { localAddress } : {}) } };
+    }
+    return {};
   }
 
   function connectionPayload() {
@@ -401,25 +436,15 @@
     const name = $('#connectionName').value.trim();
     const transportKind = $('#connectionTransport').value;
     const payload = { connectionId, name: name || connectionId, transportKind, transport: transportKind.toUpperCase() };
-    if (transportKind.startsWith('serial')) {
+    if (transportKind.startsWith('serial-')) {
       const path = $('#serialPath').value.trim();
       payload.endpoint = path;
-      payload.serial = {
-        path,
-        baudRate: Number($('#serialBaud').value),
-        dataBits: 8,
-        stopBits: 1,
-        parity: $('#serialParity').value,
-      };
-    } else if (transportKind.startsWith('tcp')) {
+      payload.serial = { path, baudRate: Number($('#serialBaud').value), dataBits: 8, stopBits: 1, parity: $('#serialParity').value };
+    } else if (isNetworkKind(transportKind)) {
       const host = $('#tcpHost').value.trim();
       const port = Number($('#tcpPort').value);
       payload.endpoint = host;
-      payload.tcp = {
-        host,
-        port,
-        ...(transportKind === 'tcp-client' && $('#tcpLocalAddress').value ? { localAddress: $('#tcpLocalAddress').value } : {}),
-      };
+      Object.assign(payload, networkPayload(transportKind, host, port));
     } else {
       payload.endpoint = 'virtual';
     }
@@ -437,9 +462,7 @@
       await refresh({ quiet: true });
       state.selectedConnectionId = payload.connectionId;
       renderConnections();
-    } catch (error) {
-      $('#dialogError').textContent = error.message;
-    }
+    } catch (error) { $('#dialogError').textContent = error.message; }
   }
 
   async function runConnectionAction(action, connectionId) {
@@ -497,9 +520,7 @@
       link.remove();
       URL.revokeObjectURL(url);
       toast('Connection profiles exported');
-    } catch (error) {
-      toast(error.message, 'error');
-    }
+    } catch (error) { toast(error.message, 'error'); }
   }
 
   async function importProfiles(file) {
@@ -596,9 +617,7 @@
       try {
         await persistPreferences({});
         toast('Workspace preferences saved');
-      } catch (error) {
-        toast(error.message, 'error');
-      }
+      } catch (error) { toast(error.message, 'error'); }
     });
 
     $('#toggleInspector').addEventListener('click', async () => {

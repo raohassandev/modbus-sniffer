@@ -12,6 +12,19 @@ function clampLimit(value, fallback = 200) {
   return Math.min(numeric, 100000);
 }
 
+const MASTER_CLIENT_KINDS = Object.freeze(new Set([
+  'serial-rtu',
+  'serial-ascii',
+  'tcp-client',
+  'udp-client',
+  'tls-client',
+  'rtu-tcp-client',
+  'ascii-tcp-client',
+  'rtu-udp-client',
+  'ascii-udp-client',
+  'virtual',
+]));
+
 class MasterWorkspaceService extends BaseMasterWorkspaceService {
   saveJob(input, projectId = this.connectionCenter.activeProjectId()) {
     const project = this.store.getProject(projectId);
@@ -36,9 +49,6 @@ class MasterWorkspaceService extends BaseMasterWorkspaceService {
       throw new MasterWorkspaceError('JOB_BUSY', 'Cannot modify an in-flight poll job', { jobId: job.jobId, connectionId });
     }
 
-    // Preserve the user's polling order when editing an existing job. Persist first,
-    // but roll back immediately if the live scheduler unexpectedly rejects the same
-    // normalized configuration so disk/runtime cannot silently diverge.
     const previousJobs = jobs.map((entry) => ({ ...entry }));
     const nextJobs = jobs.map((entry) => ({ ...entry }));
     if (existingIndex >= 0) nextJobs[existingIndex] = job;
@@ -90,8 +100,20 @@ class MasterWorkspaceService extends BaseMasterWorkspaceService {
     rows.sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0) || String(a.auditId || '').localeCompare(String(b.auditId || '')));
     return Object.freeze(rows.slice(-safeLimit));
   }
+
+  _isMasterEligible(profile) {
+    return MASTER_CLIENT_KINDS.has(String(profile?.transportKind || '').toLowerCase());
+  }
+
+  _framing(profile) {
+    const kind = String(profile?.transportKind || '').toLowerCase();
+    if (['serial-ascii', 'ascii-tcp-client', 'ascii-udp-client'].includes(kind)) return 'ascii';
+    if (['tcp-client', 'udp-client', 'tls-client'].includes(kind)) return 'tcp';
+    return 'rtu';
+  }
 }
 
 module.exports = {
+  MASTER_CLIENT_KINDS,
   MasterWorkspaceService,
 };

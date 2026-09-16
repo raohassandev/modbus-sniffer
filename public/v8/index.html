@@ -19,10 +19,7 @@
         </div>
       </div>
       <div class="app-bar-center">
-        <label class="field-inline" for="projectSelect">
-          <span>Project</span>
-          <select id="projectSelect" aria-label="Active project"></select>
-        </label>
+        <label class="field-inline" for="projectSelect"><span>Project</span><select id="projectSelect" aria-label="Active project"></select></label>
         <div class="runtime-summary" aria-label="Active runtime state">
           <span id="activeConnectionChip" class="status-chip neutral">No active connection</span>
           <span id="activeModeChip" class="status-chip neutral">IDLE</span>
@@ -55,10 +52,7 @@
     <main class="workspace-host">
       <section id="workspace-connections" class="workspace active" aria-labelledby="connectionsTitle">
         <div class="workspace-header">
-          <div>
-            <h1 id="connectionsTitle">Connection Center</h1>
-            <p>Saved transport profiles and exact live ownership state.</p>
-          </div>
+          <div><h1 id="connectionsTitle">Connection Center</h1><p>Saved transport profiles and exact live ownership state.</p></div>
           <div class="toolbar">
             <button id="refreshConnections" class="button secondary" type="button">Refresh</button>
             <button id="importConnections" class="button secondary" type="button">Import</button>
@@ -72,47 +66,27 @@
           <div class="metric-card"><span class="metric-label">Profiles</span><strong id="metricProfiles">0</strong></div>
           <div class="metric-card"><span class="metric-label">Open</span><strong id="metricOpen">0</strong></div>
           <div class="metric-card"><span class="metric-label">Serial</span><strong id="metricSerial">0</strong></div>
-          <div class="metric-card"><span class="metric-label">TCP</span><strong id="metricTcp">0</strong></div>
+          <div class="metric-card"><span class="metric-label">Network</span><strong id="metricTcp">0</strong></div>
           <div class="metric-card"><span class="metric-label">Write enabled</span><strong id="metricWrites">0</strong></div>
         </div>
 
         <div class="panel table-panel">
-          <div class="table-toolbar">
-            <input id="connectionFilter" class="text-input" type="search" placeholder="Filter profiles…" aria-label="Filter connections">
-            <div id="connectionMessage" class="inline-message" role="status" aria-live="polite"></div>
-          </div>
+          <div class="table-toolbar"><input id="connectionFilter" class="text-input" type="search" placeholder="Filter profiles…" aria-label="Filter connections"><div id="connectionMessage" class="inline-message" role="status" aria-live="polite"></div></div>
           <div class="table-wrap">
             <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Profile</th>
-                  <th>Transport</th>
-                  <th>Endpoint</th>
-                  <th>Runtime</th>
-                  <th>Owner</th>
-                  <th>Writes</th>
-                  <th class="actions-column">Actions</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Profile</th><th>Transport</th><th>Endpoint</th><th>Runtime</th><th>Owner</th><th>Writes</th><th class="actions-column">Actions</th></tr></thead>
               <tbody id="connectionsBody"></tbody>
             </table>
           </div>
           <div id="connectionsEmpty" class="empty-state" hidden>
-            <div class="empty-icon">↔</div>
-            <h2>No connection profiles</h2>
-            <p>Create a serial, TCP client/server, or virtual profile to begin.</p>
+            <div class="empty-icon">↔</div><h2>No connection profiles</h2><p>Create a serial, TCP/UDP, tunnel, TLS, or virtual profile to begin.</p>
             <button class="button primary" data-action="new-connection" type="button">Create profile</button>
           </div>
         </div>
       </section>
 
       <section id="workspace-settings" class="workspace" aria-labelledby="settingsTitle">
-        <div class="workspace-header">
-          <div>
-            <h1 id="settingsTitle">Workspace Settings</h1>
-            <p>Safe visual preferences stored with the active project.</p>
-          </div>
-        </div>
+        <div class="workspace-header"><div><h1 id="settingsTitle">Workspace Settings</h1><p>Safe visual preferences stored with the active project.</p></div></div>
         <div class="settings-grid">
           <div class="panel settings-card">
             <h2>Appearance</h2>
@@ -135,16 +109,11 @@
 
     <aside id="contextInspector" class="context-inspector" aria-label="Context inspector">
       <div class="inspector-header"><strong>Inspector</strong><button id="toggleInspector" class="icon-button" type="button" aria-label="Collapse inspector">×</button></div>
-      <div id="inspectorContent" class="inspector-content">
-        <div class="empty-inspector">Select a connection to inspect its runtime details.</div>
-      </div>
+      <div id="inspectorContent" class="inspector-content"><div class="empty-inspector">Select a connection to inspect its runtime details.</div></div>
     </aside>
 
     <footer class="status-bar">
-      <div><span id="wsStatusDot" class="status-dot offline"></span><span id="wsStatus">Realtime disconnected</span></div>
-      <div id="statusProject">Project: —</div>
-      <div id="statusSchema">Schema: —</div>
-      <div id="statusLastUpdate">Updated: —</div>
+      <div><span id="wsStatusDot" class="status-dot offline"></span><span id="wsStatus">Realtime disconnected</span></div><div id="statusProject">Project: —</div><div id="statusSchema">Schema: —</div><div id="statusLastUpdate">Updated: —</div>
     </footer>
   </div>
 
@@ -154,13 +123,28 @@
       <div class="form-grid">
         <label class="field"><span>Connection ID</span><input id="connectionId" class="text-input" required maxlength="120" placeholder="plant-meter-1"></label>
         <label class="field"><span>Name</span><input id="connectionName" class="text-input" required maxlength="200" placeholder="Plant Meter 1"></label>
-        <label class="field"><span>Transport</span><select id="connectionTransport"><option value="serial-rtu">Serial RTU</option><option value="serial-ascii">Serial ASCII</option><option value="tcp-client">TCP Client</option><option value="tcp-server">TCP Server</option><option value="virtual">Virtual</option></select></label>
+        <label class="field"><span>Transport</span>
+          <select id="connectionTransport">
+            <optgroup label="Serial"><option value="serial-rtu">Serial RTU</option><option value="serial-ascii">Serial ASCII</option></optgroup>
+            <optgroup label="Native network"><option value="tcp-client">Modbus TCP Client</option><option value="tcp-server">Modbus TCP Server</option><option value="udp-client">Modbus UDP Client</option><option value="udp-server">Modbus UDP Server</option><option value="tls-client">Modbus TCP Security / TLS Client</option><option value="tls-server">Modbus TCP Security / TLS Server</option></optgroup>
+            <optgroup label="RTU tunnelling"><option value="rtu-tcp-client">RTU over TCP Client</option><option value="rtu-tcp-server">RTU over TCP Server</option><option value="rtu-udp-client">RTU over UDP Client</option><option value="rtu-udp-server">RTU over UDP Server</option></optgroup>
+            <optgroup label="ASCII tunnelling"><option value="ascii-tcp-client">ASCII over TCP Client</option><option value="ascii-tcp-server">ASCII over TCP Server</option><option value="ascii-udp-client">ASCII over UDP Client</option><option value="ascii-udp-server">ASCII over UDP Server</option></optgroup>
+            <option value="virtual">Virtual</option>
+          </select>
+        </label>
         <label class="field serial-field"><span>Serial port</span><div class="input-action"><select id="serialPath"></select><button id="reloadPorts" class="button secondary" type="button">Scan</button></div></label>
         <label class="field serial-field"><span>Baud rate</span><select id="serialBaud"><option>1200</option><option>2400</option><option>4800</option><option selected>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label>
         <label class="field serial-field"><span>Parity</span><select id="serialParity"><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option></select></label>
-        <label class="field tcp-field"><span>Host / listen IP</span><input id="tcpHost" class="text-input" value="127.0.0.1"></label>
-        <label class="field tcp-field"><span>Port</span><input id="tcpPort" class="text-input" type="number" min="0" max="65535" value="502"></label>
-        <label class="field tcp-client-field"><span>Local interface</span><select id="tcpLocalAddress"><option value="">Automatic</option></select></label>
+        <label class="field network-field hidden"><span>Host / listen IP</span><input id="tcpHost" class="text-input" value="127.0.0.1"></label>
+        <label class="field network-field hidden"><span>Port</span><input id="tcpPort" class="text-input" type="number" min="0" max="65535" value="502"></label>
+        <label class="field network-client-field hidden"><span>Local interface</span><select id="tcpLocalAddress"><option value="">Automatic</option></select></label>
+        <label class="field tls-field hidden"><span>CA certificate path</span><input id="tlsCaPath" class="text-input" placeholder="C:\\certs\\ca.pem"></label>
+        <label class="field tls-field hidden"><span>Certificate path</span><input id="tlsCertPath" class="text-input" placeholder="C:\\certs\\client-or-server.pem"></label>
+        <label class="field tls-field hidden"><span>Private key path</span><input id="tlsKeyPath" class="text-input" placeholder="C:\\certs\\key.pem"></label>
+        <label class="field tls-client-field hidden"><span>Server name (SNI)</span><input id="tlsServername" class="text-input" placeholder="meter.example.local"></label>
+        <label class="field tls-client-field hidden"><span><input id="tlsVerifyServer" type="checkbox" checked> Verify server certificate</span></label>
+        <label class="field tls-server-field hidden"><span><input id="tlsRequestClient" type="checkbox"> Request client certificate</span></label>
+        <label class="field tls-server-field hidden"><span><input id="tlsVerifyClient" type="checkbox"> Require valid client certificate (mTLS)</span></label>
       </div>
       <div id="dialogError" class="form-error" role="alert"></div>
       <div class="dialog-actions"><button class="button secondary" value="cancel" type="button" data-dialog-cancel>Cancel</button><button id="saveConnection" class="button primary" type="submit">Save profile</button></div>
