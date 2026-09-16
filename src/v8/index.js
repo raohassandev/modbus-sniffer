@@ -45,6 +45,8 @@ module.exports = Object.freeze({
   ...require('./traffic/trafficTimelineService'),
   ...require('./traffic/registerLabService'),
   ...require('./traffic/trafficRoutes'),
+  ...require('./digitalTwin/digitalTwinService'),
+  ...require('./digitalTwin/digitalTwinRoutes'),
   ...require('./testCenter/rawFrameStudio'),
   ...require('./testCenter/recipeEngine'),
   ...require('./testCenter/testCenterWorkspaceService'),
