@@ -1,7 +1,7 @@
 {
   "name": "modbus-engineering-analyzer-desktop",
   "version": "7.0.0",
-  "description": "Windows desktop shell for the Modbus Engineering Analyzer v7.",
+  "description": "Windows desktop shell for the Modbus Engineering Workbench v8.",
   "author": "Automatrix Engineering",
   "license": "MIT",
   "private": true,
@@ -16,8 +16,8 @@
   },
   "build": {
     "appId": "pk.automatrix.modbus-analyzer",
-    "productName": "Modbus Engineering Analyzer",
-    "artifactName": "Modbus-Engineering-Analyzer-Setup-${version}.${ext}",
+    "productName": "Modbus Engineering Workbench",
+    "artifactName": "Modbus-Engineering-Workbench-Setup-${version}.${ext}",
     "asar": true,
     "files": [
       "main.js",
