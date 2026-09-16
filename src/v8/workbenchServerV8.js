@@ -1,5 +1,6 @@
 'use strict';
 
+const { WebSocket } = require('ws');
 const { startV8WorkbenchServer } = require('./workbenchServer');
 const { assertFeature } = require('./featureFlags');
 const { MasterWorkspaceService } = require('./master/masterWorkspaceService');
@@ -16,7 +17,7 @@ async function startV8ProductServer(options = {}) {
   const broadcast = (event) => {
     const payload = JSON.stringify({ at: Date.now(), ...event });
     for (const client of web.wss.clients) {
-      if (client.readyState === client.OPEN) client.send(payload);
+      if (client.readyState === WebSocket.OPEN) client.send(payload);
     }
   };
 
