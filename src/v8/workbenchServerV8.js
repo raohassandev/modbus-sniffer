@@ -9,6 +9,9 @@ const { DiscoveryScanService } = require('./discovery/discoveryScanService');
 const { mountDiscoveryRoutes } = require('./discovery/discoveryRoutes');
 const { SimulatorWorkspaceService } = require('./slave/simulatorWorkspaceService');
 const { mountSimulatorRoutes } = require('./slave/simulatorRoutes');
+const { TrafficTimelineService } = require('./traffic/trafficTimelineService');
+const { RegisterLabService } = require('./traffic/registerLabService');
+const { mountTrafficRegisterRoutes } = require('./traffic/trafficRoutes');
 
 async function startV8ProductServer(options = {}) {
   const web = await startV8WorkbenchServer(options);
@@ -28,6 +31,8 @@ async function startV8ProductServer(options = {}) {
     broker: options.broker,
     connectionCenter: web.center,
   });
+  const timeline = new TrafficTimelineService({ maxEvents: 20000 });
+  const registerLab = new RegisterLabService({ store: options.store, broker: options.broker });
 
   const broadcast = (event) => {
     const payload = JSON.stringify({ at: Date.now(), ...event });
@@ -57,13 +62,37 @@ async function startV8ProductServer(options = {}) {
     assertFeature,
     broadcast,
   });
+  mountTrafficRegisterRoutes({
+    app: web.app,
+    timeline,
+    registerLab,
+    flags: options.flags,
+    assertFeature,
+    broadcast,
+  });
 
-  const onMasterEvent = (event) => broadcast({ type: 'runtime.event', event });
-  const onDiscoveryEvent = (event) => broadcast({ type: 'runtime.event', event });
-  const onSimulatorEvent = (event) => broadcast({ type: 'runtime.event', event });
+  const capture = (event) => {
+    const normalized = timeline.ingest(event);
+    registerLab.ingest(normalized);
+    return normalized;
+  };
+  const onMasterEvent = (event) => {
+    capture(event);
+    broadcast({ type: 'runtime.event', event });
+  };
+  const onDiscoveryEvent = (event) => {
+    capture(event);
+    broadcast({ type: 'runtime.event', event });
+  };
+  const onSimulatorEvent = (event) => {
+    capture(event);
+    broadcast({ type: 'runtime.event', event });
+  };
+  const onBrokerEvent = (event) => capture(event);
   masterWorkspace.on('event', onMasterEvent);
   discovery.on('event', onDiscoveryEvent);
   simulator.on('event', onSimulatorEvent);
+  options.broker.on('event', onBrokerEvent);
 
   const baseClose = web.close;
   return Object.freeze({
@@ -71,7 +100,10 @@ async function startV8ProductServer(options = {}) {
     masterWorkspace,
     discovery,
     simulator,
+    timeline,
+    registerLab,
     async close() {
+      options.broker.off('event', onBrokerEvent);
       simulator.off('event', onSimulatorEvent);
       discovery.off('event', onDiscoveryEvent);
       masterWorkspace.off('event', onMasterEvent);
