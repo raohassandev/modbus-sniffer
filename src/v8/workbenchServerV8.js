@@ -21,6 +21,7 @@ const { HistoryWorkspaceService } = require('./history/historyWorkspaceService')
 const { mountHistoryRoutes } = require('./history/historyRoutes');
 const { HmiBuilderService } = require('./hmi/hmiBuilderServiceHardened');
 const { mountHmiRoutes } = require('./hmi/hmiRoutes');
+const { mountProjectLifecycleRoutes } = require('./project/projectLifecycleRoutes');
 
 async function startV8ProductServer(options = {}) {
   const connectionCenter = options.connectionCenter || new ConnectionCenterServiceV8({ store: options.store, broker: options.broker });
@@ -59,6 +60,7 @@ async function startV8ProductServer(options = {}) {
     }
   };
 
+  const projectLifecycle = mountProjectLifecycleRoutes({ app: web.app, store: options.store, broker: options.broker, broadcast });
   mountMasterWorkspaceRoutes({ app: web.app, masterWorkspace, flags: options.flags, assertFeature, broadcast });
   mountDiscoveryRoutes({ app: web.app, discovery, flags: options.flags, assertFeature, broadcast });
   mountSimulatorRoutes({ app: web.app, simulator, flags: options.flags, assertFeature, broadcast });
@@ -94,6 +96,7 @@ async function startV8ProductServer(options = {}) {
   const baseClose = web.close;
   return Object.freeze({
     ...web,
+    projectLifecycle,
     masterWorkspace,
     discovery,
     simulator,
