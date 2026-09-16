@@ -78,6 +78,7 @@ function sanitizeConnectionProfile(input = {}, { index = 0 } = {}) {
   const transport = String(input.transport || input.transportKind || '').toUpperCase();
   const serial = input.serial && typeof input.serial === 'object' && !Array.isArray(input.serial) ? clone(input.serial) : null;
   const tcp = input.tcp && typeof input.tcp === 'object' && !Array.isArray(input.tcp) ? clone(input.tcp) : null;
+  const udp = input.udp && typeof input.udp === 'object' && !Array.isArray(input.udp) ? clone(input.udp) : null;
   const metadata = objectOr(input.metadata, {});
 
   // Persist configuration, never live capability/ownership/armed state.
@@ -90,6 +91,7 @@ function sanitizeConnectionProfile(input = {}, { index = 0 } = {}) {
     endpoint: input.endpoint == null ? null : safeText(input.endpoint).slice(0, 500),
     serial,
     tcp,
+    udp,
     activation: 'manual',
     ownerMode: SAFE_OWNER_MODE,
     transmitCapability: 'none',
