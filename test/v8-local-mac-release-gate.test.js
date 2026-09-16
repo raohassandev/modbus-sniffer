@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, '..');
 const gatePath = path.join(root, 'scripts', 'release-gate-mac.sh');
 const script = fs.readFileSync(gatePath, 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const gitignore = fs.readFileSync(path.join(root, '.gitignore'), 'utf8');
 const macWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'test.yml'), 'utf8');
 const windowsWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'desktop-windows.yml'), 'utf8');
 
@@ -35,6 +36,12 @@ test('v8 local Mac release gate is the npm-exposed deterministic exact-head gate
     /lockfile-sha256\.txt/,
   ]);
   assert.doesNotMatch(script, /--untracked-files=no/);
+});
+
+test('release evidence and deterministic browser runtime artifacts are ignored without weakening clean-tree checks', () => {
+  for (const entry of ['.release-evidence/', '.tmp/', 'test-results/', 'playwright-report/']) {
+    assert.match(gitignore, new RegExp(`^${entry.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+  }
 });
 
 test('v8 local Mac release gate requires Node 20, 22 and 24 full validation', () => {
