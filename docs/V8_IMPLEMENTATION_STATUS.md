@@ -2,8 +2,8 @@
 
 **Last audited:** 2026-09-16  
 **Stable product release:** 7.0.0  
-**v8 development state:** foundation/runtime and vertical browser workspaces in progress on `main`  
-**Status source of truth:** this document for implemented state; `V8_MASTER_TODO.md` remains the full target-scope roadmap.
+**v8 development state:** tested vertical workspaces continue behind the separate v8 launcher  
+**Status source of truth:** this document records implemented state; `V8_MASTER_TODO.md` remains the full target-scope roadmap.
 
 ## Why the repository still says v7
 
@@ -20,6 +20,8 @@ The following work is present with automated coverage:
 - WP-05: cyclic poll scheduler, write safety/read-back/audit service and canonical address notation.
 - WP-06: v8 project schema v3, explicit/idempotent v7 schema-2 migration, separate `workbench-v8.json` persistence, atomic writes/backups, migration evidence, corrupt-primary recovery and safe configuration-only connection profiles.
 - WP-07: dedicated v8 browser shell and Connection Center with persistent app bar/navigation/status, safe project UI preferences, System/Light/Dark themes, density modes, context inspector, document tabs, command palette, feature flags, profile create/delete/duplicate/import/export, serial/network enumeration, target-subnet interface recommendation, open/close/test actions, live diagnostics and WebSocket runtime state.
+- WP-08: shared extended protocol/data core and Master Workstation vertical slice. Standard FC codecs cover FC01/02/03/04/05/06/07/08/11/12/15/16/17/20/21/22/23/24/43, unknown/vendor PDUs are preserved, common integer/float/ASCII/BCD/timestamp permutations are shared, and the browser Master workspace supports one-shot reads, persistent cyclic poll jobs, runtime start/pause/resume/stop, guarded FC05/06/15/16 writes, read-back and exact evidence.
+- WP-09: guarded read-only Discovery vertical slice. It provides FC43-first Unit/Slave scanning with read-only fallback, one-by-one/adaptive FC01-04 address scanning, cancellation/progress, persistent scan evidence/export, confirmed-device handoff into Master poll jobs, REST/WebSocket integration and a browser Discovery workspace. Serial discovery requires explicit maintenance-window and exclusive-bus confirmation.
 - Deep-audit hardening: FC22 Mask Write Register end-to-end support, serial Unit-ID validation, correct RTU/ASCII broadcast behavior, immutable broker-level transmission evidence, reopen write-lock hardening, strict simulator seed validation, serialized serial transmit execution and explicit handling of indeterminate driver-write outcomes.
 
 ## Project migration guarantees
@@ -49,6 +51,7 @@ The following work is present with automated coverage:
 | P1 | CI syntax gates explicitly covered older runtime files but not the whole v8 source tree | Added recursive v8 syntax coverage and expanded it to the v8 launcher/browser shell |
 | P1 | v8 had a planned schema but no executable, safe v7-to-v8 migration boundary | Added schema v3, validation, idempotent migration, source backup/reporting and a separate v8 store so v7 data is never silently overwritten |
 | P1 | Connection Center lacked a vertical browser/runtime integration | Added the v8 shell, profile/runtime API, WebSocket updates, safe project preferences and browser acceptance coverage |
+| P1 | Discovery could have drifted into a second active-Master path | Discovery uses a dedicated read-only engine/owner mode; writes cannot be armed, serial scans require two explicit interlocks, active ownership conflicts are rejected and every scan releases ownership on completion/cancel/failure |
 | P2 | README/version state made v8 commits look inconsistent with a v7 package | Documentation separates stable v7 release surfaces from the in-progress v8 workbench |
 
 ## Safety invariants currently enforced in code
@@ -65,15 +68,16 @@ The following work is present with automated coverage:
 - The richer write audit records user/session, address/quantity, requested values, old value when available, response, verification and result.
 - Persisted v8 connection profiles contain configuration only and always normalize to manual/inactive/unowned/transmit-disabled/write-locked/fault-disabled state.
 - UI mode/write labels are driven from the live Connection Broker state rather than persisted profile flags.
+- Discovery serial scans cannot start unless maintenance-window and exclusive-bus access are both explicitly confirmed.
 
 ## Remaining product work
 
-- Complete the shared protocol/core matrix still missing from the v8 target, including remaining standard function codecs, common engineering data types and golden-vector verification.
-- Complete Master Workstation UI, scan workflow and full poll-document persistence/editing.
-- Complete Slave/Server Simulator UI, dynamic generators and isolated Fault Injection Lab.
+- Reconcile the master TODO checkboxes with the already-proven WP-01 through WP-09 implementation/gates; the unchecked roadmap currently understates completed work.
+- Complete the remaining Master professional workflow items not in WP-08: multi-select/duplicate/order controls, richer representation/stale/change indicators, encoded write preview, templates and Chart/Logger/Recipe shortcuts.
+- Complete Slave/Server Simulator UI, persistent server/device configuration, dynamic generators and isolated Fault Injection Lab.
 - Integrate unified v8 Traffic and Register Lab workspaces.
 - Build Test Center/raw-frame studio and automated recipe engine.
-- Add UDP/tunnelling, remaining IPv6 work and Modbus/TCP Security/TLS.
+- Add UDP/tunnelling, full IPv6 qualification and Modbus/TCP Security/TLS.
 - Build charts/logger/SQLite historian, capture-to-digital-twin, automation APIs/CLI/SDK and HMI Builder.
 - Complete accessibility/keyboard/performance/security hardening for all final v8 workspaces.
 - Complete long-duration combined workload soak, interoperability matrix and real-device/site acceptance.

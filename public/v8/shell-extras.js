@@ -6,6 +6,11 @@
   extraStyles.href = '/v8/shell-extras.css';
   document.head.appendChild(extraStyles);
 
+  const discoveryScript = document.createElement('script');
+  discoveryScript.src = '/v8/discovery.js';
+  discoveryScript.defer = true;
+  document.head.appendChild(discoveryScript);
+
   const workspaceLabels = new Map([
     ['connections', 'Connections'],
     ['master', 'Master'],

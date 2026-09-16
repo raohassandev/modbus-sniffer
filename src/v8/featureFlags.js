@@ -4,6 +4,7 @@ const DEFAULT_FLAGS = Object.freeze({
   shell: true,
   connectionCenter: true,
   masterWorkspace: true,
+  discoveryWorkspace: true,
   simulatorWorkspace: false,
   trafficWorkspace: false,
   registerLabWorkspace: false,
