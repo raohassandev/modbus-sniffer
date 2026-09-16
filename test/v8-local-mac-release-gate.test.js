@@ -4,9 +4,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
-const script = fs.readFileSync(path.join(root, 'scripts', 'release-gate-mac.sh'), 'utf8');
+const gatePath = path.join(root, 'scripts', 'release-gate-mac.sh');
+const script = fs.readFileSync(gatePath, 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const macWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'test.yml'), 'utf8');
 const windowsWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'desktop-windows.yml'), 'utf8');
@@ -14,6 +16,11 @@ const windowsWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 
 function includesAll(text, values) {
   for (const value of values) assert.match(text, value, `release gate must retain ${value}`);
 }
+
+test('v8 local Mac release gate shell syntax is valid', { skip: process.platform === 'win32' }, () => {
+  const result = spawnSync('bash', ['-n', gatePath], { cwd: root, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout || 'bash -n failed');
+});
 
 test('v8 local Mac release gate is the npm-exposed deterministic exact-head gate', () => {
   assert.equal(pkg.scripts['release:gate:mac'], 'bash scripts/release-gate-mac.sh');
