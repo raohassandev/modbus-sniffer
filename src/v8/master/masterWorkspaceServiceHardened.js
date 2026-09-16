@@ -90,6 +90,19 @@ class MasterWorkspaceService extends BaseMasterWorkspaceService {
     rows.sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0) || String(a.auditId || '').localeCompare(String(b.auditId || '')));
     return Object.freeze(rows.slice(-safeLimit));
   }
+
+  _isMasterEligible(profile) {
+    return ['serial-rtu', 'serial-ascii', 'tcp-client', 'udp-client', 'virtual'].includes(String(profile?.transportKind || '').toLowerCase());
+  }
+
+  _framing(profile) {
+    const kind = String(profile?.transportKind || '').toLowerCase();
+    if (kind === 'serial-ascii') return 'ascii';
+    // Native Modbus/UDP in this workbench carries an MBAP/TID ADU in one datagram,
+    // so it intentionally reuses the MasterEngine's transaction-safe TCP framing.
+    if (kind === 'tcp-client' || kind === 'udp-client') return 'tcp';
+    return 'rtu';
+  }
 }
 
 module.exports = {
