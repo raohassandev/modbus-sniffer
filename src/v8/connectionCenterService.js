@@ -6,6 +6,7 @@ const {
 } = require('./transports/serialTransport');
 const { TcpClientTransport } = require('./transports/tcpClientTransport');
 const { TcpServerTransport } = require('./transports/tcpServerTransport');
+const { UdpClientTransport, UdpServerTransport } = require('./transports/udpTransport');
 const { VirtualLoopbackEndpoint } = require('./transports/virtualLoopback');
 const { listLocalAddresses, recommendLocalAddress } = require('./transports/networkAddresses');
 
@@ -40,6 +41,10 @@ function normalizeKind(profile) {
     'modbus-tcp': 'tcp-client',
     tcpclient: 'tcp-client',
     tcpserver: 'tcp-server',
+    udp: 'udp-client',
+    'modbus-udp': 'udp-client',
+    udpclient: 'udp-client',
+    udpserver: 'udp-server',
   };
   return aliases[value] || value;
 }
@@ -97,6 +102,29 @@ function defaultTransportFactory(profile) {
       writeTimeoutMs: Number(tcp.writeTimeoutMs || 3000),
     });
   }
+  if (kind === 'udp-client') {
+    const udp = profile.udp || {};
+    const host = String(udp.host || profile.endpoint || '').trim();
+    if (!host) throw new ConnectionCenterError('UDP_HOST_REQUIRED', 'UDP client profile requires a host', { connectionId: profile.connectionId });
+    return new UdpClientTransport({
+      host,
+      port: integer(udp.port, 502),
+      family: udp.family ?? 4,
+      localAddress: udp.localAddress || null,
+      localPort: integer(udp.localPort, 0),
+      receiveTimeoutMs: Number(udp.receiveTimeoutMs ?? 1000),
+    });
+  }
+  if (kind === 'udp-server') {
+    const udp = profile.udp || {};
+    return new UdpServerTransport({
+      host: String(udp.host || profile.endpoint || '127.0.0.1').trim(),
+      port: integer(udp.port, 502),
+      family: udp.family ?? 4,
+      maxPeers: integer(udp.maxPeers, 256),
+      receiveTimeoutMs: Number(udp.receiveTimeoutMs ?? 1000),
+    });
+  }
   if (kind === 'virtual') {
     return new VirtualLoopbackEndpoint({ name: profile.connectionId });
   }
@@ -117,12 +145,18 @@ function resourceKey(profile) {
   if (kind === 'tcp-client') {
     return `tcp-connect:${String(profile.tcp?.host || profile.endpoint || '').trim()}:${integer(profile.tcp?.port, 502)}:${profile.connectionId}`;
   }
+  if (kind === 'udp-server') {
+    return `udp-listen:${String(profile.udp?.host || profile.endpoint || '127.0.0.1').trim()}:${integer(profile.udp?.port, 502)}`;
+  }
+  if (kind === 'udp-client') {
+    return `udp-connect:${String(profile.udp?.host || profile.endpoint || '').trim()}:${integer(profile.udp?.port, 502)}:${profile.connectionId}`;
+  }
   return `virtual:${profile.connectionId}`;
 }
 
 function isExclusive(profile) {
   const kind = normalizeKind(profile);
-  return kind !== 'tcp-client';
+  return !['tcp-client', 'udp-client'].includes(kind);
 }
 
 class ConnectionCenterService {
@@ -343,4 +377,5 @@ module.exports = {
   defaultTransportFactory,
   normalizeKind,
   resourceKey,
+  isExclusive,
 };
