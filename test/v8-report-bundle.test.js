@@ -50,15 +50,22 @@ test('v8 report bundle produces hashed bounded handover files with spreadsheet s
   }
 });
 
-test('inactive project handover never inherits active project Master/audit/Traffic runtime evidence', (t) => {
+test('inactive project handover uses persisted historian configuration without active runtime evidence', (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modbus-v8-report-isolation-'));
   const store = new V8ProjectStore({ dataDir: dir, autoMigrate: false });
   t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 25 }));
   const active = store.getActiveProject();
-  const inactive = store.createProject({ name: 'Inactive Site' });
+  const inactive = store.createProject({
+    name: 'Inactive Site',
+    loggerProfiles: [
+      { streamId: 'inactive-kw', sourceKey: 'grid:kw', label: 'Power', unit: 'kW', historian: true },
+      { streamId: 'log-only', sourceKey: 'grid:pf', label: 'PF', historian: false },
+    ],
+  });
   let snapshots = 0;
   let audits = 0;
   let trafficQueries = 0;
+  let historianQueries = 0;
   const reports = new ReportBundleService({
     store,
     masterWorkspace: {
@@ -66,7 +73,7 @@ test('inactive project handover never inherits active project Master/audit/Traff
       audit() { audits += 1; return [{ auditId: 'active-only' }]; },
     },
     timeline: { query() { trafficQueries += 1; return [{ eventId: 'active-only' }]; } },
-    history: { historianTags(projectId) { return [{ tagId: `${projectId}:tag` }]; } },
+    history: { historianTags() { historianQueries += 1; return [{ tagId: 'active-only' }]; } },
   });
 
   const model = reports.collect(inactive.id);
@@ -77,7 +84,14 @@ test('inactive project handover never inherits active project Master/audit/Traff
   assert.equal(snapshots, 0);
   assert.equal(audits, 0);
   assert.equal(trafficQueries, 0);
-  assert.equal(model.historianTags[0].tagId, `${inactive.id}:tag`);
+  assert.equal(historianQueries, 0);
+  assert.deepEqual(model.historianTags, [{
+    tagId: 'inactive-kw',
+    name: 'Power',
+    unit: 'kW',
+    source: { sourceKey: 'grid:kw' },
+    configured: true,
+  }]);
 });
 
 test('v8 export helpers sanitize filenames and formula-leading text', () => {
