@@ -1,6 +1,11 @@
 'use strict';
 
 (() => {
+  const extraStyles = document.createElement('link');
+  extraStyles.rel = 'stylesheet';
+  extraStyles.href = '/v8/shell-extras.css';
+  document.head.appendChild(extraStyles);
+
   const workspaceLabels = new Map([
     ['connections', 'Connections'],
     ['master', 'Master'],
@@ -36,10 +41,10 @@
       tab.dataset.workspaceTab = workspace;
       const label = document.createElement('span');
       label.textContent = workspaceLabels.get(workspace) || workspace;
-      const state = document.createElement('span');
-      state.className = 'document-state';
-      state.textContent = 'Saved';
-      tab.append(label, state);
+      const tabState = document.createElement('span');
+      tabState.className = 'document-state';
+      tabState.textContent = 'Saved';
+      tab.append(label, tabState);
       tabBar.appendChild(tab);
     }
   }
