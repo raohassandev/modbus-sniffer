@@ -6,6 +6,7 @@ const express = require('express');
 const { WebSocketServer, WebSocket } = require('ws');
 const { ConnectionCenterService } = require('./connectionCenterService');
 const { loadFeatureFlags, assertFeature } = require('./featureFlags');
+const { sameOriginMutationGuard, createMutationRateLimiter, createBodyLengthGuard } = require('./security/httpSafety');
 
 function httpErrorStatus(error) {
   const code = error?.code || '';
@@ -48,7 +49,15 @@ function startV8WorkbenchServer({
 
   const app = express();
   app.disable('x-powered-by');
+  app.use(createBodyLengthGuard({ maxBytes: 2 * 1024 * 1024 }));
+  app.use(sameOriginMutationGuard);
+  app.use(createMutationRateLimiter({ windowMs: 60000, max: 240 }));
   app.use(express.json({ limit: '2mb' }));
+  app.use((error, _req, res, next) => {
+    if (error?.type === 'entity.too.large') return res.status(413).json({ ok: false, error: { code: 'BODY_TOO_LARGE', message: 'Request body exceeds 2 MiB' } });
+    if (error instanceof SyntaxError && Object.prototype.hasOwnProperty.call(error, 'body')) return res.status(400).json({ ok: false, error: { code: 'INVALID_JSON', message: 'Request body is not valid JSON' } });
+    return next(error);
+  });
 
   const route = (handler) => async (req, res) => {
     try {
@@ -99,10 +108,7 @@ function startV8WorkbenchServer({
       error.code = 'PROJECT_NOT_FOUND';
       throw error;
     }
-    const ui = {
-      ...(project.ui || {}),
-      ...(req.body && typeof req.body === 'object' ? req.body : {}),
-    };
+    const ui = { ...(project.ui || {}), ...(req.body && typeof req.body === 'object' ? req.body : {}) };
     const updated = store.updateProject(req.params.projectId, { ui });
     broadcast({ type: 'project.ui', projectId: req.params.projectId, ui: updated.ui });
     res.json({ ok: true, ui: updated.ui });
@@ -198,9 +204,7 @@ function startV8WorkbenchServer({
 
   function broadcast(event) {
     const payload = safeJson({ at: Date.now(), ...event });
-    for (const client of wss.clients) {
-      if (client.readyState === WebSocket.OPEN) client.send(payload);
-    }
+    for (const client of wss.clients) if (client.readyState === WebSocket.OPEN) client.send(payload);
   }
 
   server.on('upgrade', (request, socket, head) => {
@@ -213,12 +217,7 @@ function startV8WorkbenchServer({
   });
 
   wss.on('connection', (ws) => {
-    ws.send(safeJson({
-      at: Date.now(),
-      type: 'hello',
-      activeProjectId: center.activeProjectId(),
-      flags,
-    }));
+    ws.send(safeJson({ at: Date.now(), type: 'hello', activeProjectId: center.activeProjectId(), flags }));
   });
 
   const onBrokerEvent = (event) => broadcast({ type: 'runtime.event', event });
@@ -255,8 +254,4 @@ function startV8WorkbenchServer({
   });
 }
 
-module.exports = {
-  startV8WorkbenchServer,
-  errorPayload,
-  httpErrorStatus,
-};
+module.exports = { startV8WorkbenchServer, errorPayload, httpErrorStatus };
