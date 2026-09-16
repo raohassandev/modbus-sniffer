@@ -58,6 +58,25 @@ function objectRows(input, keyName) {
   return Object.entries(input || {}).map(([key, value]) => ({ [keyName]: key, ...(value && typeof value === 'object' ? value : { value }) }));
 }
 
+const SENSITIVE_FIELD_NAMES = new Set([
+  'password', 'passphrase', 'secret', 'clientsecret', 'apikey', 'token', 'accesstoken', 'refreshtoken',
+  'privatekey', 'privatekeypem', 'keypem', 'keypath',
+]);
+
+function redactSensitive(value) {
+  if (Array.isArray(value)) return value.map(redactSensitive);
+  if (!value || typeof value !== 'object') return value;
+  const output = {};
+  for (const [key, current] of Object.entries(value)) {
+    if (SENSITIVE_FIELD_NAMES.has(String(key).replace(/[^A-Za-z0-9]/g, '').toLowerCase())) {
+      output[key] = current == null || current === '' ? current : '[REDACTED]';
+    } else {
+      output[key] = redactSensitive(current);
+    }
+  }
+  return output;
+}
+
 function configuredHistorianTags(project) {
   return (project.loggerProfiles || [])
     .filter((profile) => profile?.historian !== false)
@@ -103,28 +122,33 @@ class ReportBundleService {
   buildFiles(projectId) {
     const model = this.collect(projectId);
     const files = new Map();
-    const devices = objectRows(model.project.devices, 'deviceKey');
-    const registers = objectRows(model.project.registers, 'registerKey');
-    files.set('project/project.json', Buffer.from(json(model.project)));
-    files.set('reports/master-summary.json', Buffer.from(json(model.master || { available: false, reason: model.active ? 'runtime unavailable' : 'project is not active' })));
-    files.set('reports/write-audit.json', Buffer.from(json(model.writeAudit)));
-    files.set('reports/write-audit.csv', Buffer.from(autoCsv(model.writeAudit, ['timestamp','auditId','connectionId','unitId','functionCode','address','quantity','result','requestRawHex','responseRawHex'])));
-    files.set('reports/traffic.json', Buffer.from(json(model.traffic)));
-    files.set('reports/traffic.csv', Buffer.from(autoCsv(model.traffic, ['sequence','timestamp','eventId','type','source','connectionId','channelId','ownerMode','direction','unitId','functionCode','error','rawHex'])));
+    const safeProject = redactSensitive(model.project);
+    const safeMaster = redactSensitive(model.master || { available: false, reason: model.active ? 'runtime unavailable' : 'project is not active' });
+    const safeWriteAudit = redactSensitive(model.writeAudit);
+    const safeTraffic = redactSensitive(model.traffic);
+    const safeHistorianTags = redactSensitive(model.historianTags);
+    const devices = objectRows(safeProject.devices, 'deviceKey');
+    const registers = objectRows(safeProject.registers, 'registerKey');
+    files.set('project/project.json', Buffer.from(json(safeProject)));
+    files.set('reports/master-summary.json', Buffer.from(json(safeMaster)));
+    files.set('reports/write-audit.json', Buffer.from(json(safeWriteAudit)));
+    files.set('reports/write-audit.csv', Buffer.from(autoCsv(safeWriteAudit, ['timestamp','auditId','connectionId','unitId','functionCode','address','quantity','result','requestRawHex','responseRawHex'])));
+    files.set('reports/traffic.json', Buffer.from(json(safeTraffic)));
+    files.set('reports/traffic.csv', Buffer.from(autoCsv(safeTraffic, ['sequence','timestamp','eventId','type','source','connectionId','channelId','ownerMode','direction','unitId','functionCode','error','rawHex'])));
     files.set('reports/devices.csv', Buffer.from(csv(devices, ['deviceKey','channelId','unitId','slaveId','name','manufacturer','model','revision'])));
     files.set('reports/registers.csv', Buffer.from(csv(registers, ['registerKey','channelId','deviceKey','unitId','slaveId','functionCode','address','name','type','dataType','byteOrder','scale','offset','unit'])));
-    files.set('reports/simulator-model.json', Buffer.from(json({ servers: model.project.slaveServers || [], devices: model.project.virtualDevices || [] })));
-    files.set('reports/recipes.json', Buffer.from(json(model.project.testRecipes || [])));
-    files.set('reports/historian.json', Buffer.from(json({ tags: model.historianTags, loggerProfiles: model.project.loggerProfiles || [], charts: model.project.charts || [] })));
-    files.set('reports/hmi-pages.json', Buffer.from(json({ screens: model.project.hmiScreens || [], templates: model.project.hmiTemplates || [] })));
-    files.set('reports/digital-twins.json', Buffer.from(json(model.project.digitalTwins || [])));
-    files.set('reports/automation.json', Buffer.from(json(model.project.automation || [])));
+    files.set('reports/simulator-model.json', Buffer.from(json({ servers: safeProject.slaveServers || [], devices: safeProject.virtualDevices || [] })));
+    files.set('reports/recipes.json', Buffer.from(json(safeProject.testRecipes || [])));
+    files.set('reports/historian.json', Buffer.from(json({ tags: safeHistorianTags, loggerProfiles: safeProject.loggerProfiles || [], charts: safeProject.charts || [] })));
+    files.set('reports/hmi-pages.json', Buffer.from(json({ screens: safeProject.hmiScreens || [], templates: safeProject.hmiTemplates || [] })));
+    files.set('reports/digital-twins.json', Buffer.from(json(safeProject.digitalTwins || [])));
+    files.set('reports/automation.json', Buffer.from(json(safeProject.automation || [])));
     const manifest = {
       format: 'modbus-workbench-v8-handover', formatVersion: 1,
       product: PRODUCT_NAME, productVersion: PRODUCT_VERSION,
       schemaVersion: model.schemaVersion, generatedAt: model.generatedAt,
       projectId: model.project.id, projectName: model.project.name,
-      activeProjectAtExport: model.active, formulaInjectionProtection: true, filenameSanitization: true,
+      activeProjectAtExport: model.active, formulaInjectionProtection: true, filenameSanitization: true, secretRedaction: true,
       boundedRuntimeEvidence: { trafficRows: model.traffic.length, writeAuditRows: model.writeAudit.length },
       files: [...files].map(([name, content]) => ({ name, bytes: content.length, sha256: sha256(content) })),
     };
@@ -145,4 +169,4 @@ class ReportBundleService {
   }
 }
 
-module.exports = { ReportBundleError, ReportBundleService, safeName, spreadsheetSafeText, csv, autoCsv, sha256, configuredHistorianTags };
+module.exports = { ReportBundleError, ReportBundleService, safeName, spreadsheetSafeText, csv, autoCsv, sha256, redactSensitive, configuredHistorianTags };
