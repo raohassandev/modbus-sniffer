@@ -10,6 +10,7 @@ const WRITE_FUNCTIONS = new Set([
   protocol.FC.WRITE_SINGLE_REGISTER,
   protocol.FC.WRITE_MULTIPLE_COILS,
   protocol.FC.WRITE_MULTIPLE_REGISTERS,
+  protocol.FC.WRITE_FILE_RECORD,
   protocol.FC.MASK_WRITE_REGISTER,
   protocol.FC.READ_WRITE_MULTIPLE_REGISTERS,
 ]);
@@ -247,23 +248,54 @@ class VirtualSlaveServer extends EventEmitter {
           device.write('holdingRegisters', request.address, [request.value]);
           return broadcast ? null : Buffer.from(pdu);
         }
+        case protocol.FC.READ_EXCEPTION_STATUS:
+          if (broadcast) return null;
+          protocol.decodeReadExceptionStatusRequest(pdu);
+          return protocol.encodeReadExceptionStatusResponse(device.exceptionStatus);
+        case protocol.FC.DIAGNOSTICS:
+          if (broadcast) return null;
+          return this._diagnostics(device, pdu);
+        case protocol.FC.GET_COMM_EVENT_COUNTER:
+          if (broadcast) return null;
+          protocol.decodeGetCommEventCounterRequest(pdu);
+          return protocol.encodeGetCommEventCounterResponse({ status: 0, eventCount: this.stats.requests & 0xFFFF });
+        case protocol.FC.GET_COMM_EVENT_LOG:
+          if (broadcast) return null;
+          protocol.decodeGetCommEventLogRequest(pdu);
+          return protocol.encodeGetCommEventLogResponse({
+            status: 0,
+            eventCount: this.stats.requests & 0xFFFF,
+            messageCount: this.stats.responses & 0xFFFF,
+            events: [],
+          });
         case protocol.FC.WRITE_MULTIPLE_COILS: {
           const request = protocol.decodeWriteMultipleRequest(pdu);
           device.write('coils', request.address, request.values);
-          return broadcast ? null : protocol.encodeWriteMultipleResponse({
-            functionCode,
-            address: request.address,
-            quantity: request.quantity,
-          });
+          return broadcast ? null : protocol.encodeWriteMultipleResponse({ functionCode, address: request.address, quantity: request.quantity });
         }
         case protocol.FC.WRITE_MULTIPLE_REGISTERS: {
           const request = protocol.decodeWriteMultipleRequest(pdu);
           device.write('holdingRegisters', request.address, request.values);
-          return broadcast ? null : protocol.encodeWriteMultipleResponse({
-            functionCode,
-            address: request.address,
-            quantity: request.quantity,
-          });
+          return broadcast ? null : protocol.encodeWriteMultipleResponse({ functionCode, address: request.address, quantity: request.quantity });
+        }
+        case protocol.FC.REPORT_SERVER_ID: {
+          if (broadcast) return null;
+          protocol.decodeReportServerIdRequest(pdu);
+          const productCode = device.identity.get(1) || Buffer.from(`Virtual-${device.unitId}`);
+          const revision = device.identity.get(2) || Buffer.alloc(0);
+          return protocol.encodeReportServerIdResponse({ serverId: productCode, runIndicator: 0xFF, additionalData: revision });
+        }
+        case protocol.FC.READ_FILE_RECORD: {
+          if (broadcast) return null;
+          const request = protocol.decodeReadFileRecordRequest(pdu);
+          const records = request.records.map((record) => ({ values: device.readFileRecord(record.fileNumber, record.recordNumber, record.recordLength) }));
+          return protocol.encodeReadFileRecordResponse({ records });
+        }
+        case protocol.FC.WRITE_FILE_RECORD: {
+          if (broadcast) return null;
+          const request = protocol.decodeWriteFileRecord(pdu);
+          for (const record of request.records) device.writeFileRecord(record.fileNumber, record.recordNumber, record.values);
+          return Buffer.from(pdu);
         }
         case protocol.FC.MASK_WRITE_REGISTER: {
           if (broadcast) return null;
@@ -282,6 +314,11 @@ class VirtualSlaveServer extends EventEmitter {
           const values = device.read('holdingRegisters', request.readAddress, request.readQuantity);
           return protocol.encodeReadRegistersResponse({ functionCode, values });
         }
+        case protocol.FC.READ_FIFO_QUEUE: {
+          if (broadcast) return null;
+          const request = protocol.decodeReadFifoQueueRequest(pdu);
+          return protocol.encodeReadFifoQueueResponse({ values: device.getFifoQueue(request.address) });
+        }
         case protocol.FC.ENCAPSULATED_INTERFACE:
           if (broadcast) return null;
           return this._deviceIdentification(device, pdu);
@@ -297,6 +334,28 @@ class VirtualSlaveServer extends EventEmitter {
     }
   }
 
+  _diagnostics(device, pdu) {
+    const request = protocol.decodeDiagnostics(pdu);
+    const sub = request.subFunction;
+    const sf = protocol.DIAGNOSTIC_SUBFUNCTION;
+    if (sub === sf.RETURN_QUERY_DATA) return Buffer.from(pdu);
+    if (sub === sf.RETURN_DIAGNOSTIC_REGISTER) return protocol.encodeDiagnostics({ subFunction: sub, data: device.diagnosticRegister });
+    if (sub === sf.CLEAR_COUNTERS_AND_DIAGNOSTIC_REGISTER) {
+      device.setDiagnosticRegister(0);
+      return Buffer.from(pdu);
+    }
+    if (sub === sf.RETURN_BUS_MESSAGE_COUNT) return protocol.encodeDiagnostics({ subFunction: sub, data: this.stats.requests & 0xFFFF });
+    if (sub === sf.RETURN_BUS_COMM_ERROR_COUNT) return protocol.encodeDiagnostics({ subFunction: sub, data: this.stats.malformed & 0xFFFF });
+    if (sub === sf.RETURN_BUS_EXCEPTION_ERROR_COUNT) return protocol.encodeDiagnostics({ subFunction: sub, data: this.stats.exceptions & 0xFFFF });
+    if (sub === sf.RETURN_SERVER_MESSAGE_COUNT) return protocol.encodeDiagnostics({ subFunction: sub, data: this.stats.responses & 0xFFFF });
+    if (sub === sf.RETURN_SERVER_NO_RESPONSE_COUNT) return protocol.encodeDiagnostics({ subFunction: sub, data: this.stats.silentUnknownUnits & 0xFFFF });
+    if (sub === sf.RETURN_SERVER_NAK_COUNT || sub === sf.RETURN_SERVER_BUSY_COUNT || sub === sf.RETURN_BUS_CHARACTER_OVERRUN_COUNT) {
+      return protocol.encodeDiagnostics({ subFunction: sub, data: 0 });
+    }
+    if (sub === sf.CLEAR_OVERRUN_COUNTER_AND_FLAG) return Buffer.from(pdu);
+    return this._exception(protocol.FC.DIAGNOSTICS, 1);
+  }
+
   _deviceIdentification(device, pdu) {
     const request = protocol.decodeDeviceIdRequest(pdu);
     const available = device.getIdentityObjects(request);
@@ -306,13 +365,13 @@ class VirtualSlaveServer extends EventEmitter {
     let used = 7;
     let nextObjectId = 0;
     for (const object of available) {
-      const bytes = Buffer.isBuffer(object.value) ? object.value : Buffer.from(String(object.value));
-      const needed = 2 + bytes.length;
+      const value = Buffer.isBuffer(object.value) ? object.value : Buffer.from(String(object.value));
+      const needed = 2 + value.length;
       if (used + needed > protocol.MAX_PDU_LENGTH) {
         nextObjectId = object.id;
         break;
       }
-      selected.push({ id: object.id, value: bytes });
+      selected.push({ id: object.id, value });
       used += needed;
     }
     const moreFollows = selected.length < available.length;
