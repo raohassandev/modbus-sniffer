@@ -58,7 +58,7 @@ test('v8 Traffic timeline stays bounded and supports filters, HEX search and boo
   assert.equal(stats.retained, 100);
   assert.equal(stats.dropped, 5);
   assert.equal(timeline.query({ connectionId: 'a', limit: 200 }).every((entry) => entry.connectionId === 'a'), true);
-  assert.equal(timeline.query({ rawSearch: '6800', limit: 200 }).length, 1);
+  assert.equal(timeline.query({ rawSearch: '0368', limit: 200 }).length, 1);
   const errors = timeline.query({ errorOnly: true });
   assert.equal(errors.length, 1);
   timeline.bookmark(errors[0].eventId, { note: 'investigate' });
