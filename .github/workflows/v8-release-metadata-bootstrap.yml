@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  sync:
+  sync-lockfiles:
     if: github.event_name == 'workflow_dispatch' || github.head_ref == 'v8-release-completion'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -26,7 +26,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Synchronize only 8.0.0 release metadata
+      - name: Synchronize lockfile versions only
         shell: bash
         run: |
           set -euo pipefail
@@ -35,9 +35,7 @@ jobs:
           const { execFileSync } = require('node:child_process');
           const version = '8.0.0';
           const metadata = [
-            ['package.json', 'modbus-engineering-analyzer'],
             ['package-lock.json', 'modbus-engineering-analyzer'],
-            ['desktop/package.json', 'modbus-engineering-analyzer-desktop'],
             ['desktop/package-lock.json', 'modbus-engineering-analyzer-desktop'],
           ];
 
@@ -62,54 +60,45 @@ jobs:
               );
             }
             const rootPackage = data.packages && data.packages[''];
-            if (rootPackage) {
-              if (!['7.0.0', version].includes(rootPackage.version)) throw new Error(`${file}: unexpected root package version ${rootPackage.version}`);
-              if (rootPackage.version !== version) {
-                text = replaceOnce(
-                  text,
-                  `      "name": "${name}",\n      "version": "${rootPackage.version}",`,
-                  `      "name": "${name}",\n      "version": "${version}",`,
-                  `${file} root package version`
-                );
-              }
+            if (!rootPackage) throw new Error(`${file}: root package metadata missing`);
+            if (!['7.0.0', version].includes(rootPackage.version)) throw new Error(`${file}: unexpected root package version ${rootPackage.version}`);
+            if (rootPackage.version !== version) {
+              text = replaceOnce(
+                text,
+                `      "name": "${name}",\n      "version": "${rootPackage.version}",`,
+                `      "name": "${name}",\n      "version": "${version}",`,
+                `${file} root package version`
+              );
             }
             fs.writeFileSync(file, text);
             const verify = JSON.parse(fs.readFileSync(file, 'utf8'));
-            if (verify.version !== version || (verify.packages?.[''] && verify.packages[''].version !== version)) throw new Error(`${file}: version verification failed`);
-            if (before !== text) {
-              const beforeLines = before.split('\n');
-              const afterLines = text.split('\n');
-              if (beforeLines.length !== afterLines.length) throw new Error(`${file}: line count changed unexpectedly`);
-              for (let i = 0; i < beforeLines.length; i += 1) {
-                if (beforeLines[i] === afterLines[i]) continue;
-                if (!/^\s*"version": "7\.0\.0"[,]?$/.test(beforeLines[i]) || !/^\s*"version": "8\.0\.0"[,]?$/.test(afterLines[i])) {
-                  throw new Error(`${file}: non-version content changed at line ${i + 1}`);
-                }
+            if (verify.version !== version || verify.packages?.['']?.version !== version) throw new Error(`${file}: version verification failed`);
+
+            const beforeLines = before.split('\n');
+            const afterLines = text.split('\n');
+            if (beforeLines.length !== afterLines.length) throw new Error(`${file}: line count changed unexpectedly`);
+            for (let i = 0; i < beforeLines.length; i += 1) {
+              if (beforeLines[i] === afterLines[i]) continue;
+              if (!/^\s*"version": "7\.0\.0"[,]?$/.test(beforeLines[i]) || !/^\s*"version": "8\.0\.0"[,]?$/.test(afterLines[i])) {
+                throw new Error(`${file}: non-version content changed at line ${i + 1}`);
               }
             }
           }
 
-          const workflow = '.github/workflows/test.yml';
-          let workflowText = fs.readFileSync(workflow, 'utf8');
-          const start = workflowText.indexOf('  release-metadata-sync:\n');
-          const end = workflowText.indexOf('  quality:\n', start);
-          if (start < 0 || end < 0) throw new Error('release-metadata-sync block not found');
-          workflowText = workflowText.slice(0, start) + workflowText.slice(end);
-          workflowText = workflowText.replace(/    needs: release-metadata-sync\n    if: needs\.release-metadata-sync\.outputs\.changed != 'true'\n/g, '');
-          if (workflowText.includes('release-metadata-sync')) throw new Error('release-metadata-sync references remain');
-          fs.writeFileSync(workflow, workflowText);
-
-          fs.rmSync('.github/workflows/v8-release-metadata-bootstrap.yml');
           execFileSync(process.execPath, ['scripts/version-sync.js'], { stdio: 'inherit' });
           execFileSync('git', ['diff', '--check'], { stdio: 'inherit' });
           NODE
-      - name: Commit synchronized metadata and self-remove
+      - name: Commit synchronized lockfiles
         shell: bash
         run: |
           set -euo pipefail
+          if git diff --quiet -- package-lock.json desktop/package-lock.json; then
+            echo "Lockfile metadata already synchronized."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json desktop/package.json desktop/package-lock.json .github/workflows/test.yml .github/workflows/v8-release-metadata-bootstrap.yml
+          git add package-lock.json desktop/package-lock.json
           git diff --cached --stat
-          git commit -m "chore: finalize Workbench 8.0.0 release metadata"
+          git commit -m "chore: synchronize Workbench 8.0.0 lockfile metadata"
           git push origin HEAD:v8-release-completion
