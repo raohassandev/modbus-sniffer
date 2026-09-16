@@ -7,7 +7,14 @@ const { WebSocketServer, WebSocket } = require('ws');
 const { ConnectionCenterService } = require('./connectionCenterService');
 const { loadFeatureFlags, assertFeature } = require('./featureFlags');
 const { PRODUCT_VERSION } = require('./version');
-const { sameOriginMutationGuard, webSocketOriginAllowed, createMutationRateLimiter, createBodyLengthGuard } = require('./security/httpSafety');
+const {
+  isLoopbackHostname,
+  loopbackHostGuard,
+  sameOriginMutationGuard,
+  webSocketOriginAllowed,
+  createMutationRateLimiter,
+  createBodyLengthGuard,
+} = require('./security/httpSafety');
 
 function httpErrorStatus(error) {
   const code = error?.code || '';
@@ -51,6 +58,7 @@ function startV8WorkbenchServer({
 } = {}) {
   if (!store) throw new TypeError('store is required');
   if (!broker) throw new TypeError('broker is required');
+  if (!isLoopbackHostname(host)) throw new TypeError('Workbench web host must be a loopback address (127.0.0.0/8, ::1 or localhost)');
   if (!Number.isInteger(maxWebSocketClients) || maxWebSocketClients < 1 || maxWebSocketClients > 10000) throw new TypeError('maxWebSocketClients must be 1..10000');
   if (!Number.isInteger(maxWebSocketPayloadBytes) || maxWebSocketPayloadBytes < 1024 || maxWebSocketPayloadBytes > 16 * 1024 * 1024) throw new TypeError('maxWebSocketPayloadBytes must be 1024..16777216');
   assertFeature(flags, 'shell');
@@ -59,6 +67,7 @@ function startV8WorkbenchServer({
 
   const app = express();
   app.disable('x-powered-by');
+  app.use(loopbackHostGuard);
   app.use(createBodyLengthGuard({ maxBytes: 2 * 1024 * 1024 }));
   app.use(sameOriginMutationGuard);
   app.use(createMutationRateLimiter({ windowMs: 60000, max: 240 }));
