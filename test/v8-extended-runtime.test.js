@@ -55,7 +55,8 @@ test('v8 Master/Slave runtime handles FC07/08/11/12/17', async (t) => {
   assert.ok(log.decoded.eventCount >= counter.decoded.eventCount);
 
   const serverId = await rig.master.request({ unitId: 1, pdu: v8.protocol.encodeReportServerIdRequest() });
-  assert.equal(serverId.decoded.runIndicator, 'V8EXT'.charCodeAt(1));
+  assert.equal(serverId.decoded.serverId[0], 1);
+  assert.equal(serverId.decoded.runIndicator, 0xFF);
   assert.ok(serverId.responsePdu.length > 3);
 });
 
