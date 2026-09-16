@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const archiver = require('archiver');
+const { PRODUCT_NAME, PRODUCT_VERSION } = require('../version');
 
 class ReportBundleError extends Error {
   constructor(code, message, details = {}) {
@@ -101,7 +102,7 @@ class ReportBundleService {
     files.set('reports/automation.json', Buffer.from(json(model.project.automation || [])));
     const manifest = {
       format: 'modbus-workbench-v8-handover', formatVersion: 1,
-      product: 'Modbus Engineering Workbench', productVersion: '8.0.0-rc',
+      product: PRODUCT_NAME, productVersion: PRODUCT_VERSION,
       schemaVersion: model.schemaVersion, generatedAt: model.generatedAt,
       projectId: model.project.id, projectName: model.project.name,
       activeProjectAtExport: model.active, formulaInjectionProtection: true, filenameSanitization: true,
