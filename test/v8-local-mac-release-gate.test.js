@@ -27,6 +27,7 @@ test('v8 local Mac release gate is the npm-exposed deterministic exact-head gate
     /release-gate\.log/,
     /lockfile-sha256\.txt/,
   ]);
+  assert.doesNotMatch(script, /--untracked-files=no/);
 });
 
 test('v8 local Mac release gate requires Node 20, 22 and 24 full validation', () => {
