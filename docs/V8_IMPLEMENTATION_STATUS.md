@@ -1,6 +1,6 @@
 # v8 Implementation Status and Deep-Audit Record
 
-**Last audited:** 2026-09-15  
+**Last audited:** 2026-09-16  
 **Stable product release:** 7.0.0  
 **v8 development state:** foundation/runtime work in progress on `main`  
 **Status source of truth:** this document for implemented state; `V8_MASTER_TODO.md` remains the full target-scope roadmap.
@@ -9,7 +9,7 @@
 
 The default application entry point, browser product surface and Windows desktop launcher intentionally remain on the accepted v7 runtime while v8 is built behind `src/v8/`. Keeping `package.json`, the desktop package and `npm start` on 7.0.0 is therefore a release boundary, not a version-sync defect.
 
-Do not label the product v8 or change the default launcher until the v8 shell, persistence/migration, runtime integration and applicable release gates are complete. A v8 source module being present on `main` does not by itself make that capability production-exposed.
+Do not label the product v8 or change the default launcher until the v8 shell, runtime integration and applicable release gates are complete. A v8 source module being present on `main` does not by itself make that capability production-exposed.
 
 ## Implemented v8 foundation
 
@@ -20,6 +20,7 @@ The following work is present with automated coverage:
 - WP-03: real TCP client/server transports, bounded stream framing/queues, multi-client routing and Transaction-ID-safe Master concurrency.
 - WP-04: real serial RTU/ASCII transport foundation, timing/framing, serial enumeration, echo suppression and RTS direction support.
 - WP-05: cyclic poll scheduler, write safety/read-back/audit service and canonical address notation.
+- WP-06: versioned v8 workspace/project schema, explicit v7 workspace-v2 migration, no-silent-loss preservation of unmapped fields, safe connection-profile persistence, feature flags for incomplete modules, atomic save/backup/recovery behavior and project-restart write/fault disarming.
 - Deep-audit hardening: FC22 Mask Write Register end-to-end support, serial Unit-ID validation, correct RTU/ASCII broadcast behavior, immutable broker-level transmission evidence, reopen write-lock hardening, strict simulator seed validation, serialized serial transmit execution and explicit handling of indeterminate driver-write outcomes.
 
 ## Deep-audit findings closed
@@ -33,6 +34,8 @@ The following work is present with automated coverage:
 | P0 | RTU/ASCII one-shot Master accepted Unit IDs 248..255 | Serial Master now enforces 0..247 while the transport-neutral/TCP codec retains byte-wide Unit IDs |
 | P0 | FC23 could be treated as a no-response Unit-0 serial broadcast even though it contains a read operation | Unit-0 serial broadcast is restricted to FC05/06/15/16; unsupported broadcast functions are rejected before transmit |
 | P0 | ASCII virtual Slave did not implement the same Unit-0 broadcast semantics as RTU | RTU and ASCII now share the same supported serial broadcast path |
+| P0 | Persisted project/runtime state could have become a future path for restoring armed writes/fault injection | v8 project normalization and persistence always replace transient runtime capability with a disarmed safe state; connection profiles exclude live owner/state/write/fault fields |
+| P0 | A v7-to-v8 migration could silently drop fields that the new schema did not yet understand | Explicit migration preserves known identity-bearing data and retains unknown project/workspace fields under legacy/migration evidence, while producing a backup and migration report |
 | P1 | FC22 was in the v8 target but absent from shared codec/Master/Slave/write-safety layers | Added one shared FC22 codec and end-to-end Master/Slave/read-back support |
 | P1 | Failed/timeout writes could lose transmitted request bytes in the enriched write audit | Master/transport errors retain request evidence and write audit uses that evidence on failures; indeterminate low-level writes are separately marked in broker evidence |
 | P1 | Simulator `seed()` could silently wrap invalid values through typed arrays | Seed operations now use the same strict bit/register value validation as live writes while still allowing initialization of read-only areas |
@@ -45,6 +48,8 @@ The following work is present with automated coverage:
 - Discovery is read-only; proxy is forward-only.
 - Master/Test write intent requires a per-connection live write latch.
 - A reopened connection returns to `LOCKED` regardless of prior ownership state.
+- Saved v8 project files cannot persist armed write/fault state; load/save normalizes those runtime fields back to safe defaults.
+- Saved connection profiles do not carry runtime ownership, live connection state, write latch or fault-injection state.
 - Serial resource ownership is exclusive through the Connection Broker.
 - Serial Unit 0 is only treated as broadcast for the explicitly supported write functions.
 - Public serial transmit calls are internally serialized across direction control, echo handling, driver write and drain.
@@ -57,7 +62,7 @@ The following work is present with automated coverage:
 These are roadmap items, not hidden completion claims:
 
 - v8 application shell, Connection Center UI, Master UI and Simulator UI.
-- v8 project schema, explicit v7-to-v8 migration and persistence of v8 workspaces.
+- vertical browser integration of the new v8 project store and saved connection profiles.
 - unified v8 Traffic/Register Lab browser integration.
 - address/unit scanning through the shared Master engine.
 - Test Center/raw-frame studio and recipe engine.
