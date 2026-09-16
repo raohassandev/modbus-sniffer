@@ -5,6 +5,8 @@ module.exports = Object.freeze({
   ...require('./events'),
   ...require('./connectionBroker'),
   ...require('./connectionBrokerSafety'),
+  ...require('./connectionProfileRuntime'),
+  ...require('./workbenchServer'),
   ...require('./transports/virtualLoopback'),
   ...require('./transports/receiveQueue'),
   ...require('./transports/tcpStreamFramer'),
