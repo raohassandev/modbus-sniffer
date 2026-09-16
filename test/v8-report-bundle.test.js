@@ -60,6 +60,7 @@ test('inactive project handover uses persisted historian configuration without a
     loggerProfiles: [
       { streamId: 'inactive-kw', sourceKey: 'grid:kw', label: 'Power', unit: 'kW', historian: true },
       { streamId: 'log-only', sourceKey: 'grid:pf', label: 'PF', historian: false },
+      { streamId: 'unspecified', sourceKey: 'grid:v', label: 'Voltage', unit: 'V' },
     ],
   });
   let snapshots = 0;
