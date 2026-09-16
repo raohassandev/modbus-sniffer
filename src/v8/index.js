@@ -7,6 +7,7 @@ module.exports = Object.freeze({
   ...require('./connectionBroker'),
   ...require('./connectionBrokerSafety'),
   ...require('./connectionCenterService'),
+  ...require('./connectionCenterServiceV8'),
   ...require('./workbenchServer'),
   ...require('./workbenchServerV8'),
   ...require('./transports/virtualLoopback'),
