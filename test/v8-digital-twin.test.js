@@ -69,7 +69,9 @@ test('v8 Digital Twin preview preserves values/definitions/provenance and defaul
   assert.equal(twin.devices.length, 1);
   assert.deepEqual(twin.devices[0].memory.holdingRegisters, [{ address: 0, values: [100, 200] }]);
   assert.deepEqual(twin.devices[0].memory.coils, [{ address: 4, values: [true] }]);
-  assert.equal(twin.devices[0].metadata.pointDefinitions[0].definition.name, 'Voltage');
+  const voltage = twin.devices[0].metadata.pointDefinitions.find((point) => point.area === 'holdingRegisters' && point.address === 0);
+  assert.equal(voltage.definition.name, 'Voltage');
+  assert.equal(voltage.evidence.sampleCount, 5);
   assert.equal(twin.quality.uncertainPoints, 1);
 });
 
