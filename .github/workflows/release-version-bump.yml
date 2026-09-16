@@ -1,0 +1,45 @@
+name: One-shot v8 release version bump
+
+on:
+  push:
+    branches: [v8-release-completion]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Synchronize root and desktop package versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$(node -p "require('./package.json').version")" = "8.0.0" ] && [ "$(node -p "require('./desktop/package.json').version")" = "8.0.0" ]; then
+            echo "Versions already synchronized."
+            exit 0
+          fi
+          npm version 8.0.0 --no-git-tag-version --allow-same-version
+          npm --prefix desktop version 8.0.0 --no-git-tag-version --allow-same-version
+          npm run version:check
+      - name: Commit synchronized manifests and lockfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package.json package-lock.json desktop/package.json desktop/package-lock.json; then
+            echo "No version changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json desktop/package.json desktop/package-lock.json
+          git commit -m "chore: bump Workbench release metadata to 8.0.0"
+          git push origin HEAD:v8-release-completion
