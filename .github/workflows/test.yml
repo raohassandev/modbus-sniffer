@@ -79,6 +79,12 @@ jobs:
       - run: node --check scripts/check-v8-syntax.js
       - run: node --check scripts/benchmark-v7.js
       - run: node --check playwright.config.js
+      - name: Windows SQLite historian core probe
+        if: runner.os == 'Windows' && matrix.node != 20
+        run: node --test test/v8-history.test.js
+      - name: Windows SQLite history workspace probe
+        if: runner.os == 'Windows' && matrix.node != 20
+        run: node --test test/v8-history-workspace.test.js
       - run: npm test
       - run: npm run smoke
       - run: npm run acceptance
