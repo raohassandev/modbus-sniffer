@@ -7,6 +7,7 @@ const path = require('path');
 const http = require('http');
 const net = require('net');
 const { prepareDesktopDataDir } = require('./storage');
+const { redactLogSecrets } = require('./logSafety');
 
 let backend = null;
 let win = null;
@@ -14,14 +15,6 @@ let port = null;
 let quitInProgress = false;
 let allowFinalQuit = false;
 let desktopLogPath = null;
-
-function redactLogSecrets(message) {
-  let text = String(message || '');
-  text = text.replace(/-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY-----[\s\S]*?-----END(?: [A-Z0-9]+)* PRIVATE KEY-----/gi, '[REDACTED PRIVATE KEY]');
-  text = text.replace(/("(?:password|passphrase|client[_-]?secret|api[_-]?key|access[_-]?token|refresh[_-]?token|token|private[_-]?key|key[_-]?path)"\s*:\s*)"(?:\\.|[^"\\])*"/gi, '$1"[REDACTED]"');
-  text = text.replace(/\b(password|passphrase|client[_-]?secret|api[_-]?key|access[_-]?token|refresh[_-]?token|token|private[_-]?key|key[_-]?path)\s*=\s*([^\s,;]+)/gi, '$1=[REDACTED]');
-  return text;
-}
 
 function appendDesktopLog(level, message) {
   if (!desktopLogPath) return;
@@ -247,4 +240,4 @@ app.on('before-quit', event => {
   });
 });
 
-module.exports = { backendEntry, redactLogSecrets };
+module.exports = { backendEntry };
