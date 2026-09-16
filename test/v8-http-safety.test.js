@@ -5,18 +5,27 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { WebSocket } = require('ws');
 const { V8ProjectStore } = require('../src/v8/project');
 const { ConnectionBroker } = require('../src/v8/connectionBroker');
 const { startV8WorkbenchServer } = require('../src/v8/workbenchServer');
-const { createMutationRateLimiter } = require('../src/v8/security/httpSafety');
+const { createMutationRateLimiter, webSocketOriginAllowed } = require('../src/v8/security/httpSafety');
 
-async function setup(t) {
+async function setup(t, options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modbus-v8-http-safety-'));
   const store = new V8ProjectStore({ dataDir: dir, autoMigrate: false });
   const broker = new ConnectionBroker();
-  const web = await startV8WorkbenchServer({ store, broker, host: '127.0.0.1', port: 0 });
+  const web = await startV8WorkbenchServer({ store, broker, host: '127.0.0.1', port: 0, ...options });
   t.after(async () => { await web.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 25 }); });
   return { store, web };
+}
+
+function openWs(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url, options);
+    ws.once('open', () => resolve(ws));
+    ws.once('error', reject);
+  });
 }
 
 test('v8 server rejects cross-origin browser mutations but allows same-origin and non-browser clients', async (t) => {
@@ -34,6 +43,39 @@ test('v8 server rejects cross-origin browser mutations but allows same-origin an
 
   const automation = await fetch(url, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ density: 'compact' }) });
   assert.equal(automation.status, 200);
+});
+
+test('v8 realtime WebSocket rejects cross-origin browser handshakes and allows same-origin/local clients', async (t) => {
+  const { web } = await setup(t);
+  const origin = web.url.replace(/\/v8\/$/, '');
+  const wsUrl = `${origin.replace(/^http/, 'ws')}/ws/v8`;
+
+  const rejectedStatus = await new Promise((resolve, reject) => {
+    const ws = new WebSocket(wsUrl, { headers: { Origin: 'https://evil.example' } });
+    ws.once('open', () => reject(new Error('cross-origin WebSocket unexpectedly opened')));
+    ws.once('unexpected-response', (_request, response) => {
+      const status = response.statusCode;
+      response.resume();
+      resolve(status);
+    });
+    ws.once('error', (error) => {
+      if (error?.message?.includes('Unexpected server response: 403')) resolve(403);
+      else reject(error);
+    });
+  });
+  assert.equal(rejectedStatus, 403);
+
+  const sameOrigin = await openWs(wsUrl, { headers: { Origin: origin } });
+  sameOrigin.close();
+  const localAutomation = await openWs(wsUrl);
+  localAutomation.close();
+});
+
+test('v8 WebSocket origin helper rejects invalid/browser cross-origin values but permits no-Origin automation', () => {
+  assert.equal(webSocketOriginAllowed({ headers: { host: '127.0.0.1:18777' }, socket: {}, }), true);
+  assert.equal(webSocketOriginAllowed({ headers: { host: '127.0.0.1:18777', origin: 'null' }, socket: {} }), false);
+  assert.equal(webSocketOriginAllowed({ headers: { host: '127.0.0.1:18777', origin: 'https://evil.example' }, socket: {} }), false);
+  assert.equal(webSocketOriginAllowed({ headers: { host: '127.0.0.1:18777', origin: 'http://127.0.0.1:18777' }, socket: {} }), true);
 });
 
 test('v8 server returns structured 413 for an oversized request body', async (t) => {
