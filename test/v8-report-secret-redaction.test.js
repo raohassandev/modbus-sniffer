@@ -9,7 +9,7 @@ test('v8 handover redaction removes credential fields without damaging engineeri
     deviceKey: 'grid-meter:1',
     registerKey: 'grid-meter:1:40001',
     tls: { keyPath: '/secure/client.key', certPath: '/secure/client.crt', passphrase: 'secret-pass' },
-    auth: { token: 'abc123', api_key: 'xyz789' },
+    auth: { token: 'abc123', api_key: 'xyz789', authorization: 'Bearer secret', cookie: 'session=abc', pfx: 'binary-secret' },
   };
   const safe = redactSensitive(input);
   assert.equal(safe.deviceKey, input.deviceKey);
@@ -19,6 +19,9 @@ test('v8 handover redaction removes credential fields without damaging engineeri
   assert.equal(safe.tls.passphrase, '[REDACTED]');
   assert.equal(safe.auth.token, '[REDACTED]');
   assert.equal(safe.auth.api_key, '[REDACTED]');
+  assert.equal(safe.auth.authorization, '[REDACTED]');
+  assert.equal(safe.auth.cookie, '[REDACTED]');
+  assert.equal(safe.auth.pfx, '[REDACTED]');
 });
 
 test('v8 handover redaction preserves Buffer and Date evidence types', () => {
@@ -53,7 +56,7 @@ test('v8 handover project and runtime report files are emitted from redacted cop
       snapshot: () => ({ session: { password: 'runtime-secret', deviceKey: 'master-device' } }),
       audit: () => [{ auditId: 'a1', details: { clientSecret: 'audit-secret' } }],
     },
-    timeline: { query: () => [{ eventId: 'e1', details: { accessToken: 'traffic-secret' } }] },
+    timeline: { query: () => [{ eventId: 'e1', details: { accessToken: 'traffic-secret', authorization: 'Bearer traffic-auth' } }] },
   });
   const built = reports.buildFiles('p1');
   const projectJson = JSON.parse(built.files.get('project/project.json').toString('utf8'));
@@ -68,5 +71,6 @@ test('v8 handover project and runtime report files are emitted from redacted cop
   assert.equal(masterJson.session.deviceKey, 'master-device');
   assert.equal(auditJson[0].details.clientSecret, '[REDACTED]');
   assert.equal(trafficJson[0].details.accessToken, '[REDACTED]');
+  assert.equal(trafficJson[0].details.authorization, '[REDACTED]');
   assert.equal(built.manifest.secretRedaction, true);
 });
