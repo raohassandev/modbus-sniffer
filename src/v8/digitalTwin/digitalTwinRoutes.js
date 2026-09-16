@@ -8,6 +8,7 @@ const BAD_REQUEST = new Set([
   'TARGET_CONNECTION_REQUIRED',
   'CONFIRMATION_REQUIRED',
   'TWIN_NOT_APPLIED',
+  'TWIN_ALREADY_APPROVED',
   'DIGITAL_TWIN_APPROVAL_REQUIRED',
 ]);
 const NOT_FOUND = new Set(['TWIN_NOT_FOUND', 'PROJECT_NOT_FOUND', 'SERVER_NOT_FOUND']);
@@ -51,25 +52,18 @@ function mountDigitalTwinRoutes({ app, digitalTwin, flags, assertFeature, broadc
     res.status(201).json({ ok: true, twin });
   }));
 
+  app.patch('/api/v8/digital-twins/:twinId', route(async (req, res) => {
+    const twin = digitalTwin.retarget(req.params.twinId, req.body || {});
+    broadcast({ type: 'digital-twin.retargeted', twinId: twin.twinId, serverId: twin.target.serverId });
+    res.json({ ok: true, twin });
+  }));
+
   app.post('/api/v8/digital-twins/:twinId/apply', route(async (req, res) => {
-    const current = digitalTwin.get(req.params.twinId);
     const body = req.body || {};
-    let twin = current;
-    if (body.targetConnectionId || body.serverId || body.framing || body.writableAreas) {
-      twin = digitalTwin.saveDraft({
-        ...current,
-        twinId: current.twinId,
-        sourceConnectionId: current.source.connectionId,
-        targetConnectionId: body.targetConnectionId ?? current.target.connectionId,
-        serverId: body.serverId ?? current.target.serverId,
-        framing: body.framing ?? current.target.framing,
-        receivePollMs: body.receivePollMs ?? current.target.receivePollMs,
-        writableAreas: body.writableAreas ?? current.safety.writableAreas,
-        unitIds: current.source.unitIds,
-        name: body.name ?? current.name,
-      });
-    }
-    twin = digitalTwin.apply(twin.twinId);
+    const hasTargetPatch = ['targetConnectionId', 'serverId', 'framing', 'receivePollMs', 'writableAreas', 'name']
+      .some((field) => Object.prototype.hasOwnProperty.call(body, field));
+    if (hasTargetPatch) digitalTwin.retarget(req.params.twinId, body);
+    const twin = digitalTwin.apply(req.params.twinId);
     broadcast({ type: 'digital-twin.applied', twinId: twin.twinId, serverId: twin.target.serverId });
     res.json({ ok: true, twin });
   }));
