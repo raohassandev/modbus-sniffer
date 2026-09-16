@@ -17,6 +17,7 @@
     "version:check": "node scripts/version-sync.js",
     "audit:runtime": "npm audit --omit=dev --audit-level=high",
     "quality": "npm run version:check && npm run lint && npm run check:v8",
+    "benchmark:v8": "node scripts/benchmark-v8.js",
     "smoke": "node scripts/smoke.js",
     "acceptance": "node scripts/acceptance.js",
     "soak": "node scripts/soak.js",
