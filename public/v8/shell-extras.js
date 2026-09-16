@@ -23,6 +23,20 @@
   const workspaceHost = document.querySelector('.workspace-host');
   if (!navList || !workspaceHost) return;
 
+  const brandSubtitle = document.querySelector('.brand-subtitle');
+  if (brandSubtitle) brandSubtitle.textContent = 'v8.0.0 release-candidate workspace · Ctrl/Cmd+K quick open';
+  for (const row of document.querySelectorAll('#workspace-settings .details-list > div')) {
+    const term = row.querySelector('dt');
+    const value = row.querySelector('dd');
+    if (!term || !value) continue;
+    if (term.textContent.trim() === 'Stable product') {
+      term.textContent = 'Release candidate';
+      value.textContent = 'v8.0.0';
+    } else if (term.textContent.trim() === 'Workbench') {
+      value.textContent = 'v8.0.0';
+    }
+  }
+
   const tabBar = document.createElement('div');
   tabBar.className = 'document-tabs';
   tabBar.setAttribute('role', 'tablist');
