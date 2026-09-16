@@ -61,7 +61,7 @@ test('v8 VirtualDevice can enforce generated-twin read-only write policy', () =>
 
 test('v8 Digital Twin preview preserves values/definitions/provenance and defaults writable areas off', () => {
   const store = createStore();
-  const registerLab = { list: ({ connectionId }) => sourcePoints().filter((point) => point.connectionId === connectionId) };
+  const registerLab = { maxPoints: 100000, list: ({ connectionId }) => sourcePoints().filter((point) => point.connectionId === connectionId) };
   const service = new v8.DigitalTwinService({ store, registerLab, simulator: {} });
   const twin = service.preview({ sourceConnectionId: 'source', targetConnectionId: 'target' });
   assert.equal(twin.target.framing, 'tcp');
@@ -75,9 +75,27 @@ test('v8 Digital Twin preview preserves values/definitions/provenance and defaul
   assert.equal(twin.quality.uncertainPoints, 1);
 });
 
+test('v8 Digital Twin can be retargeted after capture evidence is no longer live', () => {
+  const store = createStore();
+  let live = true;
+  const registerLab = { maxPoints: 100000, list: () => live ? sourcePoints() : [] };
+  const service = new v8.DigitalTwinService({ store, registerLab, simulator: {} });
+  const draft = service.saveDraft({ sourceConnectionId: 'source', targetConnectionId: 'target', serverId: 'generated-a' });
+  live = false;
+  const retargeted = service.retarget(draft.twinId, {
+    targetConnectionId: 'target',
+    serverId: 'generated-b',
+    writableAreas: { holdingRegisters: true },
+  });
+  assert.equal(retargeted.target.serverId, 'generated-b');
+  assert.equal(retargeted.devices[0].serverId, 'generated-b');
+  assert.equal(retargeted.devices[0].metadata.pointDefinitions.length, 3);
+  assert.equal(retargeted.safety.writableAreas.holdingRegisters, true);
+});
+
 test('v8 Digital Twin apply is review-gated and explicit approval updates simulator metadata', () => {
   const store = createStore();
-  const registerLab = { list: () => sourcePoints() };
+  const registerLab = { maxPoints: 100000, list: () => sourcePoints() };
   const calls = { servers: [], devices: [] };
   let server = null;
   const simulator = {
