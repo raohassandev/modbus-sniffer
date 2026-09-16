@@ -6,8 +6,10 @@ const { spawnSync } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
 const sourceRoot = path.join(root, 'src', 'v8');
+const publicRoot = path.join(root, 'public', 'v8');
 
 function collectJs(dir) {
+  if (!fs.existsSync(dir)) return [];
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -17,14 +19,12 @@ function collectJs(dir) {
   return out.sort();
 }
 
-const files = collectJs(sourceRoot);
-for (const extra of [
-  path.join(root, 'src', 'index-v8.js'),
-  path.join(root, 'public', 'v8', 'app.js'),
-  path.join(root, 'public', 'v8', 'shell-extras.js'),
-]) {
-  if (fs.existsSync(extra)) files.push(extra);
-}
+const files = [
+  ...collectJs(sourceRoot),
+  ...collectJs(publicRoot),
+];
+const launcher = path.join(root, 'src', 'index-v8.js');
+if (fs.existsSync(launcher)) files.push(launcher);
 files.sort();
 
 if (!files.length) {

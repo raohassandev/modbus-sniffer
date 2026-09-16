@@ -23,6 +23,7 @@ module.exports = Object.freeze({
   ...require('./master/pollScheduler'),
   ...require('./master/writeSafety'),
   ...require('./master/addressNotation'),
+  ...require('./master/masterWorkspaceService'),
   ...require('./slave/virtualDevice'),
   ...require('./slave/virtualSlaveServer'),
   ...require('./project'),

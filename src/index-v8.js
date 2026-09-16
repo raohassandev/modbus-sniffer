@@ -4,7 +4,7 @@ const path = require('node:path');
 const process = require('node:process');
 const { ConnectionBroker } = require('./v8/connectionBroker');
 const { V8ProjectStore } = require('./v8/project');
-const { startV8WorkbenchServer } = require('./v8/workbenchServer');
+const { startV8ProductServer } = require('./v8/workbenchServerV8');
 const { loadFeatureFlags } = require('./v8/featureFlags');
 
 function parseArgs(argv) {
@@ -48,7 +48,7 @@ async function main() {
   const store = new V8ProjectStore({ dataDir: options.dataDir });
   const broker = new ConnectionBroker();
   const flags = loadFeatureFlags();
-  const web = await startV8WorkbenchServer({
+  const web = await startV8ProductServer({
     store,
     broker,
     host: options.host,
