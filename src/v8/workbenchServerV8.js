@@ -17,6 +17,8 @@ const { DigitalTwinService } = require('./digitalTwin/digitalTwinService');
 const { mountDigitalTwinRoutes } = require('./digitalTwin/digitalTwinRoutes');
 const { TestCenterWorkspaceService } = require('./testCenter/testCenterWorkspaceService');
 const { mountTestCenterRoutes } = require('./testCenter/testCenterRoutes');
+const { HistoryWorkspaceService } = require('./history/historyWorkspaceService');
+const { mountHistoryRoutes } = require('./history/historyRoutes');
 
 async function startV8ProductServer(options = {}) {
   const connectionCenter = options.connectionCenter || new ConnectionCenterServiceV8({ store: options.store, broker: options.broker });
@@ -45,6 +47,7 @@ async function startV8ProductServer(options = {}) {
   const timeline = new TrafficTimelineService({ maxEvents: 20000 });
   const registerLab = new RegisterLabService({ store: options.store, broker: options.broker });
   const digitalTwin = new DigitalTwinService({ store: options.store, registerLab, simulator });
+  const history = new HistoryWorkspaceService({ store: options.store, registerLab, dataDir: options.store?.dataDir });
 
   const broadcast = (event) => {
     const payload = JSON.stringify({ at: Date.now(), ...event });
@@ -59,6 +62,7 @@ async function startV8ProductServer(options = {}) {
   mountTrafficRegisterRoutes({ app: web.app, timeline, registerLab, flags: options.flags, assertFeature, broadcast });
   mountDigitalTwinRoutes({ app: web.app, digitalTwin, flags: options.flags, assertFeature, broadcast });
   mountTestCenterRoutes({ app: web.app, testCenter, flags: options.flags, assertFeature, broadcast });
+  mountHistoryRoutes({ app: web.app, history, flags: options.flags, assertFeature, broadcast });
 
   const capture = (event) => {
     const normalized = timeline.ingest(event);
@@ -70,12 +74,16 @@ async function startV8ProductServer(options = {}) {
     broadcast({ type: 'runtime.event', event });
   };
   const twinRelay = (event) => broadcast({ type: 'runtime.event', event });
+  const onHistoryEvent = (event) => broadcast({ type: 'runtime.event', event });
+  const onHistoryError = (error) => broadcast({ type: 'history.error', error: { code: error?.code || null, message: String(error?.message || error) } });
   const onBrokerEvent = (event) => capture(event);
   masterWorkspace.on('event', relay);
   discovery.on('event', relay);
   simulator.on('event', relay);
   testCenter.on('event', relay);
   digitalTwin.on('event', twinRelay);
+  history.on('event', onHistoryEvent);
+  history.on('error', onHistoryError);
   options.broker.on('event', onBrokerEvent);
 
   const baseClose = web.close;
@@ -88,13 +96,17 @@ async function startV8ProductServer(options = {}) {
     timeline,
     registerLab,
     digitalTwin,
+    history,
     async close() {
       options.broker.off('event', onBrokerEvent);
+      history.off('event', onHistoryEvent);
+      history.off('error', onHistoryError);
       digitalTwin.off('event', twinRelay);
       testCenter.off('event', relay);
       simulator.off('event', relay);
       discovery.off('event', relay);
       masterWorkspace.off('event', relay);
+      history.shutdown();
       await testCenter.shutdown();
       await simulator.shutdown();
       await discovery.shutdown();
