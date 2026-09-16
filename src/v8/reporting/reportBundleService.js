@@ -60,7 +60,7 @@ function objectRows(input, keyName) {
 
 function configuredHistorianTags(project) {
   return (project.loggerProfiles || [])
-    .filter((profile) => profile?.historian === true)
+    .filter((profile) => profile?.historian !== false)
     .map((profile) => ({
       tagId: String(profile.streamId || ''),
       name: String(profile.label || profile.streamId || ''),
