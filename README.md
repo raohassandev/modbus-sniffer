@@ -11,7 +11,7 @@ This branch is the **8.0.0 release candidate** carried by PR #31. On this branch
 - the Windows desktop launcher starts the v8 backend and UI.
 - v7 remains available explicitly with `npm run v7` for compatibility.
 
-Do not describe 8.0.0 as merged/released on `main` until PR #31's exact current head passes the full CI matrix and is merged. See `docs/V8_IMPLEMENTATION_STATUS.md` for the audited release boundary.
+Do not describe 8.0.0 as merged/released on `main` until PR #31's exact current head passes `npm run release:gate:mac` on a clean Mac checkout and is merged. See `docs/V8_IMPLEMENTATION_STATUS.md`, `docs/V8_RELEASE_CLOSURE.md` and `docs/ACTIVE_TODO.md` for the audited release boundary.
 
 ## Safety model
 
@@ -21,12 +21,13 @@ The active workspaces are deliberately separated from passive and LAB behavior:
 - Discovery is read-only and cannot inherit Master write permission.
 - Serial resources have one active owner through the central Connection Broker.
 - Write permission is per connection, off by default, available only while the connection is live and re-locks on close/reopen/restart.
-- Bulk/sensitive writes require stronger confirmation. HMI FC16 writes require explicit bulk confirmation as well as the operator confirmation.
+- Bulk/sensitive writes require stronger confirmation. Effective HMI FC16 writes require explicit bulk confirmation as well as the operator confirmation.
 - Unit-0 RTU/ASCII broadcast semantics are limited to supported write functions.
 - Raw Test Center traffic is distinct from normal validated Modbus requests.
 - Fault injection exists only in the Simulator LAB path and is disabled by default.
 - Low-level write/raw/test transmissions retain bounded audit evidence including connection, ownership, timestamp and transmitted HEX.
 - Browser cross-site mutations are rejected and mutation/body limits are enforced.
+- Browser WebSocket access is same-origin for browser clients and bounded by payload/client limits.
 - Persisted/imported projects and connections cannot restore live ownership, armed writes or active fault injection.
 
 ## Requirements
@@ -85,7 +86,7 @@ This is a compatibility path, not the default product on the v8 release-candidat
 - **Register Lab** — datatype/byte-order/engineering interpretation, scale/offset, enums/bitfields/limits and provenance.
 - **Test Center** — guarded raw-frame studio and versioned automated recipes with assertions, variables, repeat, pause/resume/stop and evidence.
 - **Charts / Logger / Historian** — bounded live series, backend decimation, rotating JSONL logging and optional SQLite historian.
-- **Digital Twin** — draft Simulator models from observed/register evidence with an explicit approval boundary before running generated servers.
+- **Digital Twin** — draft Simulator models from observed/register evidence with an explicit approval boundary and rollback-atomic apply.
 - **HMI Builder** — persistent screens/templates, edit/preview/run modes, bindings, live reads and guarded operator writes/actions.
 - **Projects / Reports** — project clone/Save As, reusable project templates and complete engineering handover bundles.
 
@@ -158,7 +159,7 @@ The v8 handover ZIP contains a manifest with product/version/schema metadata and
 - HMI pages
 - Digital Twin definitions
 
-CSV text is protected against spreadsheet formula injection and generated filenames are sanitized.
+CSV text is protected against spreadsheet formula injection and generated filenames are sanitized. Known credential/private-key material is redacted from handover content before hashing/archiving.
 
 ## Automation / CLI / SDK
 
@@ -188,7 +189,7 @@ sdk/python/modbus_workbench_client.py
 
 ## Validation
 
-Run the local validation gates:
+For ordinary development checks:
 
 ```powershell
 npm run quality
@@ -198,9 +199,17 @@ npm run acceptance
 npm run e2e
 ```
 
-CI exercises Windows and Linux across Node 20/22/24, plus quality/dependency audit and Chromium browser E2E. Windows Node 22/24 runs the SQLite historian coverage through the repository's isolation runner rather than skipping it.
+For release validation, use a clean Mac checkout of the **exact PR head**:
 
-The release candidate must not be merged solely because it is mergeable; the exact current head must be green.
+```bash
+npm run release:gate:mac
+```
+
+That gate runs Node 20/22/24 full test/smoke/acceptance passes, version consistency, lint, recursive v8 syntax, the v8 scale benchmark, v7 compatibility benchmark, runtime dependency audit, bounded v8 concurrent soak and Chromium browser E2E. It records PASS/FAIL evidence under `.release-evidence/` and verifies the Git HEAD did not change during the run.
+
+GitHub Actions validation is manual-only and optional. The existing Automatrix Mac runner is repository-scoped to another repository, so this repository does not depend on it. See `docs/LOCAL_MAC_RELEASE_GATE.md`.
+
+The release candidate must not be merged solely because it is mergeable; the exact current head must have a valid local Mac PASS evidence set.
 
 ## Windows desktop build
 
@@ -212,9 +221,11 @@ npm run desktop:win
 
 Installer output is created under `desktop/dist/`. The release-candidate desktop shell launches v8 on a loopback dynamic port and opens `/v8/` after `/api/v8/status` becomes ready.
 
+The GitHub Windows packaging workflow is manual-only. Clean-Windows installer execution remains target-platform acceptance rather than an automatic merge-time gate.
+
 ## Field acceptance
 
-Software CI cannot prove site wiring, termination, transceiver behavior, electromagnetic noise, third-party device timing or real certificate infrastructure. Perform real equipment/site qualification before production deployment.
+Software validation cannot prove site wiring, termination, transceiver behavior, electromagnetic noise, third-party device timing or real certificate infrastructure. Perform real equipment/site qualification before production deployment.
 
 For the field procedure see:
 
@@ -224,8 +235,11 @@ docs/SITE_ACCEPTANCE.md
 
 ## Documentation
 
+- `docs/ACTIVE_TODO.md` — authoritative short release checklist
 - `docs/V8_IMPLEMENTATION_STATUS.md` — audited implementation and release-candidate boundary
-- `docs/V8_MASTER_TODO.md` — full target-scope roadmap
+- `docs/V8_RELEASE_CLOSURE.md` — release closure ledger and remaining evidence boundary
+- `docs/LOCAL_MAC_RELEASE_GATE.md` — exact local Mac validation/evidence procedure
+- `docs/V8_MASTER_TODO.md` — historical full target-scope roadmap
 - `docs/V8_ALL_IN_ONE_MODBUS_WORKBENCH_PLAN.md` — product/architecture plan
 - `docs/V8_EXECUTION_ARCHITECTURE.md` — execution/ownership contract
 - `docs/V8_PROFESSIONAL_UI_UX_PLAN.md` — UI/UX target
