@@ -7,6 +7,9 @@ module.exports = defineConfig({
   timeout: 30000,
   expect: { timeout: 5000 },
   fullyParallel: false,
+  // Browser integration suites mutate the same long-lived v7/v8 test servers.
+  // Keep one worker so Connection/Traffic/Simulator state cannot race across files.
+  workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'line' : 'list',
   use: {
