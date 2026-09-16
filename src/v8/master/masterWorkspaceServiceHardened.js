@@ -25,7 +25,28 @@ const MASTER_CLIENT_KINDS = Object.freeze(new Set([
   'virtual',
 ]));
 
+function preflightWriteConfirmation(input = {}) {
+  const confirmation = input?.confirmation && typeof input.confirmation === 'object' ? input.confirmation : {};
+  if (confirmation.confirmed !== true) {
+    throw new MasterWorkspaceError('CONFIRMATION_REQUIRED', 'Explicit write confirmation is required');
+  }
+  const functionCode = Number(input?.functionCode);
+  if ([15, 16].includes(functionCode) && confirmation.bulk !== true) {
+    throw new MasterWorkspaceError('BULK_CONFIRMATION_REQUIRED', 'FC15/FC16 require explicit bulk-write confirmation', { functionCode });
+  }
+  if (Number(input?.unitId ?? 1) === 0 && confirmation.broadcast !== true) {
+    throw new MasterWorkspaceError('BROADCAST_CONFIRMATION_REQUIRED', 'Broadcast writes require explicit broadcast confirmation');
+  }
+  return true;
+}
+
 class MasterWorkspaceService extends BaseMasterWorkspaceService {
+  async writeOnce(input = {}) {
+    // Reject unsafe requests before _ensureSession() can open/claim a transport.
+    preflightWriteConfirmation(input);
+    return super.writeOnce(input);
+  }
+
   saveJob(input, projectId = this.connectionCenter.activeProjectId()) {
     const project = this.store.getProject(projectId);
     if (!project) throw new MasterWorkspaceError('PROJECT_NOT_FOUND', `Project ${projectId} was not found`, { projectId });
@@ -115,5 +136,6 @@ class MasterWorkspaceService extends BaseMasterWorkspaceService {
 
 module.exports = {
   MASTER_CLIENT_KINDS,
+  preflightWriteConfirmation,
   MasterWorkspaceService,
 };
