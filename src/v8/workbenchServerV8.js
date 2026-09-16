@@ -17,6 +17,8 @@ const { DigitalTwinService } = require('./digitalTwin/digitalTwinService');
 const { mountDigitalTwinRoutes } = require('./digitalTwin/digitalTwinRoutes');
 const { TestCenterWorkspaceService } = require('./testCenter/testCenterWorkspaceService');
 const { mountTestCenterRoutes } = require('./testCenter/testCenterRoutes');
+const { HmiBuilderService } = require('./hmi/hmiBuilderService');
+const { mountHmiRoutes } = require('./hmi/hmiRoutes');
 
 async function startV8ProductServer(options = {}) {
   const connectionCenter = options.connectionCenter || new ConnectionCenterServiceV8({ store: options.store, broker: options.broker });
@@ -45,6 +47,7 @@ async function startV8ProductServer(options = {}) {
   const timeline = new TrafficTimelineService({ maxEvents: 20000 });
   const registerLab = new RegisterLabService({ store: options.store, broker: options.broker });
   const digitalTwin = new DigitalTwinService({ store: options.store, registerLab, simulator });
+  const hmi = new HmiBuilderService({ store: options.store, masterWorkspace, testCenter });
 
   const broadcast = (event) => {
     const payload = JSON.stringify({ at: Date.now(), ...event });
@@ -59,6 +62,7 @@ async function startV8ProductServer(options = {}) {
   mountTrafficRegisterRoutes({ app: web.app, timeline, registerLab, flags: options.flags, assertFeature, broadcast });
   mountDigitalTwinRoutes({ app: web.app, digitalTwin, flags: options.flags, assertFeature, broadcast });
   mountTestCenterRoutes({ app: web.app, testCenter, flags: options.flags, assertFeature, broadcast });
+  mountHmiRoutes({ app: web.app, hmi, flags: options.flags, assertFeature, broadcast });
 
   const capture = (event) => {
     const normalized = timeline.ingest(event);
@@ -69,13 +73,14 @@ async function startV8ProductServer(options = {}) {
     capture(event);
     broadcast({ type: 'runtime.event', event });
   };
-  const twinRelay = (event) => broadcast({ type: 'runtime.event', event });
+  const passiveRelay = (event) => broadcast({ type: 'runtime.event', event });
   const onBrokerEvent = (event) => capture(event);
   masterWorkspace.on('event', relay);
   discovery.on('event', relay);
   simulator.on('event', relay);
   testCenter.on('event', relay);
-  digitalTwin.on('event', twinRelay);
+  digitalTwin.on('event', passiveRelay);
+  hmi.on('event', passiveRelay);
   options.broker.on('event', onBrokerEvent);
 
   const baseClose = web.close;
@@ -88,9 +93,11 @@ async function startV8ProductServer(options = {}) {
     timeline,
     registerLab,
     digitalTwin,
+    hmi,
     async close() {
       options.broker.off('event', onBrokerEvent);
-      digitalTwin.off('event', twinRelay);
+      hmi.off('event', passiveRelay);
+      digitalTwin.off('event', passiveRelay);
       testCenter.off('event', relay);
       simulator.off('event', relay);
       discovery.off('event', relay);
