@@ -6,6 +6,7 @@ const { ConnectionBroker } = require('./v8/connectionBroker');
 const { V8ProjectStore } = require('./v8/project');
 const { startV8ProductServer } = require('./v8/workbenchServerV8');
 const { loadFeatureFlags } = require('./v8/featureFlags');
+const { isLoopbackHostname } = require('./v8/security/httpSafety');
 const { PRODUCT_NAME, PRODUCT_VERSION } = require('./v8/version');
 
 function parseArgs(argv) {
@@ -24,6 +25,7 @@ function parseArgs(argv) {
   }
   if (!Number.isInteger(options.port) || options.port < 0 || options.port > 65535) throw new Error('--port must be 0..65535');
   if (!options.host) throw new Error('--host is required');
+  if (!isLoopbackHostname(options.host)) throw new Error('--host must be loopback-only (127.0.0.0/8, ::1 or localhost)');
   return options;
 }
 
@@ -33,7 +35,7 @@ function helpText() {
     '',
     'Usage: node src/index-v8.js [options]',
     '',
-    '  --host <ip>       Web bind address (default 127.0.0.1)',
+    '  --host <ip>       Loopback web bind address only (default 127.0.0.1)',
     '  --port <number>   Web port (default 8088, use 0 for ephemeral)',
     '  --data-dir <dir>  Project data directory (default ./data)',
   ].join('\n');
