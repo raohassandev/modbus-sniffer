@@ -110,8 +110,18 @@ class HmiBuilderService extends base.HmiBuilderService {
   async writeWidget(screenId, widgetId, { value, confirmation = null } = {}, projectId = null) {
     const screen = this.get(screenId, projectId);
     const widget = screen.widgets.find((entry) => entry.widgetId === widgetId);
-    if (widget?.write?.functionCode === 16 && confirmation?.bulk !== true) {
-      throw new base.HmiBuilderError('BULK_CONFIRMATION_REQUIRED', 'FC16 HMI write requires an explicit bulk confirmation', { screenId, widgetId });
+    const configuredFunctionCode = Number(widget?.write?.functionCode ?? 6);
+    const wordCount = WORDS[String(widget?.binding?.dataType || 'uint16')] || 1;
+    const effectiveFunctionCode = widget?.type === 'numericInput' && (configuredFunctionCode === 16 || wordCount > 1)
+      ? 16
+      : configuredFunctionCode;
+    if (effectiveFunctionCode === 16 && confirmation?.bulk !== true) {
+      throw new base.HmiBuilderError('BULK_CONFIRMATION_REQUIRED', 'FC16 HMI write requires an explicit bulk confirmation', {
+        screenId,
+        widgetId,
+        configuredFunctionCode,
+        effectiveFunctionCode,
+      });
     }
     return super.writeWidget(screenId, widgetId, { value, confirmation }, projectId);
   }
