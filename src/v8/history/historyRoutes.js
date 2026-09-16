@@ -8,11 +8,23 @@ function numberOr(value, fallback) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function integerOr(value, fallback, { min = Number.MIN_SAFE_INTEGER, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const numeric = numberOr(value, fallback);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(numeric)));
+}
+
 function historyErrorStatus(error) {
-  if (['DOCUMENT_NOT_FOUND', 'SERIES_NOT_FOUND', 'STREAM_NOT_FOUND'].includes(error?.code)) return 404;
+  if (['DOCUMENT_NOT_FOUND', 'SERIES_NOT_FOUND', 'STREAM_NOT_FOUND', 'TAG_NOT_FOUND'].includes(error?.code)) return 404;
   if (String(error?.code || '').startsWith('INVALID_')) return 400;
   if (['DOCUMENT_EXISTS', 'SERIES_EXISTS', 'STREAM_EXISTS'].includes(error?.code)) return 409;
   return httpErrorStatus(error);
+}
+
+function sqliteUnavailable(res, history) {
+  if (history.historian) return false;
+  res.status(503).json({ ok: false, error: { code: 'SQLITE_UNAVAILABLE', message: history.snapshot().historian.reason } });
+  return true;
 }
 
 function mountHistoryRoutes({ app, history, flags, assertFeature, broadcast = () => {} } = {}) {
@@ -61,7 +73,7 @@ function mountHistoryRoutes({ app, history, flags, assertFeature, broadcast = ()
     const points = history.charts.querySeries(req.params.documentId, req.params.seriesId, {
       from: numberOr(req.query.from, -Infinity),
       to: numberOr(req.query.to, Infinity),
-      maxPoints: req.query.maxPoints == null ? null : Math.max(2, Math.floor(numberOr(req.query.maxPoints, 1000))),
+      maxPoints: req.query.maxPoints == null ? null : integerOr(req.query.maxPoints, 1000, { min: 2, max: 100000 }),
     });
     res.json({ ok: true, points });
   }));
@@ -81,24 +93,39 @@ function mountHistoryRoutes({ app, history, flags, assertFeature, broadcast = ()
   app.post('/api/v8/logger/flush', historian(async (_req, res) => { history.logger.flush(); res.json({ ok: true, status: history.logger.status() }); }));
 
   app.get('/api/v8/historian', historian(async (_req, res) => res.json({ ok: true, historian: history.snapshot().historian })));
+  app.get('/api/v8/historian/tags', historian(async (_req, res) => {
+    if (sqliteUnavailable(res, history)) return;
+    res.json({ ok: true, tags: history.historian.listTags() });
+  }));
   app.put('/api/v8/historian/tags/:tagId', historian(async (req, res) => {
-    if (!history.historian) return res.status(503).json({ ok: false, error: { code: 'SQLITE_UNAVAILABLE', message: history.snapshot().historian.reason } });
+    if (sqliteUnavailable(res, history)) return;
     res.json({ ok: true, tag: history.historian.upsertTag({ ...(req.body || {}), tagId: req.params.tagId }) });
   }));
   app.post('/api/v8/historian/tags/:tagId/samples', historian(async (req, res) => {
-    if (!history.historian) return res.status(503).json({ ok: false, error: { code: 'SQLITE_UNAVAILABLE', message: history.snapshot().historian.reason } });
+    if (sqliteUnavailable(res, history)) return;
     const result = history.ingestSample({ ...(req.body || {}), tagId: req.params.tagId });
     res.status(201).json({ ok: true, result });
   }));
   app.get('/api/v8/historian/tags/:tagId/samples', historian(async (req, res) => {
-    if (!history.historian) return res.status(503).json({ ok: false, error: { code: 'SQLITE_UNAVAILABLE', message: history.snapshot().historian.reason } });
-    const rows = history.historian.querySamples(req.params.tagId, { from: numberOr(req.query.from, -Infinity), to: numberOr(req.query.to, Infinity), limit: Math.max(1, Math.floor(numberOr(req.query.limit, 10000))) });
+    if (sqliteUnavailable(res, history)) return;
+    const rows = history.historian.querySamples(req.params.tagId, {
+      from: integerOr(req.query.from, 0, { min: 0, max: Number.MAX_SAFE_INTEGER }),
+      to: integerOr(req.query.to, Number.MAX_SAFE_INTEGER, { min: 0, max: Number.MAX_SAFE_INTEGER }),
+      limit: integerOr(req.query.limit, 10000, { min: 1, max: 1000000 }),
+      descending: ['1', 'true', 'yes'].includes(String(req.query.descending || '').toLowerCase()),
+    });
     res.json({ ok: true, samples: rows });
   }));
   app.get('/api/v8/historian/events', historian(async (req, res) => {
-    if (!history.historian) return res.status(503).json({ ok: false, error: { code: 'SQLITE_UNAVAILABLE', message: history.snapshot().historian.reason } });
-    res.json({ ok: true, events: history.historian.queryEvents(req.query || {}) });
+    if (sqliteUnavailable(res, history)) return;
+    const events = history.historian.queryEvents({
+      from: integerOr(req.query.from, 0, { min: 0, max: Number.MAX_SAFE_INTEGER }),
+      to: integerOr(req.query.to, Number.MAX_SAFE_INTEGER, { min: 0, max: Number.MAX_SAFE_INTEGER }),
+      type: req.query.type == null || req.query.type === '' ? null : String(req.query.type),
+      limit: integerOr(req.query.limit, 10000, { min: 1, max: 1000000 }),
+    });
+    res.json({ ok: true, events });
   }));
 }
 
-module.exports = { historyErrorStatus, mountHistoryRoutes };
+module.exports = { numberOr, integerOr, historyErrorStatus, mountHistoryRoutes };
