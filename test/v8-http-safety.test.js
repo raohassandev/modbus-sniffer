@@ -9,7 +9,12 @@ const { WebSocket } = require('ws');
 const { V8ProjectStore } = require('../src/v8/project');
 const { ConnectionBroker } = require('../src/v8/connectionBroker');
 const { startV8WorkbenchServer } = require('../src/v8/workbenchServer');
-const { createMutationRateLimiter, webSocketOriginAllowed } = require('../src/v8/security/httpSafety');
+const {
+  createMutationRateLimiter,
+  isLoopbackHostname,
+  loopbackHostGuard,
+  webSocketOriginAllowed,
+} = require('../src/v8/security/httpSafety');
 
 async function setup(t, options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modbus-v8-http-safety-'));
@@ -71,11 +76,52 @@ test('v8 realtime WebSocket rejects cross-origin browser handshakes and allows s
   localAutomation.close();
 });
 
-test('v8 WebSocket origin helper rejects invalid/browser cross-origin values but permits no-Origin automation', () => {
+test('v8 WebSocket origin helper rejects invalid/cross-origin and DNS-rebinding hosts', () => {
   assert.equal(webSocketOriginAllowed({ headers: { host: '127.0.0.1:18777' }, socket: {}, }), true);
   assert.equal(webSocketOriginAllowed({ headers: { host: '127.0.0.1:18777', origin: 'null' }, socket: {} }), false);
   assert.equal(webSocketOriginAllowed({ headers: { host: '127.0.0.1:18777', origin: 'https://evil.example' }, socket: {} }), false);
   assert.equal(webSocketOriginAllowed({ headers: { host: '127.0.0.1:18777', origin: 'http://127.0.0.1:18777' }, socket: {} }), true);
+  assert.equal(webSocketOriginAllowed({ headers: { host: 'evil.example:18777', origin: 'http://evil.example:18777' }, socket: {} }), false);
+});
+
+test('v8 loopback boundary recognizes only local web bind hosts', () => {
+  assert.equal(isLoopbackHostname('127.0.0.1'), true);
+  assert.equal(isLoopbackHostname('127.25.1.9'), true);
+  assert.equal(isLoopbackHostname('localhost'), true);
+  assert.equal(isLoopbackHostname('::1'), true);
+  assert.equal(isLoopbackHostname('0.0.0.0'), false);
+  assert.equal(isLoopbackHostname('192.168.1.20'), false);
+  assert.equal(isLoopbackHostname('evil.example'), false);
+});
+
+test('v8 HTTP host guard rejects DNS-rebinding Host headers before routes execute', () => {
+  const state = { status: 200, payload: null, next: 0 };
+  const res = {
+    status(code) { state.status = code; return this; },
+    json(payload) { state.payload = payload; return this; },
+  };
+  loopbackHostGuard({ headers: { host: 'evil.example:8088' } }, res, () => { state.next += 1; });
+  assert.equal(state.next, 0);
+  assert.equal(state.status, 403);
+  assert.equal(state.payload.error.code, 'NON_LOOPBACK_HOST');
+
+  const allowed = { headers: { host: '127.0.0.1:8088' } };
+  loopbackHostGuard(allowed, res, () => { state.next += 1; });
+  assert.equal(state.next, 1);
+});
+
+test('v8 Workbench server rejects non-loopback bind addresses before listen', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modbus-v8-remote-bind-'));
+  const store = new V8ProjectStore({ dataDir: dir, autoMigrate: false });
+  const broker = new ConnectionBroker();
+  try {
+    assert.throws(
+      () => startV8WorkbenchServer({ store, broker, host: '0.0.0.0', port: 0 }),
+      /loopback address/,
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 25 });
+  }
 });
 
 test('v8 server returns structured 413 for an oversized request body', async (t) => {
