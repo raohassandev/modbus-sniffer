@@ -11,6 +11,11 @@
   discoveryScript.defer = true;
   document.head.appendChild(discoveryScript);
 
+  const simulatorScript = document.createElement('script');
+  simulatorScript.src = '/v8/simulator.js';
+  simulatorScript.defer = true;
+  document.head.appendChild(simulatorScript);
+
   const workspaceLabels = new Map([
     ['connections', 'Connections'],
     ['master', 'Master'],
