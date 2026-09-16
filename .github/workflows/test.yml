@@ -78,10 +78,11 @@ jobs:
       - run: node --check scripts/version-sync.js
       - run: node --check scripts/check-v8-syntax.js
       - run: node --check scripts/benchmark-v7.js
+      - run: node --check scripts/test-windows-sqlite.js
       - run: node --check playwright.config.js
-      - name: Run full tests (Windows Node 22/24 serialized)
+      - name: Run full tests (Windows Node 22/24 with SQLite isolation)
         if: runner.os == 'Windows' && matrix.node != 20
-        run: node --test --test-concurrency=1
+        run: node scripts/test-windows-sqlite.js
       - name: Run full tests
         if: runner.os != 'Windows' || matrix.node == 20
         run: npm test
