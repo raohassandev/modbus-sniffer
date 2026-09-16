@@ -42,7 +42,7 @@ async function startV8ProductServer(options = {}) {
     for (const client of web.wss.clients) if (client.readyState === WebSocket.OPEN) client.send(payload);
   };
 
-  const projectLifecycle = mountProjectLifecycleRoutes({ app: web.app, store: options.store, broker: options.broker, broadcast });
+  const projectLifecycle = mountProjectLifecycleRoutes({ app: web.app, store: options.store, broker: options.broker, connectionCenter: web.center, broadcast });
   mountMasterWorkspaceRoutes({ app: web.app, masterWorkspace, flags: options.flags, assertFeature, broadcast });
   mountDiscoveryRoutes({ app: web.app, discovery, flags: options.flags, assertFeature, broadcast });
   mountSimulatorRoutes({ app: web.app, simulator, flags: options.flags, assertFeature, broadcast });
