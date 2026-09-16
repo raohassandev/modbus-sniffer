@@ -14,6 +14,8 @@ const { RegisterLabService } = require('./traffic/registerLabService');
 const { mountTrafficRegisterRoutes } = require('./traffic/trafficRoutes');
 const { TestCenterWorkspaceService } = require('./testCenter/testCenterWorkspaceService');
 const { mountTestCenterRoutes } = require('./testCenter/testCenterRoutes');
+const { HistoryWorkspaceService } = require('./history/historyWorkspaceService');
+const { mountHistoryRoutes } = require('./history/historyRoutes');
 
 async function startV8ProductServer(options = {}) {
   const web = await startV8WorkbenchServer(options);
@@ -40,6 +42,7 @@ async function startV8ProductServer(options = {}) {
   });
   const timeline = new TrafficTimelineService({ maxEvents: 20000 });
   const registerLab = new RegisterLabService({ store: options.store, broker: options.broker });
+  const history = new HistoryWorkspaceService({ store: options.store, timeline });
 
   const broadcast = (event) => {
     const payload = JSON.stringify({ at: Date.now(), ...event });
@@ -53,6 +56,7 @@ async function startV8ProductServer(options = {}) {
   mountSimulatorRoutes({ app: web.app, simulator, flags: options.flags, assertFeature, broadcast });
   mountTrafficRegisterRoutes({ app: web.app, timeline, registerLab, flags: options.flags, assertFeature, broadcast });
   mountTestCenterRoutes({ app: web.app, testCenter, flags: options.flags, assertFeature, broadcast });
+  mountHistoryRoutes({ app: web.app, history, flags: options.flags, assertFeature, broadcast });
 
   const capture = (event) => {
     const normalized = timeline.ingest(event);
@@ -79,12 +83,14 @@ async function startV8ProductServer(options = {}) {
     testCenter,
     timeline,
     registerLab,
+    history,
     async close() {
       options.broker.off('event', onBrokerEvent);
       testCenter.off('event', relay);
       simulator.off('event', relay);
       discovery.off('event', relay);
       masterWorkspace.off('event', relay);
+      history.close();
       await testCenter.shutdown();
       await simulator.shutdown();
       await discovery.shutdown();
