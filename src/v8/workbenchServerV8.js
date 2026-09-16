@@ -3,7 +3,7 @@
 const { WebSocket } = require('ws');
 const { startV8WorkbenchServer } = require('./workbenchServer');
 const { assertFeature } = require('./featureFlags');
-const { MasterWorkspaceService } = require('./master/masterWorkspaceService');
+const { MasterWorkspaceService } = require('./master/masterWorkspaceServiceHardened');
 const { mountMasterWorkspaceRoutes } = require('./master/masterWorkspaceRoutes');
 const { DiscoveryScanService } = require('./discovery/discoveryScanService');
 const { mountDiscoveryRoutes } = require('./discovery/discoveryRoutes');
