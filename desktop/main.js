@@ -47,7 +47,7 @@ async function chooseBackendPort() {
 }
 
 function backendEntry(root = backendRoot()) {
-  return path.join(root, 'src', 'index-v7.js');
+  return path.join(root, 'src', 'index-v8.js');
 }
 
 function startBackend(dataDir, selectedPort) {
@@ -55,8 +55,8 @@ function startBackend(dataDir, selectedPort) {
   const entry = backendEntry(root);
   const args = [
     entry,
-    '--web-port', String(selectedPort),
-    '--web-host', '127.0.0.1',
+    '--port', String(selectedPort),
+    '--host', '127.0.0.1',
     '--data-dir', dataDir
   ];
   backend = spawn(process.execPath, args, {
@@ -69,14 +69,14 @@ function startBackend(dataDir, selectedPort) {
   backend.stderr?.on('data', b => console.error(String(b).trim()));
   backend.on('exit', code => {
     backend = null;
-    if (code && win && !win.isDestroyed() && !quitInProgress) dialog.showErrorBox('Analyzer backend stopped', `Backend exited with code ${code}`);
+    if (code && win && !win.isDestroyed() && !quitInProgress) dialog.showErrorBox('Workbench backend stopped', `Backend exited with code ${code}`);
   });
 }
 
 function waitReady(selectedPort, retries = 80) {
   return new Promise((resolve, reject) => {
     const ping = () => {
-      const req = http.get(`http://127.0.0.1:${selectedPort}/api/status`, res => {
+      const req = http.get(`http://127.0.0.1:${selectedPort}/api/v8/status`, res => {
         res.resume();
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 500) resolve();
         else if (--retries <= 0) reject(new Error(`Backend health check returned HTTP ${res.statusCode}.`));
@@ -130,7 +130,7 @@ async function create() {
   let storage;
   try { storage = prepareData(); }
   catch (error) {
-    dialog.showErrorBox('Storage migration error', `${error.message}\n\nThe legacy data was left untouched. Resolve the storage issue before starting the analyzer.`);
+    dialog.showErrorBox('Storage migration error', `${error.message}\n\nThe legacy data was left untouched. Resolve the storage issue before starting the Workbench.`);
     app.quit();
     return;
   }
@@ -161,7 +161,7 @@ async function create() {
   });
   lockNavigation(win, port);
   nativeTheme.on('updated', () => { if (win && !win.isDestroyed()) win.setBackgroundColor(backgroundColor()); });
-  await win.loadURL(`http://127.0.0.1:${port}`);
+  await win.loadURL(`http://127.0.0.1:${port}/v8/`);
 }
 
 const gotLock = app.requestSingleInstanceLock();
