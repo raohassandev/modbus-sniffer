@@ -60,7 +60,8 @@ function objectRows(input, keyName) {
 
 const SENSITIVE_FIELD_NAMES = new Set([
   'password', 'passphrase', 'secret', 'clientsecret', 'apikey', 'token', 'accesstoken', 'refreshtoken',
-  'privatekey', 'privatekeypem', 'keypem', 'keypath',
+  'authorization', 'cookie', 'setcookie', 'credential', 'credentials',
+  'privatekey', 'privatekeypem', 'keypem', 'keypath', 'clientkey', 'serverkey', 'pfx', 'pkcs12',
 ]);
 
 function redactSensitive(value) {
