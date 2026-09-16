@@ -31,5 +31,10 @@ module.exports = Object.freeze({
   ...require('./discovery/discoveryRoutes'),
   ...require('./slave/virtualDevice'),
   ...require('./slave/virtualSlaveServer'),
+  ...require('./slave/faultInjectionLab'),
+  ...require('./slave/labVirtualSlaveServer'),
+  ...require('./slave/dynamicValueEngine'),
+  ...require('./slave/simulatorWorkspaceService'),
+  ...require('./slave/simulatorRoutes'),
   ...require('./project'),
 });
