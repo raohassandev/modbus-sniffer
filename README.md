@@ -1,247 +1,223 @@
-# Modbus Engineering Workbench v8
+# Modbus Sniffer
 
-An all-in-one Modbus engineering workstation for **RTU, ASCII, TCP, UDP, tunnelling and TLS** workflows. The v8 product combines Master polling/writes, Slave/Server simulation, passive/proxy analysis, discovery, Traffic/Register Lab, Test Center/recipes, Charts/Logger/Historian, Digital Twin workflows, automation and HMI Builder surfaces behind one shared protocol and connection-ownership model.
+A field-oriented Modbus engineering tool for observing, decoding and reverse-engineering Modbus RTU/RS485 and Modbus TCP traffic.
 
-## Release status
+## Current product status
 
-This branch is the **8.0.0 release candidate** carried by PR #31. On this branch:
+The **stable Sniffer / Analyzer is the default product again**.
 
-- `npm start` launches `src/index-v8.js`.
-- the package entry point is v8.
-- the Windows desktop launcher starts the v8 backend and UI.
-- v7 remains available explicitly with `npm run v7` for compatibility.
+The experimental v8 Workbench remains in this branch for continued Master/Slave development, but it is **not** the normal entry point and PR #31 is not release-eligible yet.
 
-Do not describe 8.0.0 as merged/released on `main` until PR #31's exact current head passes `npm run release:gate:mac` on a clean Mac checkout and is merged. See `docs/V8_IMPLEMENTATION_STATUS.md`, `docs/V8_RELEASE_CLOSURE.md` and `docs/ACTIVE_TODO.md` for the audited release boundary.
+Normal commands:
 
-## Safety model
-
-The active workspaces are deliberately separated from passive and LAB behavior:
-
-- Passive Analyzer/replay does not gain transmit capability implicitly.
-- Discovery is read-only and cannot inherit Master write permission.
-- Serial resources have one active owner through the central Connection Broker.
-- Write permission is per connection, off by default, available only while the connection is live and re-locks on close/reopen/restart.
-- Bulk/sensitive writes require stronger confirmation. Effective HMI FC16 writes require explicit bulk confirmation as well as the operator confirmation.
-- Unit-0 RTU/ASCII broadcast semantics are limited to supported write functions.
-- Raw Test Center traffic is distinct from normal validated Modbus requests.
-- Fault injection exists only in the Simulator LAB path and is disabled by default.
-- Low-level write/raw/test transmissions retain bounded audit evidence including connection, ownership, timestamp and transmitted HEX.
-- Browser cross-site mutations are rejected and mutation/body limits are enforced.
-- Browser WebSocket access is same-origin for browser clients and bounded by payload/client limits.
-- Persisted/imported projects and connections cannot restore live ownership, armed writes or active fault injection.
-
-## Requirements
-
-- Node.js 20 or newer
-- Windows, Linux or macOS
-- USB-RS485 adapter for real RTU/ASCII work
-- appropriate network access for TCP/UDP/TLS targets
-
-## Install and run
-
-```powershell
-git clone https://github.com/raohassandev/modbus-sniffer.git
-cd modbus-sniffer
-npm install
+```bash
 npm start
 ```
 
-The default v8 browser endpoint is:
+or explicitly:
+
+```bash
+npm run sniffer
+```
+
+Both start the accepted Sniffer / Analyzer runtime:
+
+```text
+src/index-v7.js
+```
+
+Open:
+
+```text
+http://127.0.0.1:8080
+```
+
+The experimental Workbench is available only when intentionally requested:
+
+```bash
+npm run workbench
+```
+
+or:
+
+```bash
+npm run v8
+```
+
+Experimental v8 browser endpoint:
 
 ```text
 http://127.0.0.1:8088/v8/
 ```
 
-Use another port when required:
+## Product model
 
-```powershell
-npm start -- --port 8090
-```
+The project is being corrected around three simple primary tools:
 
-Use a separate data directory:
+### 1. Sniffer
 
-```powershell
-npm start -- --data-dir C:\ModbusWorkbench\data
-```
+Passive analysis of an existing Modbus bus or TCP exchange.
 
-The web server binds to loopback by default. Change `--host` only when you intentionally need another bind address and understand the network exposure.
+Use Sniffer when you want to:
 
-## v7 compatibility
+- listen to existing RTU traffic without polling the device
+- decode requests and responses
+- automatically identify Unit/Slave IDs
+- group registers per device
+- estimate polling intervals
+- measure RTT, timeouts, exceptions and communication quality
+- infer common datatypes / byte orders
+- compare captures and export engineering evidence
 
-The accepted legacy analyzer remains available explicitly:
+The normal RTU Sniffer is receive-only by design.
 
-```powershell
-npm run v7
-```
+### 2. Master
 
-This is a compatibility path, not the default product on the v8 release-candidate branch.
+Active Modbus polling, similar to the normal workflow in Modbus Poll / ModScan.
 
-## Main v8 workspaces
-
-- **Connection Center** — saved connection profiles, ownership/state, serial/network enumeration, diagnostics and safe open/close/test actions.
-- **Master** — one-shot requests, persistent cyclic poll jobs, scheduling, result grids, canonical addressing and guarded writes/read-back/audit.
-- **Discovery** — FC43-first read-only identification and adaptive FC01-04 scanning with evidence and Master handoff.
-- **Simulator** — persistent virtual servers/devices, memory editing, dynamic generators and isolated LAB fault injection.
-- **Traffic** — bounded unified runtime timeline with filters, search, bookmarks, raw evidence and error navigation.
-- **Register Lab** — datatype/byte-order/engineering interpretation, scale/offset, enums/bitfields/limits and provenance.
-- **Test Center** — guarded raw-frame studio and versioned automated recipes with assertions, variables, repeat, pause/resume/stop and evidence.
-- **Charts / Logger / Historian** — bounded live series, backend decimation, rotating JSONL logging and optional SQLite historian.
-- **Digital Twin** — draft Simulator models from observed/register evidence with an explicit approval boundary and rollback-atomic apply.
-- **HMI Builder** — persistent screens/templates, edit/preview/run modes, bindings, live reads and guarded operator writes/actions.
-- **Projects / Reports** — project clone/Save As, reusable project templates and complete engineering handover bundles.
-
-## Supported protocol/runtime scope
-
-The shared v8 protocol core covers standard handling for:
+The corrected Master workflow must be:
 
 ```text
-FC01  Read Coils
-FC02  Read Discrete Inputs
-FC03  Read Holding Registers
-FC04  Read Input Registers
-FC05  Write Single Coil
-FC06  Write Single Register
-FC07  Read Exception Status
-FC08  Diagnostics
-FC11  Get Comm Event Counter
-FC12  Get Comm Event Log
-FC15  Write Multiple Coils
-FC16  Write Multiple Registers
-FC17  Report Server ID
-FC20  Read File Record
-FC21  Write File Record
-FC22  Mask Write Register
-FC23  Read/Write Multiple Registers
-FC24  Read FIFO Queue
-FC43  MEI / Device Identification
+Connect
+  -> Slave / Unit ID
+  -> Function
+  -> Address
+  -> Quantity
+  -> Poll Interval
+  -> Read Once / Start Polling
+  -> Live Values
 ```
 
-The common data model includes exact 16/32/64-bit signed/unsigned handling, float32/float64, configurable byte/word permutations, string/ASCII helpers, BCD and timestamp/date interpretations.
+Writes must use the existing guarded write-safety path and must never be silently armed.
 
-Transport families include native serial RTU/ASCII, Modbus TCP client/server, UDP client/server, RTU/ASCII tunnelling over TCP/UDP and TLS client/server options. TLS profiles use explicit certificate/key/trust configuration and do not silently downgrade to insecure TCP.
+The v8 Master backend exists, but its UI/workflow is still being simplified before it can become a normal product entry point.
 
-## Connection and write safety
+### 3. Slave
 
-A connection profile stores configuration only. Opening a connection establishes runtime ownership separately. A saved project cannot restore a previously armed write latch.
+A Modbus slave/server simulator.
 
-Typical Master flow:
+The corrected Slave workflow must be:
 
-1. create/save the connection profile;
-2. open it in Master ownership;
-3. perform read-only polling;
-4. explicitly enable writes for that live connection when required;
-5. confirm the individual write, including additional bulk/broadcast confirmation where applicable;
-6. inspect read-back/audit evidence;
-7. close the connection, which returns it to a safe locked state.
+```text
+Choose RTU / ASCII / TCP server
+  -> configure port/listener
+  -> add Unit ID
+  -> edit Coils / Discrete Inputs / Holding Registers / Input Registers
+  -> Start Server
+  -> observe incoming reads/writes
+```
 
-If a serial driver write may have reached the bus but completion cannot be proven, the result is reported as `TRANSMISSION_OUTCOME_UNKNOWN`; the connection enters an error state and writes are re-locked until close/reopen.
+Dynamic generators and fault injection are advanced/LAB functions, not part of the normal first screen.
 
-## Projects and migration
+## Install
 
-v8 uses schema version 3 and stores its workbench database separately from legacy v7 workspace data. Migration from supported v7 schema-2 data is explicit and creates a source backup and migration report before writing the v8 destination.
+Requirements:
 
-The store uses atomic writes, keeps a last-known-good backup and preserves a corrupt primary file before recovery. Same Unit IDs on different channels remain isolated through channel-scoped identity.
+- Node.js 20 or newer
+- Windows, Linux or macOS
+- USB-RS485 adapter for live RTU capture
 
-Project clone/Save As and reusable project templates strip runtime/armed state. Project switching is refused while a connection is active.
+Install:
 
-## Engineering handover export
+```bash
+git clone https://github.com/raohassandev/modbus-sniffer.git
+cd modbus-sniffer
+npm install
+```
 
-The v8 handover ZIP contains a manifest with product/version/schema metadata and SHA-256 hashes. Depending on available project/runtime evidence, it can include:
+Run the stable Sniffer:
 
-- complete project configuration
-- Master summary
-- write audit
-- bounded Traffic evidence
-- device/register CSVs with channel/device identity
-- Simulator model
-- recipes/Test Center definitions
-- Logger/Chart/Historian definitions and tags
-- HMI pages
-- Digital Twin definitions
+```bash
+npm start
+```
 
-CSV text is protected against spreadsheet formula injection and generated filenames are sanitized. Known credential/private-key material is redacted from handover content before hashing/archiving.
-
-## Automation / CLI / SDK
-
-The v8 automation client defaults to loopback-only API access and requires explicit remote opt-in. Write helpers require explicit confirmation and preserve separate bulk/broadcast confirmations.
+## Sniffer serial options
 
 Examples:
 
-```powershell
-npm run v8:cli -- status --json
-npm run v8:cli -- connections --json
-npm run v8:cli -- read --connection meter-1 --unit 1 --fc 3 --address 0 --quantity 10 --json
-npm run v8:cli -- write --connection meter-1 --unit 1 --fc 6 --address 10 --value 25 --confirm --json
-npm run v8:cli -- recipe-run .\recipe.json --connection meter-1 --json
+```bash
+npm start -- --port COM5 --baud 9600 --parity none
 ```
 
-JavaScript SDK entry point:
-
-```text
-sdk/js/index.js
-```
-
-Dependency-free Python example client:
-
-```text
-sdk/python/modbus_workbench_client.py
-```
-
-## Validation
-
-For ordinary development checks:
-
-```powershell
-npm run quality
-npm test
-npm run smoke
-npm run acceptance
-npm run e2e
-```
-
-For release validation, use a clean Mac checkout of the **exact PR head**:
+List serial ports:
 
 ```bash
-npm run release:gate:mac
+npm run ports
 ```
 
-That gate runs Node 20/22/24 full test/smoke/acceptance passes, version consistency, lint, recursive v8 syntax, the v8 scale benchmark, v7 compatibility benchmark, runtime dependency audit, bounded v8 concurrent soak and Chromium browser E2E. It records PASS/FAIL evidence under `.release-evidence/` and verifies the Git HEAD did not change during the run.
+Run demo traffic without hardware:
 
-GitHub Actions validation is manual-only and optional. The existing Automatrix Mac runner is repository-scoped to another repository, so this repository does not depend on it. See `docs/LOCAL_MAC_RELEASE_GATE.md`.
-
-The release candidate must not be merged solely because it is mergeable; the exact current head must have a valid local Mac PASS evidence set.
-
-## Windows desktop build
-
-```powershell
-npm install
-npm run desktop:install
-npm run desktop:win
+```bash
+npm run demo
 ```
 
-Installer output is created under `desktop/dist/`. The release-candidate desktop shell launches v8 on a loopback dynamic port and opens `/v8/` after `/api/v8/status` becomes ready.
+Change web port:
 
-The GitHub Windows packaging workflow is manual-only. Clean-Windows installer execution remains target-platform acceptance rather than an automatic merge-time gate.
+```bash
+npm start -- --web-port 8090
+```
 
-## Field acceptance
+Use another data directory:
 
-Software validation cannot prove site wiring, termination, transceiver behavior, electromagnetic noise, third-party device timing or real certificate infrastructure. Perform real equipment/site qualification before production deployment.
+```bash
+npm start -- --data-dir data-site-a
+```
 
-For the field procedure see:
+## Modbus TCP analyzer
+
+The stable TCP analyzer is an inline forwarding proxy. It forwards existing client/server bytes while analyzing MBAP transactions; it does not fabricate polling requests.
+
+Example options include:
 
 ```text
-docs/SITE_ACCEPTANCE.md
+--tcp-proxy
+--tcp-listen-host 127.0.0.1
+--tcp-listen-port 1502
+--tcp-target-host 192.168.1.50
+--tcp-target-port 502
 ```
 
-## Documentation
+## Desktop
 
-- `docs/ACTIVE_TODO.md` — authoritative short release checklist
-- `docs/V8_IMPLEMENTATION_STATUS.md` — audited implementation and release-candidate boundary
-- `docs/V8_RELEASE_CLOSURE.md` — release closure ledger and remaining evidence boundary
-- `docs/LOCAL_MAC_RELEASE_GATE.md` — exact local Mac validation/evidence procedure
-- `docs/V8_MASTER_TODO.md` — historical full target-scope roadmap
-- `docs/V8_ALL_IN_ONE_MODBUS_WORKBENCH_PLAN.md` — product/architecture plan
-- `docs/V8_EXECUTION_ARCHITECTURE.md` — execution/ownership contract
-- `docs/V8_PROFESSIONAL_UI_UX_PLAN.md` — UI/UX target
-- `docs/V8_WP15_WP16.md` — Digital Twin and automation details
-- `docs/SITE_ACCEPTANCE.md` — real-hardware/site acceptance procedure
+The Windows desktop application now defaults to the stable Sniffer runtime.
+
+Development launch:
+
+```bash
+npm --prefix desktop start
+```
+
+The experimental v8 desktop mode is explicit only:
+
+```text
+MODBUS_DESKTOP_MODE=v8
+```
+
+Windows installer build:
+
+```bash
+npm --prefix desktop run dist:win
+```
+
+## Safety
+
+- Passive Sniffer RTU operation must not transmit production requests.
+- Active Master and Discovery operations must remain explicitly separate from passive capture.
+- Writes are locked by default.
+- Bulk/broadcast writes require stronger confirmation.
+- Raw/LAB traffic must remain clearly separated from normal validated requests.
+- Persisted configuration must never restore an armed write state.
+
+## Development status
+
+PR #31 is currently an **experimental product-recovery branch**, not a release candidate.
+
+The active recovery checklist is:
+
+```text
+docs/ACTIVE_TODO.md
+```
+
+The previous v8 planning documents remain useful implementation history, but they no longer override the current product requirement: the application must first make **Sniffer, Master and Slave** obvious and independently usable.
+
+Do not merge PR #31 until that product model is implemented, accepted and retested.
