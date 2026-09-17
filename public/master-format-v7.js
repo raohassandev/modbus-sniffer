@@ -26,15 +26,16 @@
   const orders=['ABCD','BADC','CDAB','DCBA'];
   orderButtons.forEach((button,index)=>{
     const order=orders[index]||'ABCD';button.disabled=false;button.dataset.masterOrder=order;button.textContent=order;
-    button.title=order==='ABCD'?'Normal byte and word order':order==='BADC'?'Swap bytes within each 16-bit register':order==='CDAB'?'Reverse 16-bit register order': 'Reverse all bytes';
+    button.title=order==='ABCD'?'Normal byte and word order':order==='BADC'?'Swap bytes within each 16-bit register':order==='CDAB'?'Reverse 16-bit register order':'Reverse all bytes';
   });
 
   const state={order:'ABCD',rendering:false};
   const wordCount=type=>['uint32','int32','float32'].includes(type)?2:['uint64','int64','float64'].includes(type)?4:1;
-  const isWide=type=>wordCount(type)>1;
   const precision=()=>Math.max(0,Math.min(12,Number(q('masterPrecision')?.value??3)));
   const scale=()=>Number(q('masterScale')?.value??1);
   const offset=()=>Number(q('masterOffset')?.value??0);
+  const setHtml=(node,html)=>{if(node&&node.innerHTML!==html)node.innerHTML=html;};
+  const setText=(node,text)=>{const next=String(text);if(node&&node.textContent!==next)node.textContent=next;};
 
   function rawWord(row){
     const cell=row.cells?.[3];if(!cell)return null;
@@ -99,21 +100,21 @@
         const row=rows[i],formatted=row.cells[4],typeCell=row.cells[5];
         if(!formatted||!typeCell)continue;
         if(bitMode){
-          const word=rawWord(row);formatted.innerHTML=`<strong>${word?'ON / 1':'OFF / 0'}</strong>`;typeCell.textContent='bool';continue;
+          const word=rawWord(row);setHtml(formatted,`<strong>${word?'ON / 1':'OFF / 0'}</strong>`);setText(typeCell,'bool');continue;
         }
         const word=rawWord(row);if(word==null)continue;
-        if(type==='hex'){formatted.innerHTML=`<strong>${hexValue(word)}</strong>`;typeCell.textContent='hex';continue;}
-        if(type==='binary'){formatted.innerHTML=`<strong>${binaryValue(word)}</strong>`;typeCell.textContent='binary';continue;}
-        if(type==='ascii'){formatted.innerHTML=`<strong>${asciiValue(word)}</strong>`;typeCell.textContent='ASCII';continue;}
-        if(needed===1){const value=numericValue(type,[word]);formatted.innerHTML=`<strong>${applyEngineering(value)}</strong>`;typeCell.textContent=type;continue;}
-        if(i%needed!==0){formatted.innerHTML='<span class="muted">↳ grouped above</span>';typeCell.textContent='continuation';continue;}
+        if(type==='hex'){setHtml(formatted,`<strong>${hexValue(word)}</strong>`);setText(typeCell,'hex');continue;}
+        if(type==='binary'){setHtml(formatted,`<strong>${binaryValue(word)}</strong>`);setText(typeCell,'binary');continue;}
+        if(type==='ascii'){setHtml(formatted,`<strong>${asciiValue(word)}</strong>`);setText(typeCell,'ASCII');continue;}
+        if(needed===1){const value=numericValue(type,[word]);setHtml(formatted,`<strong>${applyEngineering(value)}</strong>`);setText(typeCell,type);continue;}
+        if(i%needed!==0){setHtml(formatted,'<span class="muted">↳ grouped above</span>');setText(typeCell,'continuation');continue;}
         const words=rows.slice(i,i+needed).map(rawWord);
         if(words.length<needed||words.some(value=>value==null)){
-          formatted.innerHTML=`<span class="muted">Need ${needed} registers</span>`;typeCell.textContent=type;continue;
+          setHtml(formatted,`<span class="muted">Need ${needed} registers</span>`);setText(typeCell,type);continue;
         }
         const value=numericValue(type,words);
-        formatted.innerHTML=value==null?'<span class="muted">Unsupported</span>':`<strong>${applyEngineering(value)}</strong>`;
-        typeCell.textContent=`${type} · ${state.order}`;
+        setHtml(formatted,value==null?'<span class="muted">Unsupported</span>':`<strong>${applyEngineering(value)}</strong>`);
+        setText(typeCell,`${type} · ${state.order}`);
       }
     }finally{state.rendering=false;}
   }
