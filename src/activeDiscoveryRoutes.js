@@ -2,7 +2,6 @@
 
 const {ActiveDiscoveryManager}=require('./activeDiscoveryManager');
 const {previewDiscoveryAdoption,adoptDiscoveryIdentification}=require('./discoveryAdoption');
-const {installMasterRoutes}=require('./master/masterRoutes');
 
 const SAFE_RTU_DISCOVERY_STATES=new Set(['idle','closed','capture']);
 function httpStatus(error){return ['DISCOVERY_BUSY','RTU_DISCOVERY_PASSIVE_CAPTURE_ACTIVE'].includes(error?.code)?409:400;}
@@ -17,10 +16,6 @@ function n(v,d){const x=Number(v);return Number.isFinite(x)?x:d;}
 function installActiveDiscoveryRoutes({app,state,demo=false,broadcast=()=>{},workspaces=null,getActiveProjectId=null,manager:providedManager=null}={}){
   if(!app)throw new Error('Express app is required for active discovery routes.');
   const manager=providedManager||new ActiveDiscoveryManager(),jobProjects=new Map(),savedJobs=new Map();
-  const masterRuntime=installMasterRoutes({app,state,demo});
-  const managerClose=typeof manager.close==='function'?manager.close.bind(manager):async()=>{};
-  manager.close=async()=>{await masterRuntime.disconnect();return managerClose();};
-  manager.masterRuntime=masterRuntime;
   const activeProjectId=()=>typeof getActiveProjectId==='function'?getActiveProjectId():workspaces?.getActiveProject?.()?.id||null;
   const persist=s=>{
     if(!workspaces||s?.state!=='completed'||!s?.jobId||!s?.result||savedJobs.has(s.jobId))return null;
