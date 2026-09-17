@@ -10,6 +10,10 @@ const sessions=fs.readFileSync(path.join(root,'public/master-sessions-v7.js'),'u
 const css=fs.readFileSync(path.join(root,'public/master-sessions-v7.css'),'utf8');
 const loader=fs.readFileSync(path.join(root,'public/platform-v6.js'),'utf8');
 
+test('monitor sessions source parses as JavaScript',()=>{
+  assert.doesNotThrow(()=>new Function(sessions));
+});
+
 test('monitor sessions load only after the Master workspace exists',()=>{
   assert.match(loader,/master-sessions-v7\.css/);
   const masterIndex=loader.indexOf("master.src='/master-v7.js");
@@ -34,6 +38,23 @@ test('monitor switching stops polling and disconnects when the saved connection 
   assert.match(switchBlock,/disconnectIfConnectionChanges/);
   assert.match(sessions,/fingerprint\(connectionFromDom\(\)\)===fingerprint\(target\.connection\)/);
   assert.match(sessions,/masterDisconnect/);
+  assert.match(sessions,/\{force=false\}/);
+  assert.match(sessions,/switchTo\(tab\.dataset\.sessionId,\{force:true\}\)/);
+});
+
+test('delete safely disconnects before applying a different saved connection profile',()=>{
+  const block=sessions.slice(sessions.indexOf("els.delete.addEventListener"),sessions.indexOf('for(const id of monitoredIds)'));
+  assert.match(block,/stopPollingIfNeeded/);
+  assert.match(block,/disconnectIfConnectionChanges\(next\)/);
+  assert.ok(block.indexOf('disconnectIfConnectionChanges(next)')<block.indexOf('store.sessions.splice'),'disconnect must happen before deleting/applying the next session');
+});
+
+test('reload does not silently overwrite a different already-live Master connection profile',()=>{
+  const block=sessions.slice(sessions.indexOf('async function ensureInitial'),sessions.indexOf("els.tabs.addEventListener"));
+  assert.match(block,/\/api\/master\/status/);
+  assert.match(block,/runtimeStatus\?\.connected/);
+  assert.match(block,/fingerprint\(runtimeStatus\.config\)!==fingerprint\(active\(\)\.connection\)/);
+  assert.match(block,/different profile/);
 });
 
 test('sessions expose familiar New Save Duplicate Rename Delete and tab workflow',()=>{
