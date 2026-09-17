@@ -15,9 +15,9 @@ capacity:
   integration_owner: lane-m0-integration
 
 resources:
-  - id: stable-v7-web-server
+  - id: stable-v7-active-route-installer
     mode: shared
-    capacity: one integration owner for shared server/shell files
+    capacity: one integration owner for shared route/shell files
   - id: physical-serial-port
     mode: exclusive
     capacity: one owner at a time; passive Analyzer and active Master must not silently share the same COM port
@@ -32,14 +32,14 @@ lanes:
   - worker_id: lane-m0-integration
     role: coder
     classification: CRITICAL_PATH
-    state: executing
-    responsibility: stable-shell/server integration and shared-file ownership
+    state: implemented
+    responsibility: stable-shell/route integration and shared-file ownership
     current_task: M1-wire-master-into-stable-product
     issue: null
     branch_or_pr: v8-release-completion / PR-31
     dependencies: []
     write_scope:
-      - src/platformWebServerV61.js
+      - src/activeDiscoveryRoutes.js
       - public/platform-v6.js
       - docs/MODBUS_MASTER_*.md
       - docs/MODBUS_MASTER_*.yaml
@@ -49,14 +49,14 @@ lanes:
       - public/master-v7.css
       - test/master-*.test.js
     shared_files:
-      - src/platformWebServerV61.js
+      - src/activeDiscoveryRoutes.js
       - public/platform-v6.js
-    blocker: null
+    blocker: exact-head local test run pending
 
   - worker_id: lane-m1-runtime
     role: coder
     classification: CRITICAL_PATH
-    state: executing
+    state: implemented
     responsibility: RTU/ASCII/TCP Master connection and FC01-04 read runtime
     current_task: M1-master-runtime
     issue: null
@@ -66,16 +66,16 @@ lanes:
     write_scope:
       - src/master/**
     forbidden_scope:
-      - src/platformWebServerV61.js
+      - src/activeDiscoveryRoutes.js
       - public/**
       - test/**
     shared_files: []
-    blocker: null
+    blocker: exact-head local test run pending
 
   - worker_id: lane-m2-ui
     role: coder
     classification: PARALLEL_READY
-    state: executing
+    state: implemented
     responsibility: approved Modbus Master main UI and polling workflow
     current_task: M1-master-ui
     issue: null
@@ -90,7 +90,7 @@ lanes:
       - test/**
       - public/platform-v6.js
     shared_files: []
-    blocker: null
+    blocker: browser visual verification pending
 
   - worker_id: lane-m3-format-sessions
     role: coder
@@ -101,7 +101,7 @@ lanes:
     issue: null
     branch_or_pr: null
     dependencies:
-      - M1 basic read contract stabilized
+      - M1 exact-head tests and basic workflow verification
     write_scope:
       - src/master/format/**
       - src/master/session/**
@@ -109,7 +109,7 @@ lanes:
     forbidden_scope:
       - shared integration files
     shared_files: []
-    blocker: M1 read model must stabilize first
+    blocker: M1 test evidence must stabilize the read model first
 
   - worker_id: lane-m4-writes
     role: coder
@@ -133,32 +133,32 @@ lanes:
   - worker_id: lane-q1-functional-qa
     role: qa
     classification: PARALLEL_READY
-    state: executing
+    state: active
     responsibility: independent Master runtime/UI contract regression tests
-    current_task: M1-master-tests
+    current_task: M1-run-exact-head-tests
     dependencies:
-      - API contract from lane-m1-runtime
+      - implemented M1 runtime/UI contract
     write_scope:
       - test/master-*.test.js
       - e2e/master-*.spec.js
     forbidden_scope:
       - src/**
       - public/**
-    blocker: null
+    blocker: test execution is pending on the local checkout
 
   - worker_id: lane-q2-ui-qa
     role: qa
-    classification: WAITING_DEPENDENCY
-    state: planned
+    classification: ENVIRONMENT_WAIT
+    state: blocked
     responsibility: visual/workflow verification against approved mockups
     current_task: M1-master-visual-qa
     dependencies:
-      - first integrated Master screen available
+      - first integrated Master screen rendered on local browser
     write_scope:
       - test-results/master-ui/**
     forbidden_scope:
       - production implementation files
-    blocker: integrated UI not yet available
+    blocker: local browser render/screenshots not yet captured
 
   - worker_id: lane-r1-review
     role: reviewer
@@ -167,26 +167,26 @@ lanes:
     responsibility: architecture/safety/reliability review
     current_task: M1-master-review
     dependencies:
-      - M1 implementation and QA evidence
+      - M1 automated test and browser evidence
     write_scope: []
     forbidden_scope:
       - implementation files
-    blocker: implementation not yet review-ready
+    blocker: implementation is authored but not yet test/visual-review ready
 
 shared_file_policy:
   integration_owner: lane-m0-integration
   rules:
-    - feature lanes do not edit src/platformWebServerV61.js or public/platform-v6.js
+    - feature lanes do not edit src/activeDiscoveryRoutes.js or public/platform-v6.js
     - QA does not silently repair implementation under test
     - stable Sniffer passive capture code is not modified unless a verified integration defect requires it
 
 scaling_policy:
   scale_up_when:
-    - M1 API contract stabilizes and format/session work becomes independent
+    - M1 exact-head tests pass and format/session work becomes independent
     - write workflow can proceed without changing core connection ownership
     - QA has independent ready scenarios
   scale_down_when:
-    - shared shell/server integration becomes the bottleneck
+    - shared shell/route integration becomes the bottleneck
     - API contract churn causes rework
     - hardware or Windows acceptance becomes the exclusive bottleneck
 
