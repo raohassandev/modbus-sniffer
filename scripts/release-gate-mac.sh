@@ -101,6 +101,15 @@ fi
 CURRENT_STEP="clean-test-runtime-artifacts"
 rm -rf "$ROOT/.tmp" "$ROOT/test-results" "$ROOT/playwright-report"
 
+# Homebrew and other shell setups sometimes export npm_config_prefix or
+# NPM_CONFIG_PREFIX. NVM refuses to initialize while either override is active.
+# The release gate owns Node selection, so inherited npm prefix overrides must
+# not influence its Node/npm toolchain.
+if [ -n "${npm_config_prefix:-}" ] || [ -n "${NPM_CONFIG_PREFIX:-}" ]; then
+  echo "Clearing inherited npm prefix override before Node version selection."
+fi
+unset npm_config_prefix NPM_CONFIG_PREFIX
+
 # Load common Node version managers when available. The gate never silently
 # skips a requested Node major; unavailable majors fail explicitly.
 if [ -n "${NVM_DIR:-}" ] && [ -s "$NVM_DIR/nvm.sh" ]; then
