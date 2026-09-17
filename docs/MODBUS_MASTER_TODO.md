@@ -25,6 +25,7 @@ AISH-OS concurrency rules apply: one integration owner for shared paths, non-ove
 
 - [x] install Master backend routes into the stable v7 product route stack
 - [x] load Master CSS/JS in the stable UI shell
+- [x] load Monitor Sessions assets only after the Master workspace is available
 - [x] add Master navigation entry without removing existing Analyzer pages
 - [x] ensure server shutdown closes active Master connection
 - [x] preserve passive Sniffer as default startup and desktop experience
@@ -78,7 +79,7 @@ AISH-OS concurrency rules apply: one integration owner for shared paths, non-ove
 
 ### Lane M3 — Data Format + Monitor Sessions
 
-**Write scope:** future `src/master/format/**`, `src/master/session/**`, `public/master-format-v7.js` or dedicated scoped files.  
+**Write scope:** `public/master-sessions-v7.js`, `public/master-sessions-v7.css`, future `src/master/format/**` / scoped format assets.  
 **Responsibility:** familiar Modbus Poll-style reusable monitors and value interpretation.
 
 - [x] basic uint16 / int16 quick display
@@ -91,12 +92,18 @@ AISH-OS concurrency rules apply: one integration owner for shared paths, non-ove
 - [x] basic scale / offset
 - [ ] precision control
 - [ ] per-row description/alias
-- [ ] save/open/duplicate monitor definition
-- [ ] multiple monitor tabs
-- [ ] persistent poll interval and address settings
+- [x] save/open/duplicate monitor definition
+- [x] multiple monitor tabs
+- [x] persistent connection + Unit/FC/address/quantity/poll interval/timeout settings
+- [x] persistent basic format/scale/offset settings
+- [x] safe session switching stops active polling first
+- [x] connection-profile changes disconnect the active Master before applying another saved target
+- [x] saved live-grid snapshot per monitor, clearly identified as snapshot until refreshed
+- [x] New / Save / Duplicate / Rename / Delete monitor workflow
 - [ ] recent profiles / templates
 - [ ] quick-start wizard
 - [ ] selected-register mini trend
+- [ ] per-monitor counter baseline/reset
 
 ### Lane M4 — Guarded Writes
 
@@ -144,6 +151,7 @@ AISH-OS concurrency rules apply: one integration owner for shared paths, non-ove
 - [ ] timeout and Modbus exception cases
 - [x] passive serial conflict route test authored
 - [x] polling start/stop/no-overlap regression authored
+- [x] Monitor Sessions persistence/tab/switching regression authored
 - [ ] write-lock and write confirmation tests
 - [x] UI shell regression test authored
 - [ ] browser E2E: TCP FC03 first read in under 60 seconds
@@ -155,6 +163,7 @@ AISH-OS concurrency rules apply: one integration owner for shared paths, non-ove
 
 - [ ] compare implementation to approved mockups
 - [ ] verify basic-read journey without documentation
+- [ ] verify Monitor Sessions tabs and actions in rendered UI
 - [ ] 1366x768, 1440x900, 1920x1080 layouts
 - [ ] empty/loading/error/timeout states visually verified
 - [ ] keyboard focus and form labels
@@ -174,7 +183,7 @@ AISH-OS concurrency rules apply: one integration owner for shared paths, non-ove
 
 ## Milestones
 
-### M1 — Basic Master Read (current critical path)
+### M1 — Basic Master Read (current acceptance gate)
 
 Acceptance — evidence required:
 
@@ -189,8 +198,8 @@ Acceptance — evidence required:
 
 ### M2 — Professional Monitor Workspace
 
-- [ ] saved monitor sessions
-- [ ] multiple monitor tabs
+- [ ] saved monitor sessions accepted in rendered UI
+- [ ] multiple monitor tabs accepted in rendered UI
 - [ ] datatype / byte-order / scale formatting
 - [ ] aliases and templates
 - [ ] quick-start guided flow
@@ -217,5 +226,7 @@ Acceptance — evidence required:
 - Master transmission is explicit and visibly identified as active mode.
 - No write can transmit while the Master write lock is locked.
 - Same serial port cannot be silently owned by passive capture and active Master at the same time.
+- Switching Monitor Sessions must not leave an old poll timer running against a changed definition.
+- A saved Monitor Session may restore stale values only as an explicitly labelled snapshot; a new live read is required for current quality.
 - Projects/Traffic/Register Lab remain optional support tools, not prerequisites for basic polling.
 - No release/complete claim without exact-head evidence for all applicable gates.
