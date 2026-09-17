@@ -18,6 +18,8 @@ Required tools:
 
 Do not run a release gate from a dirty worktree. The script rejects tracked or untracked changes by default so the evidence maps to one exact Git commit.
 
+The gate also removes inherited `npm_config_prefix` / `NPM_CONFIG_PREFIX` environment overrides before loading NVM. This prevents Homebrew or shell npm-prefix settings from aborting Node-version selection and keeps the release toolchain under the gate's control.
+
 ## Run the release gate
 
 ```bash
