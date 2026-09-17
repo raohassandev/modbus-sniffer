@@ -11,6 +11,7 @@ This file is the short active checklist for release closure.
 
 - `V8_IMPLEMENTATION_STATUS.md`
 - `V8_RELEASE_CLOSURE.md`
+- `STANDARD_MODBUS_WORKFLOW.md`
 - this active checklist
 
 ## Software/source closure
@@ -30,6 +31,36 @@ This file is the short active checklist for release closure.
 - [x] release docs reconciled with local Mac gate
 - [x] diagnostic dirty mode cannot produce release PASS evidence
 - [x] inherited npm prefix overrides are sanitized before NVM initialization
+- [x] packaged desktop includes all local modules required by `desktop/main.js`
+- [x] first UI layout-quality pass for Master/Discovery/Simulator/Traffic/Register Lab
+
+## Standard Modbus workflow / usability closure
+
+User acceptance feedback showed that the product capabilities were too fragmented compared with familiar Modbus master tools. These are now treated as real product gaps, not cosmetic follow-up.
+
+- [x] add Standard Modbus Monitor to Master / Poll
+- [x] Standard Monitor: Slave/Unit ID, FC01–04, address, quantity, scan rate, timeout
+- [x] Standard Monitor: Read once / Start polling / Stop
+- [x] Standard Monitor: live value grid with request/OK/error/RTT counters
+- [x] Standard Monitor: common unsigned/signed/hex/binary/Float32 quick formats
+- [x] Standard Monitor: zero-based and reference-address guidance
+- [x] reorder navigation around the normal commissioning workflow
+- [x] in-app Help workspace covering every major function
+- [x] F1 context help and searchable Quick Start/reference topics
+- [x] canonical parity plan added: `docs/STANDARD_MODBUS_WORKFLOW.md`
+- [ ] persistent Monitor Session model with multiple saved monitor tabs/documents
+- [ ] persistent aliases/names and per-cell presentation settings
+- [ ] full common 32/64-bit datatype + byte/word-order quick formats in Standard Monitor
+- [ ] direct safe write from selected monitor cell/range through the existing guarded write path
+- [ ] standard UI for FC22 and FC23
+- [ ] applicable serial standard UI for FC08, FC11 and FC17
+- [ ] direct on-demand FC43/14 device-identification action outside Discovery
+- [ ] compact familiar Slave Scan / Address Scan presets and one-click adopt-to-monitor
+- [ ] per-monitor clearable Tx/Error counters and focused Traffic filter
+- [ ] one-click Chart / Log from a monitor definition
+- [ ] inline field help and first-run guided walkthrough
+
+See `STANDARD_MODBUS_WORKFLOW.md` for detailed behavior and parity boundaries.
 
 ## Exact-head release evidence
 
@@ -60,4 +91,4 @@ See `SITE_ACCEPTANCE.md` for field procedures.
 
 ## Merge rule
 
-`mergeable=true` is not a release pass. The source release candidate is merge-ready only after the final exact PR head has a valid local Mac release-gate PASS evidence set.
+`mergeable=true` is not a release pass. The release candidate is not source-closed while unchecked **Standard Modbus workflow / usability closure** items remain in the intended 8.0.0 scope. After that scope is closed, merge only after the final exact PR head has a valid local Mac release-gate PASS evidence set.
