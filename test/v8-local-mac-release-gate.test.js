@@ -73,6 +73,21 @@ test('v8 local Mac release gate retains release quality, bounded soak and browse
   ]);
 });
 
+test('dirty diagnostic mode can never produce release PASS evidence', () => {
+  assert.match(script, /echo "allow_dirty=\$ALLOW_DIRTY"/);
+  assert.match(script, /echo "release_eligible=\$RELEASE_ELIGIBLE"/);
+  assert.match(script, /RELEASE_GATE_ALLOW_DIRTY=1 is diagnostic-only and cannot produce release PASS evidence/);
+
+  const dirtyGuardIndex = script.lastIndexOf('if [ "$ALLOW_DIRTY" = "1" ]; then');
+  const passIndex = script.lastIndexOf('STATUS="PASS"');
+  assert.ok(dirtyGuardIndex >= 0, 'dirty diagnostic release guard must exist');
+  assert.ok(passIndex >= 0, 'release PASS assignment must exist');
+  assert.ok(dirtyGuardIndex < passIndex, 'dirty diagnostic release guard must execute before PASS assignment');
+
+  const guardedTail = script.slice(dirtyGuardIndex, passIndex);
+  assert.match(guardedTail, /exit 6/);
+});
+
 test('v8 local Mac release gate never silently skips an unavailable Node major', () => {
   assert.match(script, /Node \$target is required but is unavailable/);
   assert.match(script, /requested Node \$target but active version is/);
