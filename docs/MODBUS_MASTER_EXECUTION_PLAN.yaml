@@ -1,0 +1,206 @@
+version: 1
+project_or_milestone: Modbus Master M1 Basic Read
+source_of_truth: docs/MODBUS_MASTER_TODO.md
+critical_path:
+  task_id: M1-basic-master-read
+  reason: The product is not usable as a Master until connection + FC01-04 read + polling are obvious and functional.
+
+capacity:
+  planned_coder_slots: 5
+  planned_qa_slots: 2
+  planned_review_slots: 2
+  active_coder_slots: 3
+  active_qa_slots: 1
+  active_review_slots: 0
+  integration_owner: lane-m0-integration
+
+resources:
+  - id: stable-v7-web-server
+    mode: shared
+    capacity: one integration owner for shared server/shell files
+  - id: physical-serial-port
+    mode: exclusive
+    capacity: one owner at a time; passive Analyzer and active Master must not silently share the same COM port
+  - id: windows-test-machine
+    mode: owner_gated
+    capacity: manual local verification
+  - id: representative-modbus-hardware
+    mode: external_gated
+    capacity: required for final RTU/TCP field acceptance
+
+lanes:
+  - worker_id: lane-m0-integration
+    role: coder
+    classification: CRITICAL_PATH
+    state: executing
+    responsibility: stable-shell/server integration and shared-file ownership
+    current_task: M1-wire-master-into-stable-product
+    issue: null
+    branch_or_pr: v8-release-completion / PR-31
+    dependencies: []
+    write_scope:
+      - src/platformWebServerV61.js
+      - public/platform-v6.js
+      - docs/MODBUS_MASTER_*.md
+      - docs/MODBUS_MASTER_*.yaml
+    forbidden_scope:
+      - src/master/**
+      - public/master-v7.js
+      - public/master-v7.css
+      - test/master-*.test.js
+    shared_files:
+      - src/platformWebServerV61.js
+      - public/platform-v6.js
+    blocker: null
+
+  - worker_id: lane-m1-runtime
+    role: coder
+    classification: CRITICAL_PATH
+    state: executing
+    responsibility: RTU/ASCII/TCP Master connection and FC01-04 read runtime
+    current_task: M1-master-runtime
+    issue: null
+    branch_or_pr: v8-release-completion / PR-31
+    dependencies:
+      - existing v8 ConnectionBroker/MasterEngine/transports contract
+    write_scope:
+      - src/master/**
+    forbidden_scope:
+      - src/platformWebServerV61.js
+      - public/**
+      - test/**
+    shared_files: []
+    blocker: null
+
+  - worker_id: lane-m2-ui
+    role: coder
+    classification: PARALLEL_READY
+    state: executing
+    responsibility: approved Modbus Master main UI and polling workflow
+    current_task: M1-master-ui
+    issue: null
+    branch_or_pr: v8-release-completion / PR-31
+    dependencies:
+      - API contract defined by lane-m1-runtime
+    write_scope:
+      - public/master-v7.js
+      - public/master-v7.css
+    forbidden_scope:
+      - src/**
+      - test/**
+      - public/platform-v6.js
+    shared_files: []
+    blocker: null
+
+  - worker_id: lane-m3-format-sessions
+    role: coder
+    classification: WAITING_DEPENDENCY
+    state: planned
+    responsibility: monitor sessions, datatype formatting, aliases, templates and quick start
+    current_task: M2-professional-monitor
+    issue: null
+    branch_or_pr: null
+    dependencies:
+      - M1 basic read contract stabilized
+    write_scope:
+      - src/master/format/**
+      - src/master/session/**
+      - public/master-format-v7.js
+    forbidden_scope:
+      - shared integration files
+    shared_files: []
+    blocker: M1 read model must stabilize first
+
+  - worker_id: lane-m4-writes
+    role: coder
+    classification: WAITING_DEPENDENCY
+    state: planned
+    responsibility: guarded FC05/06/15/16/22/23 writes, verification and audit
+    current_task: M3-guarded-writes
+    issue: null
+    branch_or_pr: null
+    dependencies:
+      - M1 connection lifecycle stable
+      - M2 row/value model stable
+    write_scope:
+      - src/master/write/**
+      - public/master-write-v7.js
+    forbidden_scope:
+      - stable Sniffer capture implementation
+    shared_files: []
+    blocker: connection and monitor contracts are predecessors
+
+  - worker_id: lane-q1-functional-qa
+    role: qa
+    classification: PARALLEL_READY
+    state: executing
+    responsibility: independent Master runtime/UI contract regression tests
+    current_task: M1-master-tests
+    dependencies:
+      - API contract from lane-m1-runtime
+    write_scope:
+      - test/master-*.test.js
+      - e2e/master-*.spec.js
+    forbidden_scope:
+      - src/**
+      - public/**
+    blocker: null
+
+  - worker_id: lane-q2-ui-qa
+    role: qa
+    classification: WAITING_DEPENDENCY
+    state: planned
+    responsibility: visual/workflow verification against approved mockups
+    current_task: M1-master-visual-qa
+    dependencies:
+      - first integrated Master screen available
+    write_scope:
+      - test-results/master-ui/**
+    forbidden_scope:
+      - production implementation files
+    blocker: integrated UI not yet available
+
+  - worker_id: lane-r1-review
+    role: reviewer
+    classification: WAITING_DEPENDENCY
+    state: planned
+    responsibility: architecture/safety/reliability review
+    current_task: M1-master-review
+    dependencies:
+      - M1 implementation and QA evidence
+    write_scope: []
+    forbidden_scope:
+      - implementation files
+    blocker: implementation not yet review-ready
+
+shared_file_policy:
+  integration_owner: lane-m0-integration
+  rules:
+    - feature lanes do not edit src/platformWebServerV61.js or public/platform-v6.js
+    - QA does not silently repair implementation under test
+    - stable Sniffer passive capture code is not modified unless a verified integration defect requires it
+
+scaling_policy:
+  scale_up_when:
+    - M1 API contract stabilizes and format/session work becomes independent
+    - write workflow can proceed without changing core connection ownership
+    - QA has independent ready scenarios
+  scale_down_when:
+    - shared shell/server integration becomes the bottleneck
+    - API contract churn causes rework
+    - hardware or Windows acceptance becomes the exclusive bottleneck
+
+reporting:
+  recurring_cadence: owner_requested_control_cycle
+  per_worker_required: true
+  no_progress_flag_required: true
+  lifecycle_state_authoritative: true
+  headline_template: "Master M1 <state> | Stable Sniffer <state> | QA <state> | Hardware acceptance <state>"
+
+gates:
+  exact_head_ci: true
+  no_force_push: true
+  no_self_approval_as_only_review: true
+  no_fake_autonomy: true
+  no_fake_elapsed_evidence: true
+  safety_or_owner_gates_never_weakened_for_speed: true
