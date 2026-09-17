@@ -1,7 +1,7 @@
 {
   "name": "modbus-engineering-analyzer-desktop",
   "version": "8.0.0",
-  "description": "Windows desktop shell for the Modbus Engineering Workbench v8.",
+  "description": "Windows desktop shell for Modbus Sniffer, with the experimental v8 Workbench available only by explicit opt-in.",
   "author": "Automatrix Engineering",
   "license": "MIT",
   "private": true,
@@ -16,8 +16,8 @@
   },
   "build": {
     "appId": "pk.automatrix.modbus-analyzer",
-    "productName": "Modbus Engineering Workbench",
-    "artifactName": "Modbus-Engineering-Workbench-Setup-${version}.${ext}",
+    "productName": "Modbus Sniffer",
+    "artifactName": "Modbus-Sniffer-Setup-${version}.${ext}",
     "asar": true,
     "files": [
       "main.js",
