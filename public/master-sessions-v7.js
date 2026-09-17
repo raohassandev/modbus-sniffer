@@ -31,7 +31,7 @@
 
   const monitoredIds=[
     'masterSerialPort','masterBaud','masterParity','masterDataBits','masterStopBits','masterEcho','masterTcpHost','masterTcpPort',
-    'masterTimeout','masterPollInterval','masterUnitId','masterFunction','masterAddress','masterQuantity','masterFormat','masterScale','masterOffset'
+    'masterTimeout','masterPollInterval','masterUnitId','masterFunction','masterAddress','masterQuantity','masterFormat','masterScale','masterOffset','masterPrecision'
   ];
   let dirty=false,switching=false,store=loadStore();
 
@@ -79,7 +79,12 @@
     };
   }
 
-  function formatFromDom(){return {type:value('masterFormat','uint16'),scale:num('masterScale',1),offset:num('masterOffset',0)};}
+  function formatFromDom(){
+    return {
+      type:value('masterFormat','uint16'),scale:num('masterScale',1),offset:num('masterOffset',0),precision:num('masterPrecision',3),
+      byteOrder:window.ModbusMasterFormat?.getByteOrder?.()||'ABCD'
+    };
+  }
   function snapshotFromDom(){
     return {
       rowsHtml:q('masterDataBody')?.innerHTML||'',gridSummary:q('masterGridSummary')?.textContent||'No data',
@@ -145,8 +150,10 @@
     setValue('masterTcpHost',c.host||'');setValue('masterTcpPort',c.port??502);setValue('masterTimeout',d.timeoutMs??c.timeoutMs??1000);setValue('masterPollInterval',d.pollIntervalMs??1000);
     setValue('masterUnitId',d.unitId??1);setValue('masterFunction',d.functionCode??3);setValue('masterAddress',d.address??0);setValue('masterQuantity',d.quantity??1);
     clickSelector('[data-address-mode]',d.addressMode||'raw','data-address-mode');
-    setValue('masterFormat',f.type||'uint16');setValue('masterScale',f.scale??1);setValue('masterOffset',f.offset??0);
+    setValue('masterFormat',f.type||'uint16');setValue('masterScale',f.scale??1);setValue('masterOffset',f.offset??0);setValue('masterPrecision',f.precision??3);
+    window.ModbusMasterFormat?.setByteOrder?.(f.byteOrder||'ABCD');
     restoreSnapshot(session);
+    window.ModbusMasterFormat?.render?.();
   }
 
   async function switchTo(sessionId,{force=false}={}){
@@ -166,8 +173,8 @@
 
   function renderTabs(){
     els.tabs.innerHTML=store.sessions.map(session=>{
-      const d=session.definition||{},c=session.connection||{};
-      const subtitle=`${String(c.type||'rtu').toUpperCase()} · Unit ${d.unitId??1} · FC${String(d.functionCode??3).padStart(2,'0')} · ${d.address??0}+${d.quantity??1} · ${d.pollIntervalMs??1000} ms`;
+      const d=session.definition||{},c=session.connection||{},f=session.format||{};
+      const subtitle=`${String(c.type||'rtu').toUpperCase()} · Unit ${d.unitId??1} · FC${String(d.functionCode??3).padStart(2,'0')} · ${d.address??0}+${d.quantity??1} · ${f.type||'uint16'} ${f.byteOrder||'ABCD'} · ${d.pollIntervalMs??1000} ms`;
       return `<button type="button" role="tab" aria-selected="${session.id===store.activeId}" class="master-session-tab${session.id===store.activeId?' active':''}" data-session-id="${session.id}"><span class="master-session-tab-main"><strong>${escapeHtml(session.name)}</strong><small>${escapeHtml(subtitle)}</small></span><i class="session-dot"></i></button>`;
     }).join('');
     const a=active();els.activeName.textContent=a?.name||'—';
@@ -215,6 +222,7 @@
   for(const id of monitoredIds){const el=q(id);if(!el)continue;el.addEventListener('input',markDirty);el.addEventListener('change',markDirty);}
   q('masterConnectionType')?.addEventListener('click',event=>{if(event.target.closest('[data-master-type]'))markDirty();});
   q('masterAddressMode')?.addEventListener('click',event=>{if(event.target.closest('[data-address-mode]'))markDirty();});
+  root.addEventListener('master-format-change',markDirty);
 
   const snapshotObserver=new MutationObserver(()=>{
     if(switching)return;const a=active();if(!a)return;a.snapshot=snapshotFromDom();a.updatedAt=Date.now();localStorage.setItem(STORAGE_KEY,JSON.stringify(store));
