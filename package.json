@@ -1,11 +1,13 @@
 {
   "name": "modbus-engineering-analyzer",
   "version": "8.0.0",
-  "description": "All-in-one Modbus Engineering Workbench v8 with RTU/ASCII/TCP/UDP/TLS tooling, Master, Simulator, Discovery, Traffic/Register Lab, history, HMI, automation and engineering handover exports.",
-  "main": "src/index-v8.js",
+  "description": "Modbus Sniffer / Engineering Analyzer with the stable passive analyzer as the default product and the v8 Workbench available as an explicit experimental mode.",
+  "main": "src/index-v7.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index-v8.js",
+    "start": "node src/index-v7.js",
+    "sniffer": "node src/index-v7.js",
+    "workbench": "node src/index-v8.js",
     "v8": "node src/index-v8.js",
     "v8:cli": "node scripts/v8-cli.js",
     "v7": "node src/index-v7.js",
