@@ -149,12 +149,13 @@
     restoreSnapshot(session);
   }
 
-  async function switchTo(sessionId){
-    if(switching||sessionId===store.activeId)return;
+  async function switchTo(sessionId,{force=false}={}){
+    if(switching||(!force&&sessionId===store.activeId))return;
     const next=store.sessions.find(x=>x.id===sessionId);if(!next)return;
+    const same=sessionId===store.activeId;
     switching=true;
     try{
-      const current=active();if(current)captureInto(current);
+      const current=active();if(current&&!same)captureInto(current);
       await stopPollingIfNeeded();
       await disconnectIfConnectionChanges(next);
       store.activeId=next.id;applyDefinition(next);persist();renderTabs();
@@ -176,13 +177,20 @@
   function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function markDirty(){if(switching)return;dirty=true;setState('Unsaved changes in the active monitor.','dirty');}
 
-  function ensureInitial(){
+  async function ensureInitial(){
     if(!store.sessions.length){const first=buildSession('Monitor 1');store.sessions.push(first);store.activeId=first.id;persist();}
     if(!active())store.activeId=store.sessions[0].id;
+    let runtimeStatus=null;
+    try{runtimeStatus=await fetch('/api/master/status').then(r=>r.ok?r.json():null);}catch{/* offline/older checkout */}
+    if(runtimeStatus?.connected&&fingerprint(runtimeStatus.config)!==fingerprint(active().connection)){
+      renderTabs();persist();
+      setState('A live Master connection is already open with a different profile. Disconnect it or click the active monitor tab to switch safely.','dirty');
+      return;
+    }
     applyDefinition(active());renderTabs();persist();
   }
 
-  els.tabs.addEventListener('click',event=>{const tab=event.target.closest('[data-session-id]');if(tab)switchTo(tab.dataset.sessionId);});
+  els.tabs.addEventListener('click',event=>{const tab=event.target.closest('[data-session-id]');if(tab)switchTo(tab.dataset.sessionId,{force:true});});
   els.new.addEventListener('click',async()=>{
     if(active())captureInto(active());await stopPollingIfNeeded();
     const session=buildSession(defaultName());store.sessions.push(session);store.activeId=session.id;applyDefinition(session);persist();renderTabs();setState('New monitor created from the current definition.','saved');
@@ -197,7 +205,11 @@
   });
   els.delete.addEventListener('click',async()=>{
     if(store.sessions.length<=1)return;const a=active();if(!a)return;if(!confirm(`Delete saved monitor “${a.name}”?`))return;
-    await stopPollingIfNeeded();const index=store.sessions.findIndex(x=>x.id===a.id);store.sessions.splice(index,1);store.activeId=store.sessions[Math.max(0,index-1)]?.id||store.sessions[0].id;persist();applyDefinition(active());renderTabs();
+    await stopPollingIfNeeded();
+    const index=store.sessions.findIndex(x=>x.id===a.id),next=store.sessions[index>0?index-1:index+1];
+    if(!next)return;
+    try{await disconnectIfConnectionChanges(next);}catch(error){setState(error.message,'dirty');return;}
+    store.sessions.splice(index,1);store.activeId=next.id;persist();applyDefinition(next);renderTabs();
   });
 
   for(const id of monitoredIds){const el=q(id);if(!el)continue;el.addEventListener('input',markDirty);el.addEventListener('change',markDirty);}
