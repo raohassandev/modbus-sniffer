@@ -10,11 +10,13 @@
   loadScript('/v8/diagnostics-workspace.js');
   loadScript('/v8/history-workspace.js');
   loadScript('/v8/hmi-workspace.js');
+  loadScript('/v8/standard-monitor.js');
+  loadScript('/v8/help.js');
 
   const workspaceLabels = new Map([
-    ['connections', 'Connections'], ['master', 'Master'], ['simulator', 'Simulator'], ['traffic', 'Traffic'],
-    ['registerLab', 'Register Lab'], ['testCenter', 'Test Center'], ['charts', 'Charts'], ['historian', 'Historian'],
-    ['discovery', 'Discovery'], ['automation', 'Automation'], ['hmi', 'HMI'], ['settings', 'Settings'],
+    ['connections', 'Connections'], ['master', 'Master / Poll'], ['discovery', 'Scan / Discovery'], ['traffic', 'Traffic'],
+    ['simulator', 'Simulator'], ['registerLab', 'Register Lab'], ['testCenter', 'Test Center'], ['charts', 'Charts'],
+    ['historian', 'Historian'], ['automation', 'Automation'], ['hmi', 'HMI'], ['help', 'Help'], ['settings', 'Settings'],
   ]);
   const openedTabs = new Set(['connections']);
   let activeTab = 'connections';
@@ -23,8 +25,35 @@
   const workspaceHost = document.querySelector('.workspace-host');
   if (!navList || !workspaceHost) return;
 
+  function ensureStandardNavigation() {
+    const rename = (workspace, label) => {
+      const button = navList.querySelector(`[data-workspace="${workspace}"]`);
+      const text = button?.querySelector('span:last-child');
+      if (text) text.textContent = label;
+    };
+    rename('master', 'Master / Poll');
+    rename('discovery', 'Scan / Discovery');
+
+    let help = navList.querySelector('[data-workspace="help"]');
+    if (!help) {
+      help = document.createElement('button');
+      help.className = 'nav-item';
+      help.dataset.workspace = 'help';
+      help.type = 'button';
+      help.innerHTML = '<span class="nav-icon">?</span><span>Help</span>';
+      navList.insertBefore(help, navList.querySelector('[data-workspace="settings"]'));
+    }
+
+    const order = ['connections', 'master', 'discovery', 'traffic', 'simulator', 'registerLab', 'testCenter', 'charts', 'historian', 'automation', 'hmi', 'help', 'settings'];
+    for (const workspace of order) {
+      const button = navList.querySelector(`[data-workspace="${workspace}"]`);
+      if (button) navList.appendChild(button);
+    }
+  }
+  ensureStandardNavigation();
+
   const brandSubtitle = document.querySelector('.brand-subtitle');
-  if (brandSubtitle) brandSubtitle.textContent = 'v8.0.0 release-candidate workspace · Ctrl/Cmd+K quick open';
+  if (brandSubtitle) brandSubtitle.textContent = 'v8.0.0 release-candidate workspace · F1 help · Ctrl/Cmd+K quick open';
   for (const row of document.querySelectorAll('#workspace-settings .details-list > div')) {
     const term = row.querySelector('dt');
     const value = row.querySelector('dd');
@@ -101,15 +130,27 @@
     }
   }
 
+  function activateDynamicWorkspace(workspace) {
+    const section = document.querySelector(`#workspace-${workspace}`);
+    if (!section) return false;
+    document.querySelectorAll('.workspace').forEach((node) => node.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach((node) => node.classList.toggle('active', node.dataset.workspace === workspace));
+    section.classList.add('active');
+    return true;
+  }
+
   function openWorkspace(workspace) {
     const nav = navList.querySelector(`[data-workspace="${workspace}"]`);
     if (!nav) return;
-    openedTabs.add(workspace); activeTab = workspace; nav.click(); renderTabs();
+    openedTabs.add(workspace); activeTab = workspace; nav.click();
+    if (workspace === 'help') setTimeout(() => activateDynamicWorkspace('help'), 0);
+    renderTabs();
   }
 
   navList.addEventListener('click', (event) => {
     const nav = event.target.closest('[data-workspace]'); if (!nav) return;
     openedTabs.add(nav.dataset.workspace); activeTab = nav.dataset.workspace; renderTabs();
+    if (nav.dataset.workspace === 'help') setTimeout(() => activateDynamicWorkspace('help'), 0);
   });
   tabBar.addEventListener('click', (event) => { const tab = event.target.closest('[data-workspace-tab]'); if (tab) openWorkspace(tab.dataset.workspaceTab); });
   tabBar.addEventListener('keydown', (event) => {
@@ -137,10 +178,11 @@
       ...[...workspaceLabels].map(([key, label]) => ({ id: `workspace:${key}`, label: `Open ${label}`, keywords: `${label} workspace`, run: () => openWorkspace(key) })),
       { id: 'new-connection', label: 'New Connection', keywords: 'create profile serial tcp udp tls tunnel', run: () => document.querySelector('#newConnection')?.click() },
       { id: 'refresh-connections', label: 'Refresh Connection Center', keywords: 'reload profiles', run: () => document.querySelector('#refreshConnections')?.click() },
+      { id: 'help-quickstart', label: 'Help: Quick Start', keywords: 'help f1 getting started', run: () => { openWorkspace('help'); setTimeout(() => window.modbusHelp?.open('quickstart'), 0); } },
     ];
     function render() {
       const query = input.value.trim().toLowerCase();
-      const filtered = actions.filter((item) => !query || `${item.label} ${item.keywords}`.toLowerCase().includes(query)).slice(0, 12);
+      const filtered = actions.filter((item) => !query || `${item.label} ${item.keywords}`.toLowerCase().includes(query)).slice(0, 14);
       results.replaceChildren(...filtered.map((item, index) => {
         const button = document.createElement('button'); button.type = 'button'; button.className = `palette-item${index === 0 ? ' selected' : ''}`; button.dataset.paletteId = item.id; button.textContent = item.label;
         button.addEventListener('click', () => { dialog.close(); item.run(); }); return button;
