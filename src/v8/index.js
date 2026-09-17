@@ -48,6 +48,7 @@ module.exports = Object.freeze({
   ...require('./slave/simulatorRoutes'),
   ...require('./traffic/trafficTimelineService'),
   ...require('./traffic/registerLabService'),
+  ...require('./traffic/registerLabServiceHardened'),
   ...require('./traffic/trafficRoutes'),
   ...require('./digitalTwin/digitalTwinService'),
   ...require('./digitalTwin/digitalTwinServiceHardened'),
