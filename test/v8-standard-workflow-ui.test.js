@@ -40,8 +40,8 @@ test('help covers each major workspace plus addressing and function codes', () =
   }
   assert.match(help, /event\.key !== 'F1'/);
   assert.match(help, /40001/);
-  assert.match(help, /FC22/);
-  assert.match(help, /FC23/);
+  assert.match(help, /<td>22<\/td><td>Mask Write Register<\/td>/);
+  assert.match(help, /<td>23<\/td><td>Read\/Write Multiple Registers<\/td>/);
 });
 
 test('parity plan keeps unfinished standard workflow work visible', () => {
