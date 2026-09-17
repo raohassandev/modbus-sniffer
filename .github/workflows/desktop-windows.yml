@@ -23,7 +23,7 @@ jobs:
         run: npm --prefix desktop ci
       - name: Build NSIS installer
         run: npm --prefix desktop run dist:win
-      - name: Smoke launch packaged Workbench and v8 backend
+      - name: Smoke launch packaged Modbus Sniffer
         shell: pwsh
         run: |
           $exe = Get-ChildItem "desktop/dist/win-unpacked" -Filter "*.exe" -File |
@@ -39,11 +39,11 @@ jobs:
             for ($i = 0; $i -lt 45; $i++) {
               Start-Sleep -Milliseconds 500
               try {
-                $response = Invoke-WebRequest -Uri "http://127.0.0.1:18787/api/v8/status" -UseBasicParsing -TimeoutSec 2
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:18787/api/status" -UseBasicParsing -TimeoutSec 2
                 if ($response.StatusCode -eq 200) { $ready = $true; break }
               } catch {}
             }
-            if (-not $ready) { throw "Packaged desktop app did not expose the v8 Workbench health endpoint." }
+            if (-not $ready) { throw "Packaged desktop app did not expose the stable Modbus Sniffer health endpoint." }
           } finally {
             if ($proc -and -not $proc.HasExited) {
               & taskkill /PID $proc.Id /T /F | Out-Null
@@ -55,7 +55,9 @@ jobs:
           $rootVersion = node -p "require('./package.json').version"
           $desktopVersion = node -p "require('./desktop/package.json').version"
           @(
-            "product=Modbus Engineering Workbench",
+            "product=Modbus Sniffer",
+            "default_runtime=stable-v7-sniffer",
+            "experimental_runtime=v8-workbench-opt-in",
             "root_version=$rootVersion",
             "desktop_version=$desktopVersion",
             "commit=$env:GITHUB_SHA",
@@ -78,6 +80,6 @@ jobs:
           $lines | Set-Content "desktop/dist/SHA256SUMS.txt" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
-          name: modbus-engineering-workbench-windows
+          name: modbus-sniffer-windows
           path: desktop/dist/*
           if-no-files-found: error
