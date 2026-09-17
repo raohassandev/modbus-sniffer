@@ -50,7 +50,8 @@ The gate records the starting Git SHA and then validates:
    - browser E2E
 5. Final integrity
    - repository HEAD must still equal the starting SHA
-   - tracked files must remain unchanged
+   - tracked and untracked source/worktree state must remain clean for a release-eligible run
+   - diagnostic dirty mode is explicitly prevented from producing release PASS evidence
    - both npm lockfile SHA-256 values are retained in the evidence directory
 
 Any failed or unavailable required Node major fails the gate. The script does not silently skip a release matrix entry.
@@ -74,6 +75,8 @@ lockfile-sha256.txt
 A release-validation result is usable only when all of these are true:
 
 - `summary.txt` contains `status=PASS`;
+- `summary.txt` contains `allow_dirty=0`;
+- `summary.txt` contains `release_eligible=1`;
 - `start_head` and `end_head` are identical;
 - that SHA is still the exact PR #31 head when merge is considered;
 - no later source commit has superseded the evidence.
@@ -104,7 +107,7 @@ For non-release troubleshooting only, the clean-tree guard can be bypassed:
 RELEASE_GATE_ALLOW_DIRTY=1 npm run release:gate:mac
 ```
 
-A dirty run is not valid merge evidence.
+The diagnostic suite may execute, but the gate intentionally exits non-zero before the PASS assignment. Its summary records `allow_dirty=1` and `release_eligible=0`, so dirty execution cannot be mistaken for valid merge evidence.
 
 ## Optional self-hosted GitHub execution
 
