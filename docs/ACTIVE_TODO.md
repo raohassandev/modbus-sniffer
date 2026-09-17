@@ -1,6 +1,6 @@
 # Modbus Engineering Workbench v8 — Active TODO
 
-**Status date:** 2026-09-16  
+**Status date:** 2026-09-17  
 **Release:** 8.0.0 release candidate  
 **Branch:** `v8-release-completion`  
 **PR:** #31
@@ -28,11 +28,14 @@ This file is the short active checklist for release closure.
 - [x] Windows hosted packaging changed to manual-only
 - [x] release-gate/manual-only workflow invariants regression-covered
 - [x] release docs reconciled with local Mac gate
+- [x] diagnostic dirty mode cannot produce release PASS evidence
+- [x] inherited npm prefix overrides are sanitized before NVM initialization
 
 ## Exact-head release evidence
 
 - [ ] Run `npm run release:gate:mac` on a clean Mac checkout of the **final exact PR head**.
 - [ ] Confirm `.release-evidence/.../summary.txt` reports `status=PASS`.
+- [ ] Confirm `allow_dirty=0` and `release_eligible=1`.
 - [ ] Confirm `start_head == end_head == current PR #31 head`.
 - [ ] Retain the release-gate log and lockfile SHA-256 evidence.
 - [ ] Re-run the full gate if any source commit is added after the PASS.
