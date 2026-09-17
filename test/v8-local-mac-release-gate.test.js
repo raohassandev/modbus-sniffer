@@ -47,6 +47,16 @@ test('release evidence and deterministic browser runtime artifacts are ignored a
   assert.doesNotMatch(script, /rm -rf[^\n]*(?:"\$ROOT\/data"|"\$ROOT\/logs")/);
 });
 
+test('release gate clears inherited npm prefix overrides before loading nvm', () => {
+  const unsetIndex = script.indexOf('unset npm_config_prefix NPM_CONFIG_PREFIX');
+  const nvmLoadIndex = script.indexOf('. "$NVM_DIR/nvm.sh"');
+
+  assert.ok(unsetIndex >= 0, 'release gate must clear npm prefix environment overrides');
+  assert.ok(nvmLoadIndex >= 0, 'release gate must retain nvm loading support');
+  assert.ok(unsetIndex < nvmLoadIndex, 'npm prefix overrides must be cleared before nvm is sourced');
+  assert.match(script, /Clearing inherited npm prefix override before Node version selection/);
+});
+
 test('v8 local Mac release gate requires Node 20, 22 and 24 full validation', () => {
   assert.match(script, /for NODE_MAJOR in 20 22 24/);
   includesAll(script, [
