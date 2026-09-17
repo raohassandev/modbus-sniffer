@@ -64,7 +64,7 @@
                 <label>Function Code<select id="masterFunction"><option value="1">FC01 — Read Coils</option><option value="2">FC02 — Read Discrete Inputs</option><option value="3" selected>FC03 — Read Holding Registers</option><option value="4">FC04 — Read Input Registers</option></select></label>
                 <label>Start Address<input id="masterAddress" type="number" min="0" max="65535" value="0"></label>
                 <label>Quantity<input id="masterQuantity" type="number" min="1" max="125" value="10"></label>
-                <div class="span-2"><label>Address Mode</label><div class="master-segments" id="masterAddressMode"><button type="button" class="active" data-address-mode="raw">0-based (PDU)</button><button type="button" data-address-mode="reference">Reference (0xxxx / 1xxxx / 3xxxx / 4xxxx)</button><button type="button" disabled>Raw request remains PDU address</button></div></div>
+                <div class="span-2"><label>Address Mode</label><div class="master-segments" id="masterAddressMode"><button type="button" class="active" data-address-mode="raw">0-based (PDU)</button><button type="button" data-address-mode="reference">Reference (0xxxx / 1xxxx / 3xxxx / 4xxxx)</button><button type="button" disabled id="masterAddressHint">Raw request uses PDU address</button></div></div>
               </div>
               <div class="master-button-row"><button class="master-secondary" id="masterReadOnce" disabled>▶ Read Once</button><button class="master-primary" id="masterStartPolling" disabled>↻ Start Polling</button><button class="master-secondary" id="masterPausePolling" disabled>Ⅱ Pause</button><button class="master-secondary" id="masterStopPolling" disabled>■ Stop</button></div>
               <div class="master-counters"><div class="master-counter"><span>Tx Requests</span><strong id="masterTx">0</strong></div><div class="master-counter"><span>Rx Responses</span><strong id="masterRx">0</strong></div><div class="master-counter"><span>Errors</span><strong id="masterErrors">0</strong></div><div class="master-counter"><span>Timeouts</span><strong id="masterTimeouts">0</strong></div><div class="master-counter"><span>Avg RTT</span><strong id="masterAvgRtt">—</strong></div></div>
@@ -152,11 +152,36 @@
     };
   }
 
+  function referenceBase(functionCode) {
+    if (functionCode === 1) return 1;
+    if (functionCode === 2) return 10001;
+    if (functionCode === 3) return 40001;
+    if (functionCode === 4) return 30001;
+    return 0;
+  }
+
+  function normalizedPduAddress() {
+    const functionCode = Number(q('masterFunction').value || 3);
+    const entered = Number(q('masterAddress').value);
+    if (!Number.isInteger(entered)) throw new Error('Start Address must be an integer.');
+    if (app.addressMode === 'raw') {
+      if (entered < 0 || entered > 65535) throw new Error('Raw PDU Start Address must be 0..65535.');
+      return entered;
+    }
+    const base = referenceBase(functionCode);
+    const address = entered - base;
+    if (address < 0 || address > 65535) {
+      const prefix = functionCode === 1 ? '00001' : functionCode === 2 ? '10001' : functionCode === 3 ? '40001' : '30001';
+      throw new Error(`Reference address for FC${String(functionCode).padStart(2,'0')} must begin at ${prefix}.`);
+    }
+    return address;
+  }
+
   function readPayload() {
     return {
       unitId: Number(q('masterUnitId').value || 1),
       functionCode: Number(q('masterFunction').value || 3),
-      address: Number(q('masterAddress').value || 0),
+      address: normalizedPduAddress(),
       quantity: Number(q('masterQuantity').value || 1),
       timeoutMs: Number(q('masterTimeout').value || 1000),
     };
@@ -206,17 +231,27 @@
     } catch { /* Master backend may not be installed on an older local checkout */ }
   }
 
-  async function connect(confirmPassiveDisconnect = false) {
+  async function connect() {
     try {
-      const payload = { ...connectionPayload(), confirmPassiveDisconnect };
+      const payload = connectionPayload();
       setNote('<strong>Connecting…</strong> Opening the active Master connection.');
       const status = await request('/api/master/connect', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(payload) });
       setConnected(true, status);
       setNote(`<strong>Connected.</strong> ${esc(app.type.toUpperCase())} Master is ready. Reads now actively transmit Modbus requests.`);
     } catch (error) {
-      if (error.code === 'PASSIVE_CAPTURE_ACTIVE' && !confirmPassiveDisconnect) {
+      if (error.code === 'PASSIVE_CAPTURE_ACTIVE') {
         const port = error.details?.port || q('masterSerialPort').value;
-        if (confirm(`The passive Analyzer currently owns ${port}. Switch this port to ACTIVE Master mode? Passive capture will disconnect.`)) return connect(true);
+        if (confirm(`The passive Analyzer currently owns ${port}. Switch this port to ACTIVE Master mode? Passive capture will disconnect.`)) {
+          try {
+            await request('/api/serial/disconnect', { method:'POST' });
+            setNote(`<strong>Passive Analyzer disconnected.</strong> Opening ${esc(port)} in active Master mode…`, 'master-active-warning');
+            return connect();
+          } catch (disconnectError) {
+            setConnected(false);
+            setNote(`<strong>Could not release passive Analyzer.</strong> ${esc(disconnectError.message)}`, 'master-error');
+            return;
+          }
+        }
       }
       setConnected(false);
       setNote(`<strong>Connection failed.</strong> ${esc(error.message)}`, 'master-error');
@@ -292,6 +327,12 @@
     if (q('masterStopPolling')) q('masterStopPolling').disabled = true;
   }
 
+  function updateAddressHint() {
+    const fc = Number(q('masterFunction').value || 3);
+    const prefix = fc === 1 ? '00001' : fc === 2 ? '10001' : fc === 3 ? '40001' : '30001';
+    q('masterAddressHint').textContent = app.addressMode === 'raw' ? 'Raw request uses PDU address' : `FC${String(fc).padStart(2,'0')} starts at ${prefix}`;
+  }
+
   function setType(type) {
     app.type = type;
     document.querySelectorAll('[data-master-type]').forEach(button => button.classList.toggle('active', button.dataset.masterType === type));
@@ -302,7 +343,7 @@
 
   masterNav.addEventListener('click', () => { try { go('master'); } catch {} refreshStatus(); loadPorts(); });
   q('masterConnectionType').addEventListener('click', event => { const button = event.target.closest('[data-master-type]'); if (button && !app.connected) setType(button.dataset.masterType); });
-  q('masterConnect').addEventListener('click', () => connect(false));
+  q('masterConnect').addEventListener('click', connect);
   q('masterDisconnect').addEventListener('click', disconnect);
   q('masterRefreshPorts').addEventListener('click', loadPorts);
   q('masterReadOnce').addEventListener('click', () => readOnce());
@@ -315,16 +356,19 @@
   q('masterFunction').addEventListener('change', () => {
     const fc = Number(q('masterFunction').value);
     q('masterQuantity').max = fc <= 2 ? '2000' : '125';
+    updateAddressHint();
   });
   q('masterAddressMode').addEventListener('click', event => {
     const button = event.target.closest('[data-address-mode]');
     if (!button) return;
     app.addressMode = button.dataset.addressMode;
     q('masterAddressMode').querySelectorAll('[data-address-mode]').forEach(node => node.classList.toggle('active', node === button));
+    updateAddressHint();
   });
   window.addEventListener('hashchange', () => { if (location.hash !== '#master') stopPolling(); });
 
   setType('rtu');
+  updateAddressHint();
   loadPorts();
   refreshStatus();
 })();
