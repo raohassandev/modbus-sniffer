@@ -38,9 +38,14 @@ window.addEventListener('DOMContentLoaded',()=>{
                     const master=document.createElement('script');
                     master.src='/master-v7.js?v=20260917-1';
                     master.onload=()=>{
-                      const sessions=document.createElement('script');
-                      sessions.src='/master-sessions-v7.js?v=20260917-1';
-                      document.body.appendChild(sessions);
+                      const format=document.createElement('script');
+                      format.src='/master-format-v7.js?v=20260917-1';
+                      format.onload=()=>{
+                        const sessions=document.createElement('script');
+                        sessions.src='/master-sessions-v7.js?v=20260917-1';
+                        document.body.appendChild(sessions);
+                      };
+                      document.body.appendChild(format);
                     };
                     document.body.appendChild(master);
                   };
