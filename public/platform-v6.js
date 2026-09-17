@@ -1,7 +1,7 @@
 'use strict';
 
 window.addEventListener('DOMContentLoaded',()=>{
-  for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1','/device-inventory-v62.css?v=20260914-1','/discovery-v63.css?v=20260915-1','/active-discovery-v7.css?v=20260915-1','/intelligence-v7.css?v=20260914-1','/master-v7.css?v=20260917-1']){
+  for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1','/device-inventory-v62.css?v=20260914-1','/discovery-v63.css?v=20260915-1','/active-discovery-v7.css?v=20260915-1','/intelligence-v7.css?v=20260914-1','/master-v7.css?v=20260917-1','/master-sessions-v7.css?v=20260917-1']){
     if(document.querySelector(`link[href="${href}"]`))continue;
     const link=document.createElement('link');link.rel='stylesheet';link.href=href;document.head.appendChild(link);
   }
@@ -37,6 +37,11 @@ window.addEventListener('DOMContentLoaded',()=>{
                   intelligence.onload=()=>{
                     const master=document.createElement('script');
                     master.src='/master-v7.js?v=20260917-1';
+                    master.onload=()=>{
+                      const sessions=document.createElement('script');
+                      sessions.src='/master-sessions-v7.js?v=20260917-1';
+                      document.body.appendChild(sessions);
+                    };
                     document.body.appendChild(master);
                   };
                   document.body.appendChild(intelligence);
