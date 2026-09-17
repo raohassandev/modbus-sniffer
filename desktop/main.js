@@ -16,6 +16,10 @@ let quitInProgress = false;
 let allowFinalQuit = false;
 let desktopLogPath = null;
 
+function desktopMode() {
+  return String(process.env.MODBUS_DESKTOP_MODE || '').toLowerCase() === 'v8' ? 'v8' : 'sniffer';
+}
+
 function appendDesktopLog(level, message) {
   if (!desktopLogPath) return;
   const safeMessage = redactLogSecrets(message).replace(/\r?\n/g, ' ');
@@ -28,7 +32,7 @@ function configureDesktopLog(userDataRoot) {
     const logDir = path.join(userDataRoot, 'logs');
     fs.mkdirSync(logDir, { recursive: true });
     desktopLogPath = path.join(logDir, 'workbench-desktop.log');
-    appendDesktopLog('INFO', `Desktop shell starting; packaged=${app.isPackaged}; platform=${process.platform}; arch=${process.arch}`);
+    appendDesktopLog('INFO', `Desktop shell starting; mode=${desktopMode()}; packaged=${app.isPackaged}; platform=${process.platform}; arch=${process.arch}`);
   } catch {
     desktopLogPath = null;
   }
@@ -74,20 +78,30 @@ async function chooseBackendPort() {
   return probePort(0);
 }
 
-function backendEntry(root = backendRoot()) {
-  return path.join(root, 'src', 'index-v8.js');
+function backendEntry(root = backendRoot(), mode = desktopMode()) {
+  return path.join(root, 'src', mode === 'v8' ? 'index-v8.js' : 'index-v7.js');
+}
+
+function backendArgs(dataDir, selectedPort, mode = desktopMode()) {
+  if (mode === 'v8') {
+    return [backendEntry(backendRoot(), mode), '--port', String(selectedPort), '--host', '127.0.0.1', '--data-dir', dataDir];
+  }
+  return [backendEntry(backendRoot(), mode), '--web-port', String(selectedPort), '--web-host', '127.0.0.1', '--data-dir', dataDir];
+}
+
+function healthPath(mode = desktopMode()) {
+  return mode === 'v8' ? '/api/v8/status' : '/api/status';
+}
+
+function uiPath(mode = desktopMode()) {
+  return mode === 'v8' ? '/v8/' : '/';
 }
 
 function startBackend(dataDir, selectedPort) {
   const root = backendRoot();
-  const entry = backendEntry(root);
-  const args = [
-    entry,
-    '--port', String(selectedPort),
-    '--host', '127.0.0.1',
-    '--data-dir', dataDir
-  ];
-  appendDesktopLog('INFO', `Starting v8 backend on 127.0.0.1:${selectedPort}`);
+  const mode = desktopMode();
+  const args = backendArgs(dataDir, selectedPort, mode);
+  appendDesktopLog('INFO', `Starting ${mode} backend on 127.0.0.1:${selectedPort}`);
   backend = spawn(process.execPath, args, {
     cwd: root,
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
@@ -108,14 +122,15 @@ function startBackend(dataDir, selectedPort) {
   backend.on('exit', (code, signal) => {
     appendDesktopLog(code ? 'ERROR' : 'INFO', `Backend exited code=${code ?? 'null'} signal=${signal || 'none'}`);
     backend = null;
-    if (code && win && !win.isDestroyed() && !quitInProgress) dialog.showErrorBox('Workbench backend stopped', `Backend exited with code ${code}`);
+    if (code && win && !win.isDestroyed() && !quitInProgress) dialog.showErrorBox('Modbus backend stopped', `Backend exited with code ${code}`);
   });
 }
 
 function waitReady(selectedPort, retries = 80) {
+  const pathName = healthPath();
   return new Promise((resolve, reject) => {
     const ping = () => {
-      const req = http.get(`http://127.0.0.1:${selectedPort}/api/v8/status`, res => {
+      const req = http.get(`http://127.0.0.1:${selectedPort}${pathName}`, res => {
         res.resume();
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 500) resolve();
         else if (--retries <= 0) reject(new Error(`Backend health check returned HTTP ${res.statusCode}.`));
@@ -171,7 +186,7 @@ async function create() {
   try { storage = prepareData(); }
   catch (error) {
     appendDesktopLog('ERROR', `Storage migration error: ${error?.stack || error}`);
-    dialog.showErrorBox('Storage migration error', `${error.message}\n\nThe legacy data was left untouched. Resolve the storage issue before starting the Workbench.`);
+    dialog.showErrorBox('Storage migration error', `${error.message}\n\nThe legacy data was left untouched. Resolve the storage issue before starting the application.`);
     app.quit();
     return;
   }
@@ -209,8 +224,8 @@ async function create() {
   win.on('unresponsive', () => appendDesktopLog('WARNING', 'Desktop renderer became unresponsive.'));
   win.on('responsive', () => appendDesktopLog('INFO', 'Desktop renderer became responsive again.'));
   nativeTheme.on('updated', () => { if (win && !win.isDestroyed()) win.setBackgroundColor(backgroundColor()); });
-  await win.loadURL(`http://127.0.0.1:${port}/v8/`);
-  appendDesktopLog('INFO', `Workbench UI loaded on local backend port ${port}`);
+  await win.loadURL(`http://127.0.0.1:${port}${uiPath()}`);
+  appendDesktopLog('INFO', `${desktopMode()} UI loaded on local backend port ${port}`);
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -240,4 +255,4 @@ app.on('before-quit', event => {
   });
 });
 
-module.exports = { backendEntry };
+module.exports = { backendEntry, backendArgs, desktopMode, healthPath, uiPath };
