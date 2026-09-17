@@ -25,7 +25,7 @@ AISH-OS concurrency rules apply: one integration owner for shared paths, non-ove
 
 - [x] install Master backend routes into the stable v7 product route stack
 - [x] load Master CSS/JS in the stable UI shell
-- [x] load Monitor Sessions assets only after the Master workspace is available
+- [x] load Master Format before Monitor Sessions so saved sessions restore complete format state
 - [x] add Master navigation entry without removing existing Analyzer pages
 - [x] ensure server shutdown closes active Master connection
 - [x] preserve passive Sniffer as default startup and desktop experience
@@ -79,25 +79,28 @@ AISH-OS concurrency rules apply: one integration owner for shared paths, non-ove
 
 ### Lane M3 — Data Format + Monitor Sessions
 
-**Write scope:** `public/master-sessions-v7.js`, `public/master-sessions-v7.css`, future `src/master/format/**` / scoped format assets.  
+**Write scope:** `public/master-format-v7.js`, `public/master-sessions-v7.js`, `public/master-sessions-v7.css`, future scoped session/alias/template assets.  
 **Responsibility:** familiar Modbus Poll-style reusable monitors and value interpretation.
 
-- [x] basic uint16 / int16 quick display
-- [ ] uint32 / int32
-- [ ] float32
-- [ ] uint64 / int64 / float64
-- [x] basic HEX / binary display
-- [ ] ASCII
-- [ ] byte/word orders ABCD / BADC / CDAB / DCBA and required 64-bit permutations
-- [x] basic scale / offset
-- [ ] precision control
+- [x] uint16 / int16
+- [x] uint32 / int32 using 2-register groups
+- [x] float32 using 2-register groups
+- [x] uint64 / int64 / float64 using 4-register groups
+- [x] HEX / binary
+- [x] ASCII word display
+- [x] ABCD / BADC / CDAB / DCBA swap policies, generalized to 32/64-bit register groups
+- [x] scale / offset
+- [x] precision control
+- [x] safe handling for BigInt values beyond JavaScript safe integer range
+- [x] idempotent MutationObserver rendering for continuous polling
 - [ ] per-row description/alias
 - [x] save/open/duplicate monitor definition
 - [x] multiple monitor tabs
 - [x] persistent connection + Unit/FC/address/quantity/poll interval/timeout settings
-- [x] persistent basic format/scale/offset settings
+- [x] persistent datatype / byte order / scale / offset / precision settings
 - [x] safe session switching stops active polling first
 - [x] connection-profile changes disconnect the active Master before applying another saved target
+- [x] browser reload does not silently apply a saved profile over a different live Master connection
 - [x] saved live-grid snapshot per monitor, clearly identified as snapshot until refreshed
 - [x] New / Save / Duplicate / Rename / Delete monitor workflow
 - [ ] recent profiles / templates
@@ -151,7 +154,8 @@ AISH-OS concurrency rules apply: one integration owner for shared paths, non-ove
 - [ ] timeout and Modbus exception cases
 - [x] passive serial conflict route test authored
 - [x] polling start/stop/no-overlap regression authored
-- [x] Monitor Sessions persistence/tab/switching regression authored
+- [x] Monitor Sessions persistence/tab/switching lifecycle regression authored
+- [x] datatype/byte-order/precision format regression authored
 - [ ] write-lock and write confirmation tests
 - [x] UI shell regression test authored
 - [ ] browser E2E: TCP FC03 first read in under 60 seconds
@@ -164,6 +168,7 @@ AISH-OS concurrency rules apply: one integration owner for shared paths, non-ove
 - [ ] compare implementation to approved mockups
 - [ ] verify basic-read journey without documentation
 - [ ] verify Monitor Sessions tabs and actions in rendered UI
+- [ ] verify 32/64-bit format controls are understandable and values align with register grouping
 - [ ] 1366x768, 1440x900, 1920x1080 layouts
 - [ ] empty/loading/error/timeout states visually verified
 - [ ] keyboard focus and form labels
@@ -200,7 +205,7 @@ Acceptance — evidence required:
 
 - [ ] saved monitor sessions accepted in rendered UI
 - [ ] multiple monitor tabs accepted in rendered UI
-- [ ] datatype / byte-order / scale formatting
+- [ ] datatype / byte-order / scale formatting accepted against known values
 - [ ] aliases and templates
 - [ ] quick-start guided flow
 - [ ] mini trend / open-in-Traffic shortcuts
