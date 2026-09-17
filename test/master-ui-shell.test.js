@@ -42,6 +42,22 @@ test('Master polling schedules the next request only after the previous read com
   assert.ok(!/setInterval/.test(loop), 'poll loop must not use overlapping setInterval requests');
 });
 
+test('reference-address mode translates familiar notation to raw PDU addresses', () => {
+  assert.match(masterJs, /function referenceBase/);
+  assert.match(masterJs, /function normalizedPduAddress/);
+  assert.match(masterJs, /functionCode === 3\) return 40001/);
+  assert.match(masterJs, /functionCode === 4\) return 30001/);
+  assert.match(masterJs, /address: normalizedPduAddress\(\)/);
+});
+
+test('serial takeover requires confirmation and releases passive capture before retrying', () => {
+  const connectFlow = masterJs.slice(masterJs.indexOf('async function connect'), masterJs.indexOf('async function disconnect'));
+  assert.match(connectFlow, /PASSIVE_CAPTURE_ACTIVE/);
+  assert.match(connectFlow, /confirm\(/);
+  assert.match(connectFlow, /\/api\/serial\/disconnect/);
+  assert.match(connectFlow, /return connect\(\)/);
+});
+
 test('Master CSS is scoped and responsive rather than replacing stable Analyzer styles', () => {
   assert.match(masterCss, /\.master-workspace/);
   assert.match(masterCss, /\.master-grid/);
@@ -50,7 +66,7 @@ test('Master CSS is scoped and responsive rather than replacing stable Analyzer 
   assert.doesNotMatch(masterCss, /(^|\n)(body|\.sidebar|\.workspace)\s*\{/);
 });
 
-test('stable route installer mounts Master API and closes it through the existing server cleanup path', () => {
+test('stable active-route installer mounts Master API and closes it through the existing server cleanup path', () => {
   assert.match(discoveryRoutes, /installMasterRoutes/);
   assert.match(discoveryRoutes, /masterRuntime\.disconnect/);
 });
