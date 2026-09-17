@@ -21,7 +21,8 @@
     "asar": true,
     "files": [
       "main.js",
-      "storage.js"
+      "storage.js",
+      "logSafety.js"
     ],
     "extraResources": [
       { "from": "../src", "to": "backend/src" },
