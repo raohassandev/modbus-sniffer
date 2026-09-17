@@ -98,7 +98,7 @@ class RecipeEngine extends base.RecipeEngine {
     this.maxRepeatDepth = positiveInteger(maxRepeatDepth, DEFAULT_MAX_REPEAT_DEPTH, 'maxRepeatDepth');
   }
 
-  run(recipe, options = {}) {
+  async run(recipe, options = {}) {
     validateRecipe(recipe, {
       maxExpandedSteps: this.maxExpandedSteps,
       maxRepeatDepth: this.maxRepeatDepth,
