@@ -76,6 +76,7 @@ function encodeWriteStep(step) {
   if (fc === protocol.FC.WRITE_SINGLE_REGISTER) return protocol.encodeWriteSingleRegisterRequest({ address: step.address, value: step.value });
   if (fc === protocol.FC.WRITE_MULTIPLE_COILS) return protocol.encodeWriteMultipleCoilsRequest({ address: step.address, values: step.values });
   if (fc === protocol.FC.WRITE_MULTIPLE_REGISTERS) return protocol.encodeWriteMultipleRegistersRequest({ address: step.address, values: step.values });
+  if (fc === protocol.FC.WRITE_FILE_RECORD) return protocol.encodeWriteFileRecordRequest({ records: step.records });
   if (fc === protocol.FC.MASK_WRITE_REGISTER) return protocol.encodeMaskWriteRegisterRequest({ address: step.address, andMask: step.andMask, orMask: step.orMask });
   if (fc === protocol.FC.READ_WRITE_MULTIPLE_REGISTERS) {
     return protocol.encodeReadWriteMultipleRegistersRequest({ readAddress: step.readAddress, readQuantity: step.readQuantity, writeAddress: step.writeAddress, values: step.values });
