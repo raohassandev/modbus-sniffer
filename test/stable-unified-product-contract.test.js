@@ -77,6 +77,8 @@ test('stable server cleanup releases active resources and export manifest follow
   assert.match(server,/activeDiscovery\.close\(\)/);
   assert.match(server,/tcpProxy\.stop\(\)/);
   assert.match(server,/if\(failed\)throw failed\.reason/);
+  assert.match(server,/ws\.terminate\(\)/);
+  assert.match(server,/wss\.close/);
 });
 
 test('unified Playwright acceptance spec parses and covers loopback read plus no-transmit write rejection',()=>{
