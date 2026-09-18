@@ -74,6 +74,7 @@ function normalizeConfig(input = {}) {
       port: integer(input.port, type === 'tls' ? 802 : 502, { min: 0, max: 65535, field: 'port' }),
       maxClients: integer(input.maxClients, 32, { min: 1, max: 256, field: 'maxClients' }),
       maxPeers: integer(input.maxPeers, 256, { min: 1, max: 4096, field: 'maxPeers' }),
+      peerIdleMs: integer(input.peerIdleMs, 5 * 60 * 1000, { min: 0, max: 24 * 60 * 60 * 1000, field: 'peerIdleMs' }),
       idleTimeoutMs: integer(input.idleTimeoutMs, 0, { min: 0, max: 24 * 60 * 60 * 1000, field: 'idleTimeoutMs' }),
       tls,
     });
@@ -456,7 +457,7 @@ class SlaveRuntime extends EventEmitter {
   _createTransport(config) {
     if (config.type === 'tcp') return new TcpServerTransport({ host: config.host, port: config.port, maxClients: config.maxClients, idleTimeoutMs: config.idleTimeoutMs });
     if (config.type === 'tls') return new TlsServerTransport({ host: config.host, port: config.port, maxClients: config.maxClients, idleTimeoutMs: config.idleTimeoutMs, cert: config.tls.cert, key: config.tls.key, ca: config.tls.ca, requestCert: config.tls.requestCert, rejectUnauthorized: config.tls.rejectUnauthorized, minVersion: config.tls.minVersion });
-    if (config.type === 'udp' || config.type === 'rtu-udp' || config.type === 'ascii-udp') return new UdpServerTransport({ host: config.host, port: config.port, maxPeers: config.maxPeers });
+    if (config.type === 'udp' || config.type === 'rtu-udp' || config.type === 'ascii-udp') return new UdpServerTransport({ host: config.host, port: config.port, maxPeers: config.maxPeers, peerIdleMs: config.peerIdleMs });
     if (config.type === 'rtu-tcp') return new TunnelTcpServerTransport({ host: config.host, port: config.port, maxClients: config.maxClients, idleTimeoutMs: config.idleTimeoutMs, framing: 'rtu' });
     if (config.type === 'ascii-tcp') return new TunnelTcpServerTransport({ host: config.host, port: config.port, maxClients: config.maxClients, idleTimeoutMs: config.idleTimeoutMs, framing: 'ascii' });
     return new SerialTransport({
