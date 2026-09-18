@@ -69,6 +69,26 @@ test('Test Sequence run comparison detects result and per-step changes',()=>{
   assert.ok(diff.steps.some(x=>x.stepId==='cleanup'&&x.status==='added'));
 });
 
+test('Test Sequence comparison preserves repeated step occurrences instead of collapsing by stepId',()=>{
+  const left={runId:'left',recipeId:'repeat',passed:true,evidence:[
+    {stepId:'sample',result:'passed',value:[10]},
+    {stepId:'sample',result:'passed',value:[20]},
+    {stepId:'sample',result:'passed',value:[30]},
+  ]};
+  const right={runId:'right',recipeId:'repeat',passed:true,evidence:[
+    {stepId:'sample',result:'passed',value:[10]},
+    {stepId:'sample',result:'passed',value:[25]},
+    {stepId:'sample',result:'passed',value:[30]},
+  ]};
+  const diff=compareTestRuns(left,right);
+  assert.equal(diff.steps.length,3);
+  assert.deepEqual(diff.steps.map(x=>x.occurrence),[1,2,3]);
+  assert.deepEqual(diff.steps.map(x=>x.key),['sample#1','sample#2','sample#3']);
+  assert.equal(diff.steps[0].status,'unchanged');
+  assert.equal(diff.steps[1].status,'changed');
+  assert.equal(diff.steps[2].status,'unchanged');
+});
+
 test('Replay Compare browser workspace loads and parses',()=>{
   const root=path.resolve(__dirname,'..');
   const loader=fs.readFileSync(path.join(root,'public/platform-v6.js'),'utf8');
