@@ -68,6 +68,10 @@ test('stable web Host boundary rejects DNS rebinding and keeps wildcard binds IP
   assert.equal(isLoopbackHost('127.0.0.1'),true);
   assert.equal(isLoopbackHost('127.25.1.9:8080'),true);
   assert.equal(isLoopbackHost('localhost:8080'),true);
+  assert.equal(isLoopbackHost('::1'),true);
+  assert.equal(isLoopbackHost('[::1]:8080'),true);
+  assert.equal(webHostAllowed('[2001:db8::20]:8080','::'),true);
+  assert.equal(webHostAllowed('evil.example:8080','::'),false);
   assert.equal(webHostAllowed('127.0.0.1:8080','127.0.0.1'),true);
   assert.equal(webHostAllowed('localhost:8080','127.0.0.1'),true);
   assert.equal(webHostAllowed('evil.example:8080','127.0.0.1'),false);
