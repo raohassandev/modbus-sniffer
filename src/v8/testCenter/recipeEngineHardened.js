@@ -72,8 +72,8 @@ function validateRecipeSafety(recipe) {
         const functionCode = Number(step.functionCode);
         // Validate function-specific payload shape before any connection/session is acquired.
         base.encodeWriteStep(step);
-        if ([15, 16, 23].includes(functionCode) && step.confirmation?.bulk !== true) {
-          throw new base.RecipeEngineError('BULK_CONFIRMATION_REQUIRED', 'FC15/FC16/FC23 recipe writes require bulk=true', { path: stepPath, functionCode });
+        if ([15, 16, 21, 23].includes(functionCode) && step.confirmation?.bulk !== true) {
+          throw new base.RecipeEngineError('BULK_CONFIRMATION_REQUIRED', 'Bulk recipe writes require bulk=true', { path: stepPath, functionCode });
         }
         if (Number(step.unitId) === 0 && step.confirmation?.broadcast !== true) {
           throw new base.RecipeEngineError('BROADCAST_CONFIRMATION_REQUIRED', 'Recipe broadcast writes require broadcast=true', { path: stepPath });
