@@ -329,7 +329,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.get('/api/export/results.xlsx', async (_q,r) => { try { const model=exportModel(); const buf=await buildWorkbook(model); const name=safeName(model.project?.name); r.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); r.setHeader('Content-Disposition',`attachment; filename="${name}-modbus-results.xlsx"`); r.send(buf); } catch(e) { r.status(500).json({error:e.message}); } });
   app.get('/api/export/report.pdf', async (_q,r) => { try { const model=exportModel(); const buf=await buildPdf(model); const name=safeName(model.project?.name); r.setHeader('Content-Type','application/pdf'); r.setHeader('Content-Disposition',`attachment; filename="${name}-modbus-report.pdf"`); r.send(buf); } catch(e) { r.status(500).json({error:e.message}); } });
   app.get('/api/export/project.zip', async (_q,r) => { try { const model=exportModel(); const html=reportHtml({project:model.project,state,diagnostics:model.diagnostics,mappings:model.mappings}); await streamProjectZip(r,model,html); } catch(e) { if(!r.headersSent) r.status(500).json({error:e.message}); else r.destroy(e); } });
-  app.get('/api/export/manifest', (_q,r) => r.json({version:'7.0.0',exports:[
+  app.get('/api/export/manifest', (_q,r) => r.json({version:PRODUCT_VERSION,exports:[
     {id:'xlsx',label:'Excel Workbook',href:'/api/export/results.xlsx',extension:'.xlsx'},
     {id:'pdf',label:'Engineering Report',href:'/api/export/report.pdf',extension:'.pdf'},
     {id:'capture',label:'Raw Capture',href:'/api/capture/export.mbcap',extension:'.mbcap'},
@@ -370,7 +370,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(options.webPort,options.webHost,resolve); });
   return {
     url:`http://${options.webHost==='0.0.0.0'?'127.0.0.1':options.webHost}:${options.webPort}`,
-    close:async()=>{ discoveryEngineering.dispose?.(); rawLab.off('event',onRawLabEvent); await rawLab.dispose?.(); loggerTrend.dispose?.(); testSequences.dispose?.(); masterRuntime.off('event',onMasterEvent); slaveRuntime.off('event',onSlaveEvent); testSequences.off('event',onTestSequenceEvent); activeDiscovery.off('evidence',onDiscoveryEvidence); activeDiscovery.off('status',onDiscoveryStatus); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
+    close:async()=>{ discoveryEngineering.dispose?.(); rawLab.off('event',onRawLabEvent); await rawLab.dispose?.(); loggerTrend.dispose?.(); testSequences.dispose?.(); masterRuntime.off('event',onMasterEvent); slaveRuntime.off('event',onSlaveEvent); testSequences.off('event',onTestSequenceEvent); activeDiscovery.off('evidence',onDiscoveryEvidence); activeDiscovery.off('status',onDiscoveryStatus); await masterRuntime.disconnect(); await slaveRuntime.shutdown(); await activeDiscovery.close(); await tcpProxy.stop(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
   };
 }
 
