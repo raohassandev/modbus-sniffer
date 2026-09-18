@@ -4,7 +4,7 @@ const { MasterRuntime, normalizeConnectionConfig } = require('./masterRuntime');
 
 function errorStatus(error) {
   if (['MASTER_NOT_CONNECTED'].includes(error?.code)) return 409;
-  if (['PASSIVE_CAPTURE_ACTIVE', 'SLAVE_ACTIVE'].includes(error?.code)) return 409;
+  if (['PASSIVE_CAPTURE_ACTIVE', 'SLAVE_ACTIVE', 'RAW_LAB_ACTIVE'].includes(error?.code)) return 409;
   if (['TIMEOUT'].includes(error?.code)) return 504;
   if (['MODBUS_EXCEPTION'].includes(error?.code)) return 502;
   if (String(error?.code || '').startsWith('INVALID_')) return 400;
@@ -27,6 +27,8 @@ function installMasterRoutes({
   runtime = new MasterRuntime(),
   getSlaveStatus = null,
   disconnectSlave = null,
+  getRawLabStatus = null,
+  disconnectRawLab = null,
 } = {}) {
   if (!app) throw new TypeError('app is required');
 
@@ -74,6 +76,19 @@ function installMasterRoutes({
             throw error;
           }
           if (typeof disconnectSlave === 'function') await disconnectSlave();
+        }
+
+        const rawLab = typeof getRawLabStatus === 'function' ? getRawLabStatus() : null;
+        const rawSerial = rawLab?.studio?.connectionState === 'open' && ['rtu', 'ascii'].includes(String(rawLab.config?.type || '').toLowerCase());
+        const rawSamePort = rawSerial && String(rawLab.config?.path || '').toLowerCase() === String(config.path || '').toLowerCase();
+        if (rawSamePort) {
+          if (req.body?.confirmRawLabClose !== true) {
+            const error = new Error(`Raw Frame Lab currently owns ${config.path}. Confirm closing Raw Lab before starting Master mode.`);
+            error.code = 'RAW_LAB_ACTIVE';
+            error.details = { port: config.path, requiresConfirmation: true };
+            throw error;
+          }
+          if (typeof disconnectRawLab === 'function') await disconnectRawLab();
         }
       }
 
