@@ -5,10 +5,13 @@ const {
   MasterEngine,
   SerialTransport,
   TcpClientTransport,
+  WriteAuditTrail,
+  WriteSafetyController,
   protocol,
 } = require('../modbusCore');
 
 const READ_FUNCTIONS = new Set([1, 2, 3, 4]);
+const WRITE_FUNCTIONS = new Set([5, 6, 15, 16, 22, 23]);
 
 class MasterRuntimeError extends Error {
   constructor(code, message, details = {}) {
@@ -79,6 +82,64 @@ function normalizeReadRequest(input = {}) {
   return Object.freeze({ unitId, functionCode, address, quantity, timeoutMs });
 }
 
+function coilValue(value, field) {
+  if ([true, 1, '1', 'true', 'TRUE', 'on', 'ON'].includes(value)) return true;
+  if ([false, 0, '0', 'false', 'FALSE', 'off', 'OFF'].includes(value)) return false;
+  throw new MasterRuntimeError('INVALID_ARGUMENT', `${field} must be boolean/0/1`, { field, value });
+}
+
+function normalizeWriteRequest(input = {}, framing = 'rtu') {
+  const functionCode = intInRange(input.functionCode, 1, 255, 'functionCode');
+  if (!WRITE_FUNCTIONS.has(functionCode)) {
+    throw new MasterRuntimeError('INVALID_FUNCTION_CODE', 'Guarded writes support FC05, FC06, FC15, FC16, FC22 and FC23', { functionCode });
+  }
+  const unitMin = framing === 'tcp' ? 1 : 0;
+  const unitMax = framing === 'tcp' ? 255 : 247;
+  const unitId = intInRange(input.unitId ?? input.slaveId ?? 1, unitMin, unitMax, 'unitId');
+  if (unitId === 0 && ![5, 6, 15, 16].includes(functionCode)) {
+    throw new MasterRuntimeError('INVALID_BROADCAST_FUNCTION', 'Serial broadcast is supported only for FC05, FC06, FC15 and FC16', { functionCode });
+  }
+
+  const address = intInRange(input.address ?? 0, 0, 65535, 'address');
+  let pdu;
+  let descriptor = { functionCode, unitId, address };
+
+  if (functionCode === 5) {
+    const value = coilValue(input.value, 'value');
+    pdu = protocol.encodeWriteSingleCoilRequest({ address, value });
+    descriptor = { ...descriptor, value };
+  } else if (functionCode === 6) {
+    const value = intInRange(input.value, 0, 0xFFFF, 'value');
+    pdu = protocol.encodeWriteSingleRegisterRequest({ address, value });
+    descriptor = { ...descriptor, value };
+  } else if (functionCode === 15) {
+    if (!Array.isArray(input.values) || !input.values.length) throw new MasterRuntimeError('INVALID_ARGUMENT', 'values must be a non-empty array for FC15');
+    const values = input.values.map((value, index) => coilValue(value, `values[${index}]`));
+    pdu = protocol.encodeWriteMultipleCoilsRequest({ address, values });
+    descriptor = { ...descriptor, values };
+  } else if (functionCode === 16) {
+    if (!Array.isArray(input.values) || !input.values.length) throw new MasterRuntimeError('INVALID_ARGUMENT', 'values must be a non-empty array for FC16');
+    const values = input.values.map((value, index) => intInRange(value, 0, 0xFFFF, `values[${index}]`));
+    pdu = protocol.encodeWriteMultipleRegistersRequest({ address, values });
+    descriptor = { ...descriptor, values };
+  } else if (functionCode === 22) {
+    const andMask = intInRange(input.andMask, 0, 0xFFFF, 'andMask');
+    const orMask = intInRange(input.orMask, 0, 0xFFFF, 'orMask');
+    pdu = protocol.encodeMaskWriteRegisterRequest({ address, andMask, orMask });
+    descriptor = { ...descriptor, andMask, orMask };
+  } else if (functionCode === 23) {
+    const readAddress = intInRange(input.readAddress ?? address, 0, 0xFFFF, 'readAddress');
+    const readQuantity = intInRange(input.readQuantity ?? 1, 1, 125, 'readQuantity');
+    const writeAddress = intInRange(input.writeAddress ?? address, 0, 0xFFFF, 'writeAddress');
+    if (!Array.isArray(input.values) || !input.values.length) throw new MasterRuntimeError('INVALID_ARGUMENT', 'values must be a non-empty array for FC23');
+    const values = input.values.map((value, index) => intInRange(value, 0, 0xFFFF, `values[${index}]`));
+    pdu = protocol.encodeReadWriteMultipleRegistersRequest({ readAddress, readQuantity, writeAddress, values });
+    descriptor = { functionCode, unitId, address: writeAddress, readAddress, readQuantity, writeAddress, values };
+  }
+
+  return Object.freeze({ ...descriptor, pdu });
+}
+
 function referenceAddress(functionCode, address) {
   const offset = Number(address) + 1;
   if (functionCode === 1) return String(offset).padStart(5, '0');
@@ -143,6 +204,8 @@ class MasterRuntime {
     this.engine = null;
     this.config = null;
     this.connectionId = null;
+    this.writeAudit = new WriteAuditTrail();
+    this.safety = null;
     this.stats = this._newStats();
   }
 
@@ -158,6 +221,8 @@ class MasterRuntime {
       lastReadAt: null,
       connectedAt: null,
       lastError: null,
+      writeOperations: 0,
+      writeFailures: 0,
     };
   }
 
@@ -176,6 +241,8 @@ class MasterRuntime {
         avgRttMs: s.rttSamples ? s.rttTotalMs / s.rttSamples : null,
       }),
       writeState: connection?.writeLock || 'LOCKED',
+      writeSafety: this.safety?.status?.() || null,
+      writeAuditCount: this.writeAudit.list().length,
     });
   }
 
@@ -218,8 +285,10 @@ class MasterRuntime {
       throw error;
     }
 
+    const safety = new WriteSafetyController({ master: engine, auditTrail: this.writeAudit, userId: 'stable-local-user', sessionId: 'stable-master' });
     this.broker = broker;
     this.engine = engine;
+    this.safety = safety;
     this.config = config;
     this.connectionId = connectionId;
     this.stats = this._newStats();
@@ -229,7 +298,10 @@ class MasterRuntime {
 
   async disconnect() {
     const engine = this.engine;
+    const safety = this.safety;
+    if (safety && engine) { try { safety.lock({ reason: 'disconnect' }); } catch { /* already locked/offline */ } }
     this.engine = null;
+    this.safety = null;
     this.connectionId = null;
     this.config = null;
     if (engine) {
@@ -281,15 +353,75 @@ class MasterRuntime {
       };
       throw error;
     }
+  }  resetStats() {
+    const connectedAt = this.stats.connectedAt;
+    this.stats = this._newStats();
+    this.stats.connectedAt = connectedAt;
+    return this.status();
   }
+
+  writeAuditEntries({ limit = 200 } = {}) {
+    return this.writeAudit.list({ limit: Math.max(1, Math.min(5000, Number(limit) || 200)) });
+  }
+
+  async write(input = {}) {
+    if (!this.engine || !this.connectionId || !this.safety) {
+      throw new MasterRuntimeError('MASTER_NOT_CONNECTED', 'Connect the Modbus Master before writing');
+    }
+    const request = normalizeWriteRequest(input, this.config?.type || 'rtu');
+    const confirmation = input.confirmation && typeof input.confirmation === 'object' ? { ...input.confirmation } : {};
+    const autoLockMs = positiveNumber(input.autoLockMs ?? 10000, 'autoLockMs', { min: 250, max: 60000 });
+    const isBroadcast = request.unitId === 0;
+    const readBack = isBroadcast ? false : input.readBack !== false;
+    const captureOldValue = isBroadcast ? false : input.captureOldValue !== false;
+
+    this.safety.unlock({ durationMs: autoLockMs, confirmation: { confirmed: confirmation.confirmed === true } });
+    try {
+      const result = await this.safety.execute({
+        unitId: request.unitId,
+        pdu: request.pdu,
+        confirmation,
+        captureOldValue,
+        readBack,
+        context: {
+          source: 'stable-master',
+          comment: String(input.comment || '').slice(0, 500),
+        },
+      });
+      this.stats.writeOperations += 1;
+      this.stats.lastError = null;
+      const audit = this.writeAudit.list({ limit: 1 })[0] || null;
+      return Object.freeze({
+        ok: true,
+        request: Object.freeze({ ...request, pdu: undefined }),
+        rttMs: result?.rttMs ?? null,
+        requestRawHex: result?.requestRaw ? Buffer.from(result.requestRaw).toString('hex').toUpperCase() : null,
+        responseRawHex: result?.responseRaw ? Buffer.from(result.responseRaw).toString('hex').toUpperCase() : null,
+        decoded: result?.decoded ?? null,
+        verification: audit?.verification || null,
+        audit,
+        writeState: this.status().writeState,
+      });
+    } catch (error) {
+      this.stats.writeFailures += 1;
+      this.stats.lastError = { code: error?.code || 'MASTER_WRITE_FAILED', message: String(error?.message || error), at: this.now() };
+      throw error;
+    } finally {
+      try { this.safety.lock({ reason: 'operation-complete' }); } catch { /* connection loss already locks */ }
+    }
+  }
+
+
 }
 
 module.exports = {
   READ_FUNCTIONS,
+  WRITE_FUNCTIONS,
   MasterRuntime,
   MasterRuntimeError,
   normalizeConnectionConfig,
   normalizeReadRequest,
+  normalizeWriteRequest,
   referenceAddress,
   buildReadRows,
   defaultTransportFactory,
