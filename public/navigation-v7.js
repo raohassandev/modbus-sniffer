@@ -9,7 +9,7 @@
     ['ANALYZE',['traffic','analysis','registers','decoder','discovery']],
     ['LAB',['transportLab','rawLab','testSequences','deviceClone']],
     ['EVIDENCE',['loggerTrend','compare','sessions']],
-    ['SYSTEM',['settings']]
+    ['SYSTEM',['settings','help']]
   ];
   const used=new Set();
   for(const [label,pages] of groups){
