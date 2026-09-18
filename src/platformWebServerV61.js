@@ -390,7 +390,8 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
         Promise.resolve().then(()=>tcpProxy.stop())
       ]);
 
-      for(const ws of wss.clients)ws.close();
+      for(const ws of wss.clients)ws.terminate();
+      await new Promise(resolve=>wss.close(()=>resolve()));
       await new Promise(resolve=>server.close(resolve));
       const failed=cleanup.find(result=>result.status==='rejected');
       if(failed)throw failed.reason;
