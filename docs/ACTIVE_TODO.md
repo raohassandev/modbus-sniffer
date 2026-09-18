@@ -25,6 +25,9 @@ The final source audit also closes these edge cases:
 - [x] UDP Slave peers expire after bounded idle retention instead of exhausting the peer table indefinitely
 - [x] Test Sequence Compare preserves every repeated step occurrence instead of collapsing duplicate execution IDs
 - [x] product/runtime version surfaces use the release version source of truth
+- [x] root test discovery is scoped to the Modbus suite and excludes unrelated nested projects/browser assets
+- [x] fast cross-platform `npm run preflight` gate covers version/lint/syntax/runtime-audit/tests/smoke/acceptance
+- [x] unified stable Playwright coverage includes primary workspaces, loopback Slave→Master read and rejected-write no-transmit audit
 
 ## Product model
 
