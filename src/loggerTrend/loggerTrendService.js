@@ -101,7 +101,7 @@ class StableLoggerTrendService extends EventEmitter{
     this.logger=new RotatingJsonlLogger({directory:path.join(this.dataDir,'samples'),prefix:'modbus',retentionFiles:50,maxBytes:25*1024*1024,immediateFlush:false});
     this.logger.addStream({streamId:RESERVED_EVENT_STREAM,source:{kind:'protocol-evidence'},mode:'every',intervalMs:1});
     this.events=[];
-    this._onTransaction=tx=>{for(const point of passivePoints(tx))this.ingestPoint(point);};
+    this._onTransaction=tx=>{for(const point of passivePoints(tx))this.ingestPoint(point);this.ingestEvidence({...tx,sourceType:'Sniffer',connectionId:tx.connectionId||tx.channelId||null});};
     this._onMasterPoint=point=>this.ingestPoint(point);
     state.on('transaction',this._onTransaction);
     masterRuntime.on('point',this._onMasterPoint);
@@ -119,6 +119,7 @@ class StableLoggerTrendService extends EventEmitter{
   _persistProfiles(){
     const tmp=this.profilePath+'.tmp';
     fs.writeFileSync(tmp,JSON.stringify(this.listProfiles(),null,2));
+    try{fs.rmSync(this.profilePath,{force:true});}catch{}
     fs.renameSync(tmp,this.profilePath);
   }
   _installProfile(profile,persist=true){
