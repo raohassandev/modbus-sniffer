@@ -48,7 +48,7 @@ function installSlaveRoutes({
   };
 
   async function ensureSerialOwnership(config, body = {}) {
-    if (config.type === 'tcp') return;
+    if (!['rtu','ascii'].includes(config.type)) return;
 
     if (demo) {
       const error = new SlaveRuntimeError('DEMO_SERIAL_DISABLED', 'Serial Slave mode is disabled while Analyzer demo mode is active.');
@@ -220,6 +220,47 @@ function installSlaveRoutes({
       const result = runtime.seedFifo(req.body || {});
       broadcast('slave-fifo', { unitId: result.unitId, address: result.address, quantity: result.values.length });
       res.json(result);
+    } catch (error) { sendError(res, error); }
+  });
+
+  app.get('/api/slave/lab/status', (_req, res) => {
+    try { res.json(runtime.status().lab || { enabled:false }); } catch (error) { sendError(res, error); }
+  });
+
+  app.post('/api/slave/lab/arm', (req, res) => {
+    try {
+      const body=req.body||{};
+      const status=runtime.armLab(body.policy||{}, { confirmed: body.confirmed === true });
+      broadcast('slave-lab', status);
+      res.json(status);
+    } catch (error) { sendError(res, error); }
+  });
+
+  app.post('/api/slave/lab/disarm', (_req, res) => {
+    try {
+      const status=runtime.disarmLab();
+      broadcast('slave-lab', status);
+      res.json(status);
+    } catch (error) { sendError(res, error); }
+  });
+
+  app.get('/api/slave/generators', (_req, res) => {
+    try { res.json(runtime.listGenerators()); } catch (error) { sendError(res, error); }
+  });
+
+  app.post('/api/slave/generators', (req, res) => {
+    try {
+      const item=runtime.saveGenerator(req.body||{});
+      broadcast('slave-generator', item);
+      res.json(item);
+    } catch (error) { sendError(res, error); }
+  });
+
+  app.delete('/api/slave/generators/:id', (req, res) => {
+    try {
+      const ok=runtime.removeGenerator(req.params.id);
+      broadcast('slave-generator', { generatorId:req.params.id, removed:ok });
+      res.json({ok});
     } catch (error) { sendError(res, error); }
   });
 
