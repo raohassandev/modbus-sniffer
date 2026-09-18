@@ -36,6 +36,13 @@ test('global shell describes unified mode safety without claiming the whole prod
   assert.doesNotMatch(html,/PASSIVE \/ RX ONLY/);
 });
 
+test('stable shell surfaces packaged asset load failures instead of failing silently',()=>{
+  const loader=read('public/platform-v6.js');
+  assert.match(loader,/platformAssetFailure/);
+  assert.match(loader,/could not load a required UI asset/);
+  assert.match(loader,/window\.addEventListener\('error'/);
+});
+
 test('stable shell loads the final Modbus-only workspaces and grouped navigation',()=>{
   const loader=read('public/platform-v6.js');
   for(const asset of [
