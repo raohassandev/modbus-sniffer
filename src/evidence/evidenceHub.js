@@ -100,11 +100,12 @@ class EvidenceHub {
     const type=String(event.type||'');
     const owner=String(event.ownerMode||'').toLowerCase();
     const source=String(event.source||'');
+    const role=String(sourceType||'').toLowerCase()||owner;
     const details=event.details&&typeof event.details==='object'?event.details:{};
     let direction=null;
 
-    if(type==='traffic.tx')direction=owner==='slave'?'RSP':'REQ';
-    else if(type==='traffic.rx')direction=owner==='slave'?'REQ':'RSP';
+    if(type==='traffic.tx')direction=role==='slave'?'RSP':'REQ';
+    else if(type==='traffic.rx')direction=role==='slave'?'REQ':'RSP';
     else if(type==='master.timeout')direction='TIMEOUT';
     else if(type==='master.receive-error'||type==='slave.malformed'||type==='slave.runtime-error')direction='UNK';
     else return null;
