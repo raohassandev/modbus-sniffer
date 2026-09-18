@@ -13,6 +13,19 @@ The repository now exposes one unified Modbus engineering product through `src/i
 
 This checklist separates **source completion** from **release/field acceptance**. Source completion does not mean hardware, packaging or soak validation has passed.
 
+### Final source-hardening closure
+
+The final source audit also closes these edge cases:
+
+- [x] TLS Slave private keys are redacted from status/events/export and retained only server-side for safe restart
+- [x] Raw Lab conformance requires semantically matching Modbus responses; unexpected exceptions cannot falsely pass success cases
+- [x] Logger/Trend reloads bounded persisted samples and protocol-event history after restart
+- [x] JSON mutation limits are enforced by the parser even without a trusted Content-Length header
+- [x] Discovery Unit-ID limits follow serial vs TCP framing
+- [x] UDP Slave peers expire after bounded idle retention instead of exhausting the peer table indefinitely
+- [x] Test Sequence Compare preserves every repeated step occurrence instead of collapsing duplicate execution IDs
+- [x] product/runtime version surfaces use the release version source of truth
+
 ## Product model
 
 - [x] Sniffer / Analyzer — passive Modbus observation and reverse engineering
