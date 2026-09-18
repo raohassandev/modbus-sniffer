@@ -15,6 +15,7 @@ const { installActiveDiscoveryRoutes } = require('./activeDiscoveryRoutes');
 const { installMasterRoutes } = require('./master/masterRoutes');
 const { installSlaveRoutes } = require('./slave/slaveRoutes');
 const { installDeviceCloneRoutes } = require('./deviceClone/deviceCloneRoutes');
+const { installTestSequenceRoutes } = require('./testSequences/testSequenceRoutes');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -128,6 +129,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null,masterRuntime});
   slaveRuntime=installSlaveRoutes({app,state,demo,disconnectSerial,masterRuntime,activeDiscovery,broadcast});
   const deviceClone=installDeviceCloneRoutes({app,state,slaveRuntime,broadcast});
+  const testSequences=installTestSequenceRoutes({app,masterRuntime,broadcast});
   const onSlaveEvent=event=>broadcast('slave-event',event);
   slaveRuntime.on('event',onSlaveEvent);
   const active = () => workspaces.getActiveProject();
@@ -266,7 +268,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(options.webPort,options.webHost,resolve); });
   return {
     url:`http://${options.webHost==='0.0.0.0'?'127.0.0.1':options.webHost}:${options.webPort}`,
-    close:async()=>{ slaveRuntime.off('event',onSlaveEvent); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
+    close:async()=>{ testSequences.dispose?.(); slaveRuntime.off('event',onSlaveEvent); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
   };
 }
 
