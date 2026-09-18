@@ -63,7 +63,8 @@ test('register mapping extension is loaded after Monitor Sessions and parses',()
 
 test('canonical product audit explicitly forbids non-Modbus scope',()=>{
   const audit=read('docs/MODBUS_ONLY_PRODUCT_AUDIT.md');
-  for(const phrase of ['generic SCADA','generic HMI screen building','plant automation/control logic','one shared Modbus protocol core','Device Clone','Test Sequences / Scripting API']){
+  for(const phrase of ['generic HMI/SCADA design','generic process control','src/modbusCore.js','Device Clone','Test Sequences']){
     assert.ok(audit.includes(phrase),`scope audit must retain: ${phrase}`);
   }
+  assert.match(audit,/former v8 shell is no longer a product or desktop launch path/);
 });
