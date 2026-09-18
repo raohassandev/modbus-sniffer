@@ -1,10 +1,12 @@
 'use strict';
 
-const { ConnectionBroker } = require('../v8/connectionBroker');
-const { MasterEngine } = require('../v8/master/masterEngine');
-const { SerialTransport } = require('../v8/transports/serialTransport');
-const { TcpClientTransport } = require('../v8/transports/tcpClientTransport');
-const protocol = require('../v8/protocol');
+const {
+  ConnectionBroker,
+  MasterEngine,
+  SerialTransport,
+  TcpClientTransport,
+  protocol,
+} = require('../modbusCore');
 
 const READ_FUNCTIONS = new Set([1, 2, 3, 4]);
 
