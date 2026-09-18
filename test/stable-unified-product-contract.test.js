@@ -27,6 +27,15 @@ test('stable shell does not overwrite the server-injected product version badge'
   assert.doesNotMatch(loader,/UI v7\.0/);
 });
 
+test('global shell describes unified mode safety without claiming the whole product is passive',()=>{
+  const html=read('public/v4.html');
+  assert.match(html,/Modbus Engineering Tool/);
+  assert.match(html,/Sniffer · Master · Slave/);
+  assert.match(html,/MODE SAFE/);
+  assert.match(html,/Sniffer is RX-only · active TX modes are explicit/);
+  assert.doesNotMatch(html,/PASSIVE \/ RX ONLY/);
+});
+
 test('stable shell loads the final Modbus-only workspaces and grouped navigation',()=>{
   const loader=read('public/platform-v6.js');
   for(const asset of [
