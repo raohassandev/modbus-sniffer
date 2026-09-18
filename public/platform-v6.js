@@ -1,6 +1,21 @@
 'use strict';
 
 window.addEventListener('DOMContentLoaded',()=>{
+  const reportAssetFailure=(url)=>{
+    if(document.getElementById('platformAssetFailure'))return;
+    const banner=document.createElement('div');
+    banner.id='platformAssetFailure';
+    banner.setAttribute('role','alert');
+    banner.style.cssText='position:fixed;z-index:99999;left:12px;right:12px;bottom:12px;padding:12px 14px;border:1px solid #ef4444;border-radius:8px;background:#450a0a;color:#fee2e2;font:600 12px/1.45 system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.35)';
+    banner.textContent='Modbus Engineering Tool could not load a required UI asset: '+String(url||'unknown')+'. Restart the app; if this repeats, verify the installation files.';
+    document.body.appendChild(banner);
+  };
+  window.addEventListener('error',event=>{
+    const target=event.target;
+    if(target&&((typeof HTMLScriptElement!=='undefined'&&target instanceof HTMLScriptElement)||(typeof HTMLLinkElement!=='undefined'&&target instanceof HTMLLinkElement))){
+      reportAssetFailure(target.src||target.href||'unknown');
+    }
+  },true);
   for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1','/device-inventory-v62.css?v=20260914-1','/discovery-v63.css?v=20260915-1','/active-discovery-v7.css?v=20260915-1','/intelligence-v7.css?v=20260914-1','/master-v7.css?v=20260917-1','/master-sessions-v7.css?v=20260917-1','/master-register-meta-v7.css?v=20260918-1','/slave-v7.css?v=20260918-1','/master-write-v7.css?v=20260918-1','/master-advanced-v7.css?v=20260918-1','/device-clone-v7.css?v=20260918-1','/test-sequences-v7.css?v=20260918-1','/traffic-evidence-v7.css?v=20260918-1','/protocol-diagnostics-v7.css?v=20260918-1','/data-lab-v7.css?v=20260918-1','/logger-trend-v7.css?v=20260918-1','/compare-v7.css?v=20260918-1','/transport-lab-v7.css?v=20260918-1','/raw-lab-v7.css?v=20260918-1','/discovery-engineering-v7.css?v=20260918-1','/slave-lab-v7.css?v=20260918-1','/navigation-v7.css?v=20260918-1','/help-v7.css?v=20260918-1']){
     if(document.querySelector(`link[href="${href}"]`))continue;
     const link=document.createElement('link');link.rel='stylesheet';link.href=href;document.head.appendChild(link);
