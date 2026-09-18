@@ -13,11 +13,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Verify release versions
-        run: npm run version:check
-      - name: Install backend runtime dependencies only
-        run: npm ci --omit=dev
-      - name: Audit backend runtime dependencies
+      - name: Install backend dependencies for source preflight
+        run: npm ci
+      - name: Run unified source preflight
+        run: npm run preflight
+      - name: Prune backend to runtime dependencies for packaging
+        run: npm prune --omit=dev
+      - name: Re-audit packaged backend runtime dependencies
         run: npm audit --omit=dev --audit-level=high
       - name: Install desktop build dependencies
         run: npm --prefix desktop ci
