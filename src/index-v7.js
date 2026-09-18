@@ -37,7 +37,7 @@ function publicConfig(o,adapterIdentity=null,rtuChannel=null){
   return {
     port:o.port,baudRate:o.baudRate,parity:o.parity,dataBits:o.dataBits,stopBits:o.stopBits,reconnectMs:o.reconnectMs,
     requestTimeoutMs:o.requestTimeoutMs,autoRebind:o.autoRebind,mapFile:o.mapFile,csvFile:o.csvFile,historyLimit:o.historyLimit,
-    webHost:o.webHost,webPort:o.webPort,dataDir:o.dataDir,
+    webHost:o.webHost,webPort:o.webPort,confirmWebExternalBind:Boolean(o.confirmWebExternalBind),dataDir:o.dataDir,
     adapterIdentity:adapterIdentity||null,rtuChannelId:rtuChannel?.channelId||null
   };
 }
