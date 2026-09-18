@@ -102,7 +102,8 @@
 
   function showFields(){
     const code=Number(fc.value),bulk=[15,16,21,23].includes(code),broadcast=Number(unit.value)===0;
-    q('masterWriteValuesLabel').hidden=![15,16,23].includes(code);\n    q('masterWriteFileRecordsLabel').hidden=code!==21;
+    q('masterWriteValuesLabel').hidden=![15,16,23].includes(code);
+    q('masterWriteFileRecordsLabel').hidden=code!==21;
     q('masterWriteValueLabel').hidden=![5,6].includes(code);
     q('masterWriteAndMaskLabel').hidden=code!==22;
     q('masterWriteOrMaskLabel').hidden=code!==22;
@@ -123,7 +124,13 @@
     if(code===6){const n=Number(q('masterWriteValue').value);if(!Number.isInteger(n)||n<0||n>65535)throw new Error('FC06 value must be 0..65535.');payload.value=n;}
     if(code===15)payload.values=parseValues(q('masterWriteValues').value,{coil:true});
     if(code===16)payload.values=parseValues(q('masterWriteValues').value);
-    if(code===21){\n      let records;\n      try{records=JSON.parse(q('masterWriteFileRecords').value);}catch{throw new Error('FC21 records must be valid JSON.');}\n      if(!Array.isArray(records)||!records.length)throw new Error('FC21 records JSON must be a non-empty array.');\n      payload.records=records;\n    }\n    if(code===22){
+    if(code===21){
+      let records;
+      try{records=JSON.parse(q('masterWriteFileRecords').value);}catch{throw new Error('FC21 records must be valid JSON.');}
+      if(!Array.isArray(records)||!records.length)throw new Error('FC21 records JSON must be a non-empty array.');
+      payload.records=records;
+    }
+    if(code===22){
       const andMask=Number(q('masterWriteAndMask').value),orMask=Number(q('masterWriteOrMask').value);
       if(!Number.isInteger(andMask)||andMask<0||andMask>65535)throw new Error('AND mask must be 0..65535.');
       if(!Number.isInteger(orMask)||orMask<0||orMask>65535)throw new Error('OR mask must be 0..65535.');
@@ -149,7 +156,8 @@
       const connectionType=q('masterConnectionType')?.querySelector('button.active')?.textContent?.trim()||'Connection';
       let values='—';
       if([5,6].includes(code))values=q('masterWriteValue').value||'—';
-      else if([15,16,23].includes(code))values=q('masterWriteValues').value||'—';\n      else if(code===21)values=q('masterWriteFileRecords').value||'—';
+      else if([15,16,23].includes(code))values=q('masterWriteValues').value||'—';
+      else if(code===21)values=q('masterWriteFileRecords').value||'—';
       else if(code===22)values=`AND ${q('masterWriteAndMask').value} / OR ${q('masterWriteOrMask').value}`;
       q('masterWritePreview').innerHTML=`<strong>Target:</strong> ${esc(connectionType)} · Unit ${unitId} · FC${String(code).padStart(2,'0')} · Address ${address}<br><strong>Requested:</strong> ${esc(values)}`;
     }catch{/* preview is advisory */}
