@@ -4,11 +4,13 @@ This document defines the supported local-data and diagnostic paths for the Modb
 
 ## Product mode
 
-The desktop application now defaults to the accepted **stable Sniffer / Analyzer** runtime. The experimental v8 Workbench is not the normal product entry point while its Master/Slave workflow is being redesigned.
+The desktop application launches the **unified Modbus Engineering Tool** runtime only.
 
-- default desktop mode: stable Sniffer (`src/index-v7.js`, `/api/status`, `/`)
-- explicit experimental mode: set `MODBUS_DESKTOP_MODE=v8` before launching the desktop app
-- normal users and release smoke tests must not be silently redirected into the experimental Workbench
+- runtime: `src/index-v7.js`
+- health endpoint: `/api/status`
+- UI root: `/`
+- the former v8 Workbench shell is not a desktop/product launch mode
+- shared protocol, transport and safety primitives under `src/v8/**` may still be reused internally by the unified core
 
 ## Persistent user data
 
@@ -40,7 +42,7 @@ The desktop shell writes persistent diagnostics to:
 
 The log records:
 
-- desktop shell startup/platform/architecture and selected mode
+- desktop shell startup/platform/architecture and unified runtime
 - selected user-data directory
 - local backend startup/exit
 - backend stdout/stderr
