@@ -10,15 +10,15 @@ Percentages below are **source-roadmap completion estimates**, not release/accep
 |---|---|---|---:|
 | L0 | Product Scope + Shell Integration | EXECUTING | 82% |
 | L1 | Master / Client Engineering | EXECUTING | 82% |
-| L2 | Shared Core Convergence | EXECUTING | 42% |
+| L2 | Shared Core Convergence | EXECUTING | 48% |
 | L3 | Slave / Server Simulator | EXECUTING | 72% |
 | L4 | Protocol Functions + Diagnostics / Conformance | EXECUTING | 80% |
-| L5 | Traffic + Register Lab + Discovery | EXECUTING | 50% |
-| L6 | Test Center + Device Clone + Replay/Test Sequences | EXECUTING | 78% |
+| L5 | Traffic + Register Lab + Discovery | EXECUTING | 62% |
+| L6 | Test Center + Device Clone + Replay/Test Sequences | EXECUTING | 82% |
 | L7 | Logger/Trend + Reports + Transport/Security Lab | READY | 45% |
-| L8 | QA + UX + Reliability + Release Evidence | EXECUTING | 32% |
+| L8 | QA + UX + Reliability + Release Evidence | EXECUTING | 34% |
 
-**Approximate overall source-roadmap completion:** 61%  
+**Approximate overall source-roadmap completion:** 64%  
 **Release/field acceptance:** substantially lower; exact-head suite, packaged smoke, hardware acceptance and soak remain open.
 
 ## Dependency DAG
@@ -155,20 +155,22 @@ Remaining:
 **Owner:** analysis lane  
 **Write scope:** traffic/register/discovery services and UI only.
 
-Existing foundations:
-- traffic timeline
-- register lab
-- discovery scan service
-- stable analyzer intelligence
+Completed source:
+- stable Analyzer transaction/evidence model
+- bounded active Evidence Hub separated from passive inference
+- unified Traffic stream for Sniffer + Master + Slave packets
+- Test Sequence and Discovery annotations
+- source/channel/unit/function/search filtering and source-aware inspector
+- register lab and discovery scan foundations
 
 Remaining:
-- unified evidence from all product modes
+- raw Discovery request/response bridging
+- richer active PDU decode/matching context
 - CRC/LRC/MBAP/timing diagnostics
 - transaction mismatch/duplicate analysis
 - compact Unit/address/function scans
 - entropy/change-frequency research
-- map diff/export/adoption
-- user-facing integration
+- map diff/export/adoption and selected-evidence export
 
 ## L6 — Test Center + Device Clone + Replay/Test Sequences — 50%
 
