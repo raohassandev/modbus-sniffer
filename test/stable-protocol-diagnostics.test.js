@@ -11,7 +11,7 @@ const { analyzeProtocolTraffic }=require('../src/evidence/protocolDiagnostics');
 
 test('protocol diagnostics validates RTU CRC, matches pairs, reports exception and corrupt frame',()=>{
   const reqPdu=protocol.encodeReadRequest({functionCode:3,address:0,quantity:2});
-  const rspPdu=protocol.encodeReadRegistersResponse({values:[11,22]});
+  const rspPdu=protocol.encodeReadRegistersResponse({functionCode:3,values:[11,22]});
   const exPdu=Buffer.from([0x83,0x02]);
   const req=protocol.encodeRtuAdu(1,reqPdu);
   const rsp=protocol.encodeRtuAdu(1,rspPdu);
@@ -40,8 +40,8 @@ test('protocol diagnostics validates RTU CRC, matches pairs, reports exception a
 test('protocol diagnostics detects duplicate request and out-of-order TCP responses',()=>{
   const req1=protocol.encodeTcpAdu({transactionId:10,unitId:1,pdu:protocol.encodeReadRequest({functionCode:3,address:0,quantity:1})});
   const req2=protocol.encodeTcpAdu({transactionId:11,unitId:1,pdu:protocol.encodeReadRequest({functionCode:3,address:1,quantity:1})});
-  const rsp1=protocol.encodeTcpAdu({transactionId:10,unitId:1,pdu:protocol.encodeReadRegistersResponse({values:[100]})});
-  const rsp2=protocol.encodeTcpAdu({transactionId:11,unitId:1,pdu:protocol.encodeReadRegistersResponse({values:[200]})});
+  const rsp1=protocol.encodeTcpAdu({transactionId:10,unitId:1,pdu:protocol.encodeReadRegistersResponse({functionCode:3,values:[100]})});
+  const rsp2=protocol.encodeTcpAdu({transactionId:11,unitId:1,pdu:protocol.encodeReadRegistersResponse({functionCode:3,values:[200]})});
   const rows=[
     {id:10,timestamp:100,direction:'REQ',unitId:1,functionCode:3,rawHex:req1.toString('hex'),transport:'TCP',connectionId:'c1',sourceType:'Master'},
     {id:11,timestamp:101,direction:'REQ',unitId:1,functionCode:3,rawHex:req1.toString('hex'),transport:'TCP',connectionId:'c1',sourceType:'Master'},
