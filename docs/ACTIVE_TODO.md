@@ -2,242 +2,214 @@
 
 **Status date:** 2026-09-18  
 **Branch:** `v8-release-completion`  
-**PR:** #31 — experimental, not release-eligible  
+**PR:** #31  
 **Canonical scope:** `docs/MODBUS_ONLY_PRODUCT_AUDIT.md`
 
-## Product rule
+## Status
 
-This repository is one **advanced Modbus engineering tool**. Every product feature must directly support Modbus testing, simulation, analysis, reverse engineering, research, troubleshooting, evidence or protocol validation.
+**Approved product source scope: COMPLETE.**
 
-Primary modes:
+The repository now exposes one unified Modbus engineering product through `src/index-v7.js`. The former v8 user-facing launch path is retired; reusable protocol/transport/safety primitives under `src/v8/**` remain internal implementation modules.
 
-1. **Sniffer / Analyzer** — passive observation and reverse engineering.
-2. **Master / Client** — active polling, diagnostics and guarded writes.
-3. **Slave / Server Simulator** — controlled Modbus device simulation.
+This checklist separates **source completion** from **release/field acceptance**. Source completion does not mean hardware, packaging or soak validation has passed.
 
-Advanced Modbus tools:
+## Product model
 
-- Traffic Analyzer
-- Register/Data Lab
-- Discovery & Scan
-- Diagnostics & Conformance
-- Test Center / Raw Frame Studio
-- Device Clone / Capture-to-Simulator
-- Test Sequences / Scripted API
-- Replay / Compare
-- Logger / Trend
-- Captures / Reports / Export
-- Connection Profiles / Transport Lab
+- [x] Sniffer / Analyzer — passive Modbus observation and reverse engineering
+- [x] Master / Client — active polling, diagnostics and guarded writes
+- [x] Slave / Server Simulator — controlled Modbus device simulation
+- [x] Modbus-only product boundary; generic HMI/SCADA/process-control scope removed
+- [x] one unified desktop/web runtime
+- [x] Core / Analyze / LAB / Evidence / System navigation grouping
+- [x] stable Help / How to Use for all primary modes and advanced tools
+- [x] common serial-resource ownership and explicit takeover rules
 
-Explicitly out of product scope:
+## Sniffer / Analyzer
 
-- generic HMI builder / SCADA screens
-- generic process automation/control
-- generic historian platform
-- generic IoT/dashboard functionality
-- non-Modbus workflow automation
-
-## Scope cleanup
-
-- [x] canonical Modbus-only scope audit created
-- [x] remove HMI from product navigation
-- [x] stop HMI Builder feature development in the Modbus product
-- [x] remove HMI from Help/product roadmap
-- [x] rename/reframe visible `Automation` product wording as `Test Sequences / API`
-- [x] rename/reframe visible `Historian` product wording as `Logger / Trend`
-- [x] stable product exposes `Device Clone / Capture-to-Simulator` instead of generic Digital Twin
-- [x] Device Clone is constrained to capture/register evidence -> built-in Modbus Slave map
-- [x] stable Test Sequences API is constrained to bounded Modbus read/write/delay/set/assert/repeat operations
-- [ ] classify/remove any remaining non-Modbus UI/routes/services
-- [x] inventory duplicate v7/v8 Master, connection and evidence paths
-- [x] define one canonical shared Modbus core boundary (`src/modbusCore.js`)
-- [ ] converge Master onto one runtime/UI contract
-- [ ] migrate valuable v8 Modbus-only capabilities into the unified product shell
-- [ ] retire duplicate experimental shell paths after migration/acceptance
-
-## Stable Sniffer baseline
-
-- [x] `npm start` restored to stable Sniffer / Analyzer
-- [x] desktop default restored to stable Sniffer
-- [ ] verify serial COM selection, baud/parity and reconnect flow on current head
-- [ ] verify passive RTU request/response capture
-- [ ] verify automatic Unit/Slave formation
-- [ ] verify grouped registers, polling intervals, timeouts and RTT
-- [ ] verify TCP inline proxy analyzer
-- [ ] verify capture/replay/export
-- [ ] add deeper CRC/LRC/MBAP diagnostics
-- [ ] add serial silent-interval/timing analysis
-- [ ] add duplicate/mismatch/out-of-order transaction diagnostics
-- [ ] add capture comparison and register-map diff
+- [x] passive RTU/RS485 capture remains RX-only
+- [x] serial port/baud/parity/data/stop configuration and reconnect flow
+- [x] automatic Unit/Slave formation
+- [x] automatic register/poll-group learning
+- [x] RTT, timeout, exception and polling cadence analysis
+- [x] TCP inline proxy analyzer
+- [x] capture/replay/export
+- [x] CRC/LRC/MBAP validation
+- [x] request/response matching
+- [x] duplicate, orphan, mismatch and TCP transaction-order diagnostics
+- [x] RTU silent-interval/gap/jitter analysis
+- [x] intelligent datatype/byte-order confidence and behavior inference
+- [x] capture/register-map comparison
 
 ## Master / Client
 
-Basic flow must remain:
+Basic path remains:
 
 `Connect -> Unit ID -> Function -> Address/Quantity -> Read/Poll -> Live Values -> Interpret -> Guarded Write`
 
-Implemented source:
+- [x] RTU / ASCII / TCP connection
+- [x] FC01/02/03/04 Read Once and cyclic polling
+- [x] zero-based and reference-address display/input
+- [x] Tx/Rx/error/timeout/retry/RTT counters
+- [x] Monitor Sessions with save/open/duplicate/rename/delete
+- [x] per-Monitor counter baselines/reset
+- [x] uint/int 16/32/64, float32/64, HEX, binary, ASCII/UTF-8, BCD and time formats
+- [x] byte/word-order permutations
+- [x] scale/offset/precision, enum, bitfield and limit interpretation
+- [x] per-register name/unit/notes mapping
+- [x] read retries, retry delay and inter-request delay
+- [x] RS-485 RTS direction/settle controls
+- [x] direct current-monitor Traffic action
+- [x] direct current-register Logger / Trend action
+- [x] guarded FC05/06/15/16/21/22/23 writes
+- [x] explicit bulk/broadcast confirmation
+- [x] old-value capture, read-back verification, audit and automatic re-lock
+- [x] FC07/08/11/12/17 diagnostics with applicability/LAB guards
+- [x] FC20 File Record read
+- [x] FC24 FIFO read
+- [x] FC43/14 Device Identification
+- [x] advanced request UI
 
-- [x] RTU / ASCII / TCP basic connection
-- [x] FC01/02/03/04 Read Once and polling
-- [x] live grid and communication counters
-- [x] raw/reference address handling
-- [x] Monitor Sessions
-- [x] uint/int 16/32/64, float32/64, HEX, binary, ASCII
-- [x] ABCD/BADC/CDAB/DCBA policies
-- [x] scale/offset/precision persistence
-
-Next:
-
-- [x] per-register alias/name/unit/notes mapping foundation
-- [ ] bitfield and richer register metadata
-- [ ] clear/reset per-monitor counters
-- [ ] open current monitor directly in Traffic
-- [ ] direct Modbus Logger/Trend from monitor
-- [x] guarded FC05/06/15/16 writes with confirmation, audit, read-back and automatic re-lock
-- [x] FC22 and FC23 guarded-write UI
-- [x] FC07/08/11/12/17 serial diagnostics UI with transport/LAB guards
-- [x] FC20 read + guarded FC21 write File Record testing
-- [x] FC24 FIFO tester
-- [x] FC43/14 device-identification action
-- [x] guarded serial broadcast semantics with separate explicit confirmation
-- [ ] retries/inter-request delay controls
-- [ ] RS-485 RTS timing controls
-- [x] advanced Modbus request panel for diagnostics, identity, File Record and FIFO functions
-- [ ] exact-head local tests + hardware acceptance
+See `docs/MODBUS_FUNCTION_MATRIX.md`.
 
 ## Slave / Server Simulator
 
-- [x] professional RTU / ASCII / TCP Slave first screen
-- [ ] supported UDP/tunnel/TLS server variants under Advanced Transport
-- [x] multi-Unit device simulation
-- [ ] coils/discrete/holding/input memory tables
+- [x] RTU / ASCII / TCP normal server modes
+- [x] TLS / UDP / RTU-over-TCP / ASCII-over-TCP / RTU-over-UDP / ASCII-over-UDP advanced transports
+- [x] multi-Unit simulation
+- [x] Coils / Discrete Inputs / Holding Registers / Input Registers memory
 - [x] direct editable simulator values
-- [x] incoming request/write protocol visibility
-- [x] connected TCP client visibility
-- [ ] complete supported FC behavior matrix
-- [x] FC43/14 server identity objects
-- [x] serial diagnostic/event counter behavior for supported functions
-- [ ] configurable exception responses
-- [ ] deterministic latency/delay injection under LAB mode
-- [ ] safe dynamic value generators
-- [x] simulator map JSON import/export
-- [x] Device Clone creates a built-in Slave map from captured register evidence
+- [x] incoming request/response/write evidence
+- [x] TCP clients and UDP peer visibility
+- [x] FC01–08, FC11/12, FC15–17, FC20–24 and FC43/14 implemented behavior where applicable
+- [x] Device Identification objects
+- [x] serial diagnostic/event counters
+- [x] File Record and FIFO simulation
+- [x] serial Unit 0 broadcast handling for FC05/06/15/16
+- [x] configurable LAB exception/fault policy
+- [x] deterministic delay/jitter/drop/duplicate/corruption/truncation controls
+- [x] bounded dynamic generators
+- [x] simulator map import/export
+- [x] TLS private-key redaction from exported maps
+- [x] Device Clone / Capture-to-Simulator
 
 ## Traffic / Protocol Analysis
 
-**Current integration:** a bounded active Evidence Hub now feeds the existing Traffic stream while passive Analyzer learning/capture remains isolated. Next: raw Discovery bridging, richer decoded active PDU context, mismatch diagnostics and selected-evidence export.
+- [x] unified evidence stream for Sniffer, Master, Slave, Discovery, Test Sequences and Raw Lab
+- [x] Tx/Rx raw HEX and decoded ADU/PDU context
+- [x] CRC/LRC/MBAP diagnostics
+- [x] request/response matching
+- [x] RTT, timeout, retry, jitter and gap analysis
+- [x] exception decoding/trending
+- [x] TCP transaction-ID ordering analysis
+- [x] source/channel/connection/unit/function/search filters
+- [x] address-range filter
+- [x] packet inspector context
+- [x] multi-select
+- [x] bookmarks and annotations
+- [x] selected-evidence CSV export
 
-- [x] stable Traffic source layer merges passive Sniffer + active Master/Slave packets plus Test Sequence/Discovery annotations without altering passive inference
-- [x] bridge raw TCP/RTU Discovery FC43 request/response/timeout evidence into unified Traffic
-- [ ] Tx/Rx raw HEX + decoded PDU/ADU
-- [ ] CRC/LRC/MBAP validation
-- [ ] request/response matching
-- [ ] RTT, timeout, retry, jitter and gap analysis
-- [ ] Modbus exception decoding/trending
-- [ ] TCP transaction-ID analysis
-- [ ] broadcast identification
-- [x] Traffic source/channel/unit/function/search filters plus source/connection inspector context
-- [ ] explicit session/connection dropdowns and address-range filter
-- [ ] bookmarks/annotations
-- [ ] export selected evidence
+## Register / Data Lab
 
-## Register/Data Lab
-
-- [ ] shared datatype interpretation engine across Master/Sniffer/Simulator
-- [ ] strings and fixed-length ASCII/UTF-8 views where applicable
-- [ ] BCD and bitfield interpretation
-- [ ] signed/unsigned integer families
-- [ ] IEEE-754 float/double
-- [ ] byte/word-order permutations
-- [ ] scale/offset/unit/precision
-- [ ] value-change frequency / min/max / entropy research
-- [ ] inferred-map confidence and provenance
-- [ ] map import/export/diff
+- [x] shared register codec
+- [x] signed/unsigned integer families
+- [x] IEEE-754 float/double
+- [x] ASCII and UTF-8 strings
+- [x] BCD and BCD date/time
+- [x] timestamp decoding
+- [x] byte/word-order permutations
+- [x] scale/offset/unit/precision
+- [x] enum and bitfield views
+- [x] engineering limits
+- [x] automatic interpretation/confidence workflow through Analyzer intelligence
 
 ## Discovery / Reverse Engineering
 
-- [ ] compact Unit/Slave scan
-- [ ] address/range scan
-- [ ] function-code probe matrix
-- [ ] FC43/14 identity scan
-- [ ] safe quantity/range probing
-- [ ] inferred datatype/endianness workflow
-- [ ] change-frequency/entropy analysis
-- [ ] adopt confirmed ranges into Monitor Sessions
-- [ ] adopt evidence into Device Clone/Simulator
+- [x] passive automatic Unit/device discovery
+- [x] FC43/14 active identity discovery
+- [x] connected-Master Unit scan
+- [x] address/range scan
+- [x] function-code probe matrix
+- [x] safe quantity probing
+- [x] framing-aware Unit range
+- [x] interpretation matrix for discovered register words
+- [x] adopt range into current Master monitor definition
+- [x] seed discovered range into built-in Slave simulator
+- [x] traffic/evidence integration
 
 ## Test Center / Modbus LAB
 
-Existing protocol Test Center / recipe code remains in scope. Stable Test Sequences now reuse the hardened Recipe Engine but deliberately reject generic connection/raw/LAB automation; raw malformed-frame work remains an explicit LAB surface.
+- [x] Raw RTU / ASCII / TCP frame composer
+- [x] automatic CRC/LRC support
+- [x] expected response and mask validation
+- [x] repeat controls
+- [x] reusable raw cases
+- [x] case import/export
+- [x] explicit LAB arming for malformed/risky raw transmissions
+- [x] validated writes remain separately confirmed
+- [x] boundary quantity presets
+- [x] Illegal Function / Address / Value conformance presets
+- [x] conformance suite runner
+- [x] exact conformance-run evidence JSON
+- [x] bounded Test Sequences with read/write/delay/set/assert/repeat
 
-- [ ] raw RTU/ASCII/TCP frame composer UI
-- [ ] auto CRC/LRC
-- [ ] expected response + mask
-- [ ] reusable raw test strings
-- [ ] boundary quantity tests
-- [ ] exception-code tests
-- [ ] invalid function/address/value LAB tests
-- [ ] timing/timeout/retry scenarios
-- [x] stable bounded Test Sequences support repeat/assert/read/write/delay/set
-- [ ] protocol regression suites
-- [ ] explicit LAB arming for raw/risky transmissions (kept separate from stable Test Sequences)
-- [ ] test case import/export
-- [ ] exact test-run evidence bundle
+## Transport / Security Lab
 
-## Transport Lab
-
-Current core already contains Serial, TCP, UDP, TLS and tunnel transports.
-
-- [ ] consistent Master/Slave/Test Center exposure for supported transports
-- [ ] RTU over TCP
-- [ ] ASCII over TCP
-- [ ] RTU over UDP
-- [ ] ASCII over UDP
-- [ ] Modbus UDP
-- [ ] Modbus TCP Security/TLS on port 802 defaults
-- [ ] certificate/authentication diagnostics
-- [ ] clearly label standard Modbus vs convenience/non-standard encapsulations
-- [ ] local interface binding controls
-- [ ] reconnect/timeout/backpressure evidence
+- [x] Modbus TCP
+- [x] Modbus TCP Security/TLS, default port 802
+- [x] peer certificate summary and TLS authorization diagnostics
+- [x] local interface binding/recommendation
+- [x] UDP MBAP
+- [x] RTU over TCP
+- [x] ASCII over TCP
+- [x] RTU over UDP
+- [x] ASCII over UDP
+- [x] standard vs convenience/non-standard encapsulation labels
+- [x] one-shot raw request/response evidence
 
 ## Logger / Replay / Compare / Evidence
 
-These remain in scope only as Modbus evidence tools.
+- [x] register/value logger
+- [x] communication-event logger
+- [x] bounded rotating JSONL retention
+- [x] live trends
+- [x] stream CSV export
+- [x] capture replay
+- [x] capture comparison
+- [x] register-map comparison
+- [x] Test Sequence run comparison
+- [x] native `.mbcap`, JSON and CSV evidence workflows
+- [x] PCAP/PCAPNG feasibility assessed; synthetic packet captures intentionally rejected
+- [x] PCAP decision documented in `docs/PCAP_FEASIBILITY.md`
 
-- [ ] register/value logger
-- [ ] communication-event logger
-- [ ] live trends
-- [ ] capture replay
-- [ ] compare captures
-- [ ] compare register maps
-- [ ] compare test runs
-- [ ] CSV/JSON/Excel export
-- [ ] protocol report bundle
-- [ ] PCAP/PCAPNG feasibility assessment
-- [ ] bounded retention / large-session performance
+## UX / architecture closure
 
-## UX rules
+- [x] no Project required for first sniff/read/simulation
+- [x] each primary workspace states its purpose and active/passive behavior
+- [x] Traffic is shared evidence rather than a competing connection workflow
+- [x] advanced tools are reachable from the engineering workflow
+- [x] no generic HMI/SCADA/process-control navigation
+- [x] user-facing duplicate v8 launch path retired
+- [x] compatibility commands `npm run workbench` and `npm run v8` resolve to the unified runtime
+- [x] desktop launches only the unified runtime
+- [x] Windows workflow remains manual `workflow_dispatch` only
 
-- [ ] no Project required before first sniff/read/simulation
-- [ ] every workspace answers a specific Modbus engineering question
-- [ ] common connection/ownership model across all active tools
-- [ ] Traffic is shared evidence, not a competing workflow
-- [ ] advanced tools are reachable from the object being investigated
-- [ ] no generic SCADA/HMI/process-control concepts in the product shell
-- [ ] Help teaches Modbus concepts and tool operation, not unrelated automation concepts
+## Remaining release / field acceptance
 
-## Validation / merge rule
+These are evidence gates, not source feature gaps:
 
-Do **not** merge PR #31 because it is mergeable or because old release evidence passed.
+- [ ] exact-current-head `npm test`
+- [ ] exact-current-head lint/version/syntax checks
+- [ ] browser visual/interaction QA at representative resolutions
+- [ ] passive Sniffer acceptance on real RTU traffic
+- [ ] Master acceptance on representative RTU and TCP devices
+- [ ] Slave interoperability acceptance with external Masters
+- [ ] TLS/mTLS interoperability on representative peers
+- [ ] repeated connect/disconnect reliability checks
+- [ ] long polling/simulation soak
+- [ ] Windows packaged application clean-machine smoke
+- [ ] Defender/firewall/driver behavior check
+- [ ] code signing when production signing material is supplied
 
-Before release eligibility:
+## Merge rule
 
-- [ ] exact-head automated tests pass
-- [ ] stable Sniffer remains accepted
-- [ ] Master accepted on representative RTU/TCP devices
-- [ ] Slave accepted as a usable simulator
-- [ ] Modbus-only navigation/scope cleanup accepted
-- [ ] Test Center / Traffic / Discovery integration accepted
-- [ ] Windows packaged application smoke passes
-- [ ] representative long polling/simulation soak passes
+PR #31 must not be merged merely because GitHub reports it mergeable. Release/merge approval requires applicable exact-head evidence above.
