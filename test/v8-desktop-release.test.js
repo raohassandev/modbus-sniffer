@@ -45,7 +45,8 @@ test('Windows packaging workflow smoke-tests stable Sniffer and emits provenance
   assert.match(workflow, /npm run version:check/);
   assert.match(workflow, /http:\/\/127\.0\.0\.1:18787\/api\/status/);
   assert.match(workflow, /product=Modbus Sniffer/);
-  assert.match(workflow, /default_runtime=stable-v7-sniffer/);
+  assert.match(workflow, /runtime=unified-modbus-engineering-tool/);
+  assert.doesNotMatch(workflow, /experimental_runtime=/);
   assert.match(workflow, /SHA256SUMS\.txt/);
   assert.match(workflow, /modbus-sniffer-windows/);
 });
