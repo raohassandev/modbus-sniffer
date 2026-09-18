@@ -181,7 +181,7 @@ class SlaveRuntime extends EventEmitter {
     this.events = [];
     this.sequence = 0;
     this._relay = null;
-    this.generators = new DynamicValueEngine({ resolveDevice: (_serverId, unitId) => this.server?.getDevice(Number(unitId)) || null });
+    this.generators = new DynamicValueEngine({ resolveDevice: (_serverId, unitId) => this.server?.running ? (this.server.getDevice(Number(unitId)) || null) : null });
     this._generatorRelay = (event) => this._recordEvent(event);
     this.generators.on('event', this._generatorRelay);
     this.generators.start();
@@ -399,7 +399,7 @@ class SlaveRuntime extends EventEmitter {
     return Object.freeze({
       schemaVersion: 1,
       exportedAt: new Date().toISOString(),
-      config: this.config ? cloneJson(this.config) : null,
+      config: this.config ? (() => { const out=cloneJson(this.config); if(out?.tls){ out.tls.key=null; out.tls.credentialsRequired=true; } return out; })() : null,
       devices: this._captureDeviceDefinitions(),
     });
   }
