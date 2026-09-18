@@ -12,6 +12,8 @@ const { TcpServerTransport } = require('./v8/transports/tcpServerTransport');
 const { TlsClientTransport, TlsServerTransport } = require('./v8/transports/tlsTransport');
 const { UdpClientTransport, UdpServerTransport } = require('./v8/transports/udpTransport');
 const protocol = require('./v8/protocol');
+const { VirtualSlaveServer } = require('./v8/slave/virtualSlaveServer');
+const { VirtualDevice, VirtualDeviceError, MemoryArea, normalizeWritableAreas } = require('./v8/slave/virtualDevice');
 
 module.exports = Object.freeze({
   ConnectionBroker,
@@ -24,4 +26,9 @@ module.exports = Object.freeze({
   UdpClientTransport,
   UdpServerTransport,
   protocol,
+  VirtualSlaveServer,
+  VirtualDevice,
+  VirtualDeviceError,
+  MemoryArea,
+  normalizeWritableAreas,
 });
