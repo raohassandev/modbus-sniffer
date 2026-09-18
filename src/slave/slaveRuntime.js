@@ -376,6 +376,7 @@ class SlaveRuntime extends EventEmitter {
 
   saveGenerator(input = {}) {
     if (!this.server) throw new SlaveRuntimeError('SLAVE_NOT_CONFIGURED', 'Configure the Slave before adding generators');
+    if (input.labConfirmed !== true) throw new SlaveRuntimeError('LAB_CONFIRMATION_REQUIRED', 'Dynamic simulator generators require explicit LAB confirmation');
     const unitId = integer(input.unitId, undefined, { min: 1, max: 255, field: 'unitId' });
     this._device(unitId);
     return this.generators.upsert({ ...input, serverId: 'stable', unitId });
@@ -386,7 +387,9 @@ class SlaveRuntime extends EventEmitter {
   }
 
   listClients() {
-    return typeof this.transport?.listClients === 'function' ? this.transport.listClients() : [];
+    if (typeof this.transport?.listClients === 'function') return this.transport.listClients();
+    if (typeof this.transport?.listPeers === 'function') return this.transport.listPeers().map(peer => ({ clientId:peer.peerId, remoteAddress:peer.remoteAddress, remotePort:peer.remotePort, framesRx:peer.framesRx||0, framesTx:0, lastTransactionId:null, transport:'udp' }));
+    return [];
   }
 
   getEvents({ limit = 200, type = null } = {}) {
