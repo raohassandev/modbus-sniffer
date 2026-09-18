@@ -45,9 +45,9 @@ Explicitly out of product scope:
 - [x] remove HMI from Help/product roadmap
 - [x] rename/reframe visible `Automation` product wording as `Test Sequences / API`
 - [x] rename/reframe visible `Historian` product wording as `Logger / Trend`
-- [ ] rename/reframe `Digital Twin` as `Device Clone / Capture-to-Simulator`
-- [ ] ensure Device Clone remains capture/register-evidence -> Modbus simulator only
-- [ ] ensure scripting APIs expose Modbus test operations only
+- [x] stable product exposes `Device Clone / Capture-to-Simulator` instead of generic Digital Twin
+- [x] Device Clone is constrained to capture/register evidence -> built-in Modbus Slave map
+- [x] stable Test Sequences API is constrained to bounded Modbus read/write/delay/set/assert/repeat operations
 - [ ] classify/remove any remaining non-Modbus UI/routes/services
 - [x] inventory duplicate v7/v8 Master, connection and evidence paths
 - [x] define one canonical shared Modbus core boundary (`src/modbusCore.js`)
@@ -94,37 +94,39 @@ Next:
 - [ ] clear/reset per-monitor counters
 - [ ] open current monitor directly in Traffic
 - [ ] direct Modbus Logger/Trend from monitor
-- [ ] guarded FC05/06/15/16 writes
-- [ ] FC22 and FC23 UI
-- [ ] FC07/08/11/12/17 serial diagnostics UI
-- [ ] FC20/21 file record tester
-- [ ] FC24 FIFO tester
-- [ ] FC43/14 device-identification action
-- [ ] broadcast semantics and explicit warnings
+- [x] guarded FC05/06/15/16 writes with confirmation, audit, read-back and automatic re-lock
+- [x] FC22 and FC23 guarded-write UI
+- [x] FC07/08/11/12/17 serial diagnostics UI with transport/LAB guards
+- [x] FC20 read + guarded FC21 write File Record testing
+- [x] FC24 FIFO tester
+- [x] FC43/14 device-identification action
+- [x] guarded serial broadcast semantics with separate explicit confirmation
 - [ ] retries/inter-request delay controls
 - [ ] RS-485 RTS timing controls
-- [ ] advanced request builder
+- [x] advanced Modbus request panel for diagnostics, identity, File Record and FIFO functions
 - [ ] exact-head local tests + hardware acceptance
 
 ## Slave / Server Simulator
 
-- [ ] professional first screen for RTU / ASCII / TCP server
+- [x] professional RTU / ASCII / TCP Slave first screen
 - [ ] supported UDP/tunnel/TLS server variants under Advanced Transport
-- [ ] multi-Unit device simulation
+- [x] multi-Unit device simulation
 - [ ] coils/discrete/holding/input memory tables
-- [ ] direct editable simulator values
-- [ ] incoming read/write visibility
-- [ ] connected TCP client visibility
+- [x] direct editable simulator values
+- [x] incoming request/write protocol visibility
+- [x] connected TCP client visibility
 - [ ] complete supported FC behavior matrix
-- [ ] FC43 server identity objects
-- [ ] diagnostic/event counters where applicable
+- [x] FC43/14 server identity objects
+- [x] serial diagnostic/event counter behavior for supported functions
 - [ ] configurable exception responses
 - [ ] deterministic latency/delay injection under LAB mode
 - [ ] safe dynamic value generators
-- [ ] simulator map import/export
-- [ ] create simulator from captured device evidence
+- [x] simulator map JSON import/export
+- [x] Device Clone creates a built-in Slave map from captured register evidence
 
 ## Traffic / Protocol Analysis
+
+**Next integration lane:** converge Sniffer + Master + Slave + Discovery + Test Sequence events into one evidence contract without replacing the accepted passive capture model.
 
 - [ ] unified evidence from Sniffer, Master, Slave, Discovery and Test Center
 - [ ] Tx/Rx raw HEX + decoded PDU/ADU
@@ -165,7 +167,7 @@ Next:
 
 ## Test Center / Modbus LAB
 
-Existing protocol Test Center / recipe code remains in scope.
+Existing protocol Test Center / recipe code remains in scope. Stable Test Sequences now reuse the hardened Recipe Engine but deliberately reject generic connection/raw/LAB automation; raw malformed-frame work remains an explicit LAB surface.
 
 - [ ] raw RTU/ASCII/TCP frame composer UI
 - [ ] auto CRC/LRC
@@ -175,9 +177,9 @@ Existing protocol Test Center / recipe code remains in scope.
 - [ ] exception-code tests
 - [ ] invalid function/address/value LAB tests
 - [ ] timing/timeout/retry scenarios
-- [ ] repeat/assert test recipes
+- [x] stable bounded Test Sequences support repeat/assert/read/write/delay/set
 - [ ] protocol regression suites
-- [ ] explicit LAB arming for raw/risky transmissions
+- [ ] explicit LAB arming for raw/risky transmissions (kept separate from stable Test Sequences)
 - [ ] test case import/export
 - [ ] exact test-run evidence bundle
 
