@@ -524,6 +524,20 @@ class MasterRuntime extends EventEmitter {
     let unlocked = false;
 
     try {
+      try {
+        this.safety.preflight({ unitId: normalizedUnitId, pdu: rawPdu, confirmation: resolvedConfirmation });
+      } catch (error) {
+        this.safety.auditRejected({
+          unitId: normalizedUnitId,
+          pdu: rawPdu,
+          error,
+          context: {
+            source: String(source || 'stable-master').slice(0, 100),
+            comment: String(comment || '').slice(0, 500),
+          },
+        });
+        throw error;
+      }
       this.safety.unlock({ durationMs: lockMs, confirmation: { confirmed: resolvedConfirmation.confirmed === true } });
       unlocked = true;
       const result = await this.safety.execute({
