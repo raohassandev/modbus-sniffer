@@ -21,6 +21,12 @@ test('unified product keeps one user-facing runtime contract',()=>{
   assert.match(readme,/src\/index-v7\.js/);
 });
 
+test('stable shell does not overwrite the server-injected product version badge',()=>{
+  const loader=read('public/platform-v6.js');
+  assert.doesNotMatch(loader,/badge\.textContent='UI v7\.0'/);
+  assert.doesNotMatch(loader,/UI v7\.0/);
+});
+
 test('stable shell loads the final Modbus-only workspaces and grouped navigation',()=>{
   const loader=read('public/platform-v6.js');
   for(const asset of [
