@@ -126,9 +126,10 @@ Next:
 
 ## Traffic / Protocol Analysis
 
-**Next integration lane:** converge Sniffer + Master + Slave + Discovery + Test Sequence events into one evidence contract without replacing the accepted passive capture model.
+**Current integration:** a bounded active Evidence Hub now feeds the existing Traffic stream while passive Analyzer learning/capture remains isolated. Next: raw Discovery bridging, richer decoded active PDU context, mismatch diagnostics and selected-evidence export.
 
-- [ ] unified evidence from Sniffer, Master, Slave, Discovery and Test Center
+- [x] stable Traffic source layer merges passive Sniffer + active Master/Slave packets plus Test Sequence/Discovery annotations without altering passive inference
+- [ ] bridge raw Discovery request/response frames into the unified packet stream
 - [ ] Tx/Rx raw HEX + decoded PDU/ADU
 - [ ] CRC/LRC/MBAP validation
 - [ ] request/response matching
@@ -136,7 +137,8 @@ Next:
 - [ ] Modbus exception decoding/trending
 - [ ] TCP transaction-ID analysis
 - [ ] broadcast identification
-- [ ] filter by connection/unit/function/address/session
+- [x] Traffic source/channel/unit/function/search filters plus source/connection inspector context
+- [ ] explicit session/connection dropdowns and address-range filter
 - [ ] bookmarks/annotations
 - [ ] export selected evidence
 
