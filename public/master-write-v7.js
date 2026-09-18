@@ -205,8 +205,12 @@
 
   async function resetCounters(){
     try{
+      if(window.ModbusMasterSessionCounters?.resetCurrent){
+        await window.ModbusMasterSessionCounters.resetCurrent();
+        return;
+      }
       const status=await api('/api/master/stats/reset',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
-      for(const [id,value] of [['masterTx',0],['masterRx',0],['masterErrors',0],['masterTimeouts',0]])if(q(id))q(id).textContent=String(value);
+      for(const [id,value] of [['masterTx',0],['masterRx',0],['masterErrors',0],['masterTimeouts',0],['masterRetryCount',0]])if(q(id))q(id).textContent=String(value);
       if(q('masterAvgRtt'))q('masterAvgRtt').textContent='—';
       root.dispatchEvent(new CustomEvent('master-stats-reset',{detail:status}));
     }catch(error){alert('Could not reset counters: '+error.message);}
