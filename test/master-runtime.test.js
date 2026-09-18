@@ -28,12 +28,14 @@ class FakeTransport extends EventEmitter {
 test('connection normalization supports RTU, ASCII and TCP with bounded defaults', () => {
   assert.deepEqual(normalizeConnectionConfig({ type:'rtu', path:'COM5' }), {
     type:'rtu', path:'COM5', baudRate:9600, dataBits:8, stopBits:1, parity:'none', timeoutMs:1000, echoSuppression:false,
+    retries:0, retryDelayMs:100, interRequestDelayMs:0, rtsTxMode:'none', rtsSettleMs:0,
   });
   assert.deepEqual(normalizeConnectionConfig({ type:'ascii', path:'/dev/ttyUSB0', baudRate:19200, parity:'even' }), {
     type:'ascii', path:'/dev/ttyUSB0', baudRate:19200, dataBits:8, stopBits:1, parity:'even', timeoutMs:1000, echoSuppression:false,
+    retries:0, retryDelayMs:100, interRequestDelayMs:0, rtsTxMode:'none', rtsSettleMs:0,
   });
   assert.deepEqual(normalizeConnectionConfig({ type:'tcp', host:'192.168.1.50' }), {
-    type:'tcp', host:'192.168.1.50', port:502, timeoutMs:1000,
+    type:'tcp', host:'192.168.1.50', port:502, timeoutMs:1000, retries:0, retryDelayMs:100, interRequestDelayMs:0,
   });
   assert.throws(() => normalizeConnectionConfig({ type:'tcp', host:'', port:502 }), /host\/IP address is required/);
 });
