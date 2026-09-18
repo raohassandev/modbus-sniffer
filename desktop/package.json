@@ -1,7 +1,7 @@
 {
   "name": "modbus-engineering-analyzer-desktop",
   "version": "8.0.0",
-  "description": "Windows desktop shell for Modbus Sniffer, with the experimental v8 Workbench available only by explicit opt-in.",
+  "description": "Windows desktop shell for the unified Modbus Engineering Tool.",
   "author": "Automatrix Engineering",
   "license": "MIT",
   "private": true,
@@ -25,11 +25,26 @@
       "logSafety.js"
     ],
     "extraResources": [
-      { "from": "../src", "to": "backend/src" },
-      { "from": "../public", "to": "backend/public" },
-      { "from": "../config", "to": "backend/config" },
-      { "from": "../node_modules", "to": "backend/node_modules" },
-      { "from": "../package.json", "to": "backend/package.json" }
+      {
+        "from": "../src",
+        "to": "backend/src"
+      },
+      {
+        "from": "../public",
+        "to": "backend/public"
+      },
+      {
+        "from": "../config",
+        "to": "backend/config"
+      },
+      {
+        "from": "../node_modules",
+        "to": "backend/node_modules"
+      },
+      {
+        "from": "../package.json",
+        "to": "backend/package.json"
+      }
     ],
     "win": {
       "target": "nsis"
