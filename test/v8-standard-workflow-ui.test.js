@@ -17,7 +17,8 @@ const plan = read('docs/STANDARD_MODBUS_WORKFLOW.md');
 test('shell exposes the standard commissioning order and help', () => {
   assert.match(shell, /loadScript\('\/v8\/standard-monitor\.js'\)/);
   assert.match(shell, /loadScript\('\/v8\/help\.js'\)/);
-  assert.match(shell, /\['connections', 'master', 'discovery', 'traffic', 'simulator', 'registerLab', 'testCenter', 'charts', 'historian', 'automation', 'hmi', 'help', 'settings'\]/);
+  assert.match(shell, /const order = \['master', 'simulator', 'traffic', 'registerLab', 'discovery', 'testCenter', 'charts', 'historian', 'automation', 'connections', 'help', 'settings'\]/);
+  assert.doesNotMatch(shell, /order = \[[^\]]*'hmi'/);
   assert.match(shell, /Master \/ Poll/);
   assert.match(shell, /Scan \/ Discovery/);
 });
@@ -35,20 +36,24 @@ test('standard monitor provides familiar read definition and live polling contro
 });
 
 test('help covers each major workspace plus addressing and function codes', () => {
-  for (const topic of ['connections', 'master', 'discovery', 'traffic', 'simulator', 'registerLab', 'testCenter', 'charts', 'historian', 'automation', 'hmi', 'settings', 'addressing', 'functionCodes', 'workflow']) {
+  for (const topic of ['connections', 'master', 'discovery', 'traffic', 'simulator', 'registerLab', 'testCenter', 'charts', 'historian', 'automation', 'settings', 'addressing', 'functionCodes', 'workflow']) {
     assert.match(help, new RegExp(`id: '${topic}'`), `help topic ${topic} must exist`);
   }
   assert.match(help, /event\.key !== 'F1'/);
   assert.match(help, /40001/);
   assert.match(help, /<td>22<\/td><td>Mask Write Register<\/td>/);
   assert.match(help, /<td>23<\/td><td>Read\/Write Multiple Registers<\/td>/);
+  assert.doesNotMatch(help, /id: 'hmi'/);
+  assert.doesNotMatch(help, /parity gap/);
 });
 
-test('parity plan keeps unfinished standard workflow work visible', () => {
-  assert.match(plan, /persistent per-cell aliases\/names/);
-  assert.match(plan, /FC08 Diagnostics/);
-  assert.match(plan, /FC11 Get Comm Event Counter/);
-  assert.match(plan, /FC17 Report Server ID/);
-  assert.match(plan, /first-class Monitor Session model/);
-  assert.match(plan, /Chart this range/);
+test('standard workflow documents the completed Modbus-only engineering contract', () => {
+  assert.match(plan, /FC22\/23/);
+  assert.match(plan, /serial FC07\/08\/11\/12\/17/);
+  assert.match(plan, /FC20\/21 file records/);
+  assert.match(plan, /FC24 FIFO/);
+  assert.match(plan, /FC43\/14 identity/);
+  assert.match(plan, /multi-session monitors/);
+  assert.match(plan, /Logger \/ Trend/);
+  assert.match(plan, /HMI -> removed from this product/);
 });
