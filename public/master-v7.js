@@ -231,14 +231,20 @@
     } catch { /* Master backend may not be installed on an older local checkout */ }
   }
 
-  async function connect() {
+  async function connect(extra = {}) {
     try {
-      const payload = connectionPayload();
+      const payload = { ...connectionPayload(), ...extra };
       setNote('<strong>Connecting…</strong> Opening the active Master connection.');
       const status = await request('/api/master/connect', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(payload) });
       setConnected(true, status);
       setNote(`<strong>Connected.</strong> ${esc(app.type.toUpperCase())} Master is ready. Reads now actively transmit Modbus requests.`);
     } catch (error) {
+      if (error.code === 'SLAVE_ACTIVE') {
+        const port = error.details?.port || q('masterSerialPort').value;
+        if (confirm(`Modbus Slave currently owns ${port}. Stop Slave and switch this port to active Master mode?`)) {
+          return connect({ ...extra, confirmSlaveStop: true });
+        }
+      }
       if (error.code === 'PASSIVE_CAPTURE_ACTIVE') {
         const port = error.details?.port || q('masterSerialPort').value;
         if (confirm(`The passive Analyzer currently owns ${port}. Switch this port to ACTIVE Master mode? Passive capture will disconnect.`)) {
