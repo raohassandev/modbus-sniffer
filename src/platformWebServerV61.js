@@ -17,6 +17,7 @@ const { installSlaveRoutes } = require('./slave/slaveRoutes');
 const { installDeviceCloneRoutes } = require('./deviceClone/deviceCloneRoutes');
 const { installTestSequenceRoutes } = require('./testSequences/testSequenceRoutes');
 const { EvidenceHub, mergeEvidence } = require('./evidence/evidenceHub');
+const { analyzeProtocolTraffic } = require('./evidence/protocolDiagnostics');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -226,6 +227,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.get('/api/channels', (_q,r) => { syncRuntimeChannels(); r.json(state.getChannels?.()||[]); });
   app.get('/api/transactions', (q,r) => { try{r.json(unifiedTransactions(q.query));}catch(e){apiError(r,e);} });
   app.get('/api/evidence/status', (_q,r) => r.json(evidence.status()));
+  app.get('/api/diagnostics/protocol', (q,r) => { try { const rows=unifiedTransactions({limit:Number(q.query.limit||10000)}); r.json(analyzeProtocolTraffic(rows,{serialConfig:state.config||{}})); } catch(e){apiError(r,e);} });
   app.get('/api/registers', (q,r) => { try{r.json(state.getRegisters(q.query));}catch(e){apiError(r,e);} });
   app.get('/api/polls', (q,r) => { try{r.json(state.getPollGroups(q.query));}catch(e){apiError(r,e);} });
   app.get('/api/devices', (q,r) => { try{r.json(state.getDevices(q.query));}catch(e){apiError(r,e);} });
