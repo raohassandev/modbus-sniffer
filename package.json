@@ -29,7 +29,8 @@
     "e2e": "playwright test",
     "desktop:install": "npm --prefix desktop install",
     "desktop": "npm --prefix desktop start",
-    "desktop:win": "npm --prefix desktop run dist:win"
+    "desktop:win": "npm --prefix desktop run dist:win",
+    "preflight": "node scripts/source-preflight.js"
   },
   "engines": {
     "node": ">=20"
