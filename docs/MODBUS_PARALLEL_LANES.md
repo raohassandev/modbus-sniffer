@@ -13,12 +13,12 @@ Percentages below are **source-roadmap completion estimates**, not release/accep
 | L2 | Shared Core Convergence | EXECUTING | 48% |
 | L3 | Slave / Server Simulator | EXECUTING | 72% |
 | L4 | Protocol Functions + Diagnostics / Conformance | EXECUTING | 80% |
-| L5 | Traffic + Register Lab + Discovery | EXECUTING | 62% |
+| L5 | Traffic + Register Lab + Discovery | EXECUTING | 68% |
 | L6 | Test Center + Device Clone + Replay/Test Sequences | EXECUTING | 82% |
 | L7 | Logger/Trend + Reports + Transport/Security Lab | READY | 45% |
 | L8 | QA + UX + Reliability + Release Evidence | EXECUTING | 34% |
 
-**Approximate overall source-roadmap completion:** 64%  
+**Approximate overall source-roadmap completion:** 65%  
 **Release/field acceptance:** substantially lower; exact-head suite, packaged smoke, hardware acceptance and soak remain open.
 
 ## Dependency DAG
@@ -160,11 +160,11 @@ Completed source:
 - bounded active Evidence Hub separated from passive inference
 - unified Traffic stream for Sniffer + Master + Slave packets
 - Test Sequence and Discovery annotations
+- raw TCP/RTU Discovery FC43 request/response/timeout evidence
 - source/channel/unit/function/search filtering and source-aware inspector
 - register lab and discovery scan foundations
 
 Remaining:
-- raw Discovery request/response bridging
 - richer active PDU decode/matching context
 - CRC/LRC/MBAP/timing diagnostics
 - transaction mismatch/duplicate analysis
