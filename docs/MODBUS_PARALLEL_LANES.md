@@ -100,16 +100,47 @@ Percentages below distinguish **source implementation** from **release/field acc
 - [x] local-interface binding
 - [x] PCAP feasibility decision
 
-## L8 — Acceptance evidence
+## L8 — QA / packaging / field acceptance
 
-Still required before a release/merge claim:
+The implementation lanes are closed. L8 is deliberately split so source QA and physical acceptance are not mixed together.
 
-- [ ] exact-head `npm test`
-- [ ] exact-head quality/lint/version checks
-- [ ] browser interaction/visual QA
-- [ ] real RTU/TCP Master and Sniffer acceptance
+| QA sub-lane | Scope | Status | Completion |
+|---|---|---|---:|
+| L8-A | Unit/integration/test-contract correctness | EXECUTING FINAL GATE | 99% |
+| L8-B | Unified browser / Playwright coverage | EXECUTING FINAL GATE | 93% |
+| L8-C | Desktop / installer / provenance | SOURCE READY | 92% |
+| L8-D | Security / ownership / transport hardening | SOURCE READY | 95% |
+| L8-E | Release docs / evidence contract | SOURCE READY | 96% |
+| L8-F | Physical RTU/TCP/TLS/Windows field acceptance | EXTERNAL | — |
+
+Evidence already obtained from the user's local Mac run on the then-current branch:
+- ESLint PASS.
+- v8 syntax gate PASS across 95 files.
+- Root Modbus suite reached **445 tests / 442 pass / 2 fail / 1 skipped**.
+- The two reported failures were subsequently root-caused and source-fixed: RTU-vs-MBAP framing precedence and unified runtime README/version contract.
+- No GitHub workflow was triggered.
+
+Additional closure added after that run:
+- explicit root-test discovery isolates the Modbus suite from unrelated nested projects/browser assets;
+- guarded writes reject unsafe bulk/broadcast attempts before unlocking and retain non-transmitted audit evidence;
+- TLS Slave private keys are never returned in public runtime state;
+- persisted Logger/Trend samples and protocol events hydrate after restart;
+- Raw Lab conformance validates Modbus response semantics and payload structure;
+- stale UDP peers expire before exhausting the server peer table;
+- unified stable E2E now covers one-shell workspaces, loopback Slave->Master reads, and no-transmit bulk-write rejection;
+- stable UI/product/desktop/release identity follows the 8.0.0 source of truth;
+- `npm run preflight` provides a fast cross-platform source gate while the full multi-Node Mac release gate remains the final exhaustive local gate.
+
+Still required before a release/merge **acceptance** claim:
+
+- [ ] exact-current-head `npm run preflight`
+- [ ] exact-current-head Playwright browser gate
+- [ ] exact-current-head bounded soak / benchmark gate
+- [ ] real passive RTU Sniffer acceptance
+- [ ] real Master acceptance on representative RTU and TCP devices
 - [ ] external-Master Slave interoperability
-- [ ] TLS/mTLS interoperability
-- [ ] Windows packaged smoke
-- [ ] repeated lifecycle/long soak
+- [ ] TLS/mTLS interoperability on representative peers
+- [ ] Windows packaged clean-machine smoke
+- [ ] Defender/firewall/USB-driver behavior check
+- [ ] production signing when signing material is supplied
 - [ ] final release approval
