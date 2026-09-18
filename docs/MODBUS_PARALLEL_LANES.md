@@ -8,17 +8,17 @@ Percentages below are **source-roadmap completion estimates**, not release/accep
 
 | Lane | Scope | Status | Source completion |
 |---|---|---|---:|
-| L0 | Product Scope + Shell Integration | EXECUTING | 65% |
-| L1 | Master / Client Engineering | EXECUTING | 62% |
-| L2 | Shared Core Convergence | EXECUTING | 25% |
+| L0 | Product Scope + Shell Integration | EXECUTING | 70% |
+| L1 | Master / Client Engineering | EXECUTING | 64% |
+| L2 | Shared Core Convergence | EXECUTING | 30% |
 | L3 | Slave / Server Simulator | READY | 30% |
 | L4 | Protocol Functions + Diagnostics / Conformance | READY | 55% |
 | L5 | Traffic + Register Lab + Discovery | READY | 45% |
 | L6 | Test Center + Device Clone + Replay/Test Sequences | READY | 50% |
 | L7 | Logger/Trend + Reports + Transport/Security Lab | READY | 45% |
-| L8 | QA + UX + Reliability + Release Evidence | EXECUTING | 25% |
+| L8 | QA + UX + Reliability + Release Evidence | EXECUTING | 28% |
 
-**Approximate overall source-roadmap completion:** 45%  
+**Approximate overall source-roadmap completion:** 46%  
 **Release/field acceptance:** substantially lower; exact-head suite, packaged smoke, hardware acceptance and soak remain open.
 
 ## Dependency DAG
@@ -36,7 +36,7 @@ L2 Shared core ───────────┐          │
 All implementation lanes ────────────> L8 QA/Acceptance
 ```
 
-## L0 — Product Scope + Shell Integration — 65%
+## L0 — Product Scope + Shell Integration — 70%
 
 **Owner:** integration lane  
 **Shared write scope:** product navigation/composition/help/docs only. Other lanes must not edit shared shell files without handoff.
@@ -59,7 +59,7 @@ Remaining:
 - [ ] migrate valuable v8 Modbus workspaces into accepted unified shell
 - [ ] retire duplicate shell after acceptance
 
-## L1 — Master / Client Engineering — 62%
+## L1 — Master / Client Engineering — 64%
 
 **Owner:** Master lane  
 **Write scope:** `src/master/**`, `public/master-*.js/css`, Master-specific tests.
@@ -87,7 +87,7 @@ Remaining:
 - [ ] advanced request builder
 - [ ] hardware acceptance
 
-## L2 — Shared Core Convergence — 25%
+## L2 — Shared Core Convergence — 30%
 
 **Owner:** architecture lane  
 **Write scope:** shared reusable core only; no UI.
@@ -201,7 +201,7 @@ Remaining:
 - certificate/auth diagnostics
 - standard vs non-standard encapsulation labeling
 
-## L8 — QA + UX + Reliability — 25%
+## L8 — QA + UX + Reliability — 28%
 
 **Owner:** QA lane  
 **Forbidden:** production changes unless explicit handoff.
