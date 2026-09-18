@@ -248,6 +248,7 @@ class UdpServerTransport extends EventEmitter {
     port = 502,
     family = 4,
     maxPeers = 256,
+    peerIdleMs = 5 * 60 * 1000,
     receiveTimeoutMs = 1000,
     maxQueuedFrames = 4096,
     maxQueuedBytes = 8 * 1024 * 1024,
@@ -256,10 +257,12 @@ class UdpServerTransport extends EventEmitter {
     this.host = assertLocalAddress(host, { allowWildcard: true, field: 'host' });
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new TypeError('port must be 0..65535');
     if (!Number.isInteger(maxPeers) || maxPeers < 1) throw new TypeError('maxPeers must be positive');
+    if (!Number.isFinite(peerIdleMs) || peerIdleMs < 0) throw new TypeError('peerIdleMs must be >= 0');
     if (!Number.isFinite(receiveTimeoutMs) || receiveTimeoutMs < 0) throw new TypeError('receiveTimeoutMs must be >= 0');
     this.port = port;
     this.family = normalizeFamily(family);
     this.maxPeers = maxPeers;
+    this.peerIdleMs = peerIdleMs;
     this.receiveTimeoutMs = receiveTimeoutMs;
     this.maxQueuedFrames = maxQueuedFrames;
     this.maxQueuedBytes = maxQueuedBytes;
@@ -276,6 +279,7 @@ class UdpServerTransport extends EventEmitter {
       bytesTx: 0,
       queueOverflows: 0,
       rejectedPeers: 0,
+      expiredPeers: 0,
       socketErrors: 0,
       lastError: null,
       openedAt: null,
@@ -390,6 +394,7 @@ class UdpServerTransport extends EventEmitter {
   }
 
   listPeers() {
+    this._prunePeers();
     return Object.freeze([...this.peers.values()].sort((a, b) => b.lastSeenAt - a.lastSeenAt).map((peer) => Object.freeze({ ...peer })));
   }
 
@@ -402,6 +407,7 @@ class UdpServerTransport extends EventEmitter {
       listenAddress: this.address(),
       peerCount: this.peers.size,
       maxPeers: this.maxPeers,
+      peerIdleMs: this.peerIdleMs,
       capabilities: this.capabilities,
       queue: this.inbox.snapshot(),
       stats: Object.freeze({ ...this.stats }),
@@ -417,6 +423,7 @@ class UdpServerTransport extends EventEmitter {
       return;
     }
     const key = routeKey(rinfo.address, rinfo.port);
+    this._prunePeers();
     if (!this.peers.has(key) && this.peers.size >= this.maxPeers) {
       this.stats.rejectedPeers += 1;
       this.emit('transport-error', new UdpTransportError('PEER_LIMIT', 'UDP peer limit reached', { maxPeers: this.maxPeers, address: rinfo.address, port: rinfo.port }));
@@ -451,6 +458,18 @@ class UdpServerTransport extends EventEmitter {
       return;
     }
     this.emit('rx', Buffer.from(payload), meta);
+  }
+
+  _prunePeers(now = Date.now()) {
+    if (!(this.peerIdleMs > 0)) return 0;
+    let removed = 0;
+    for (const [key, peer] of this.peers.entries()) {
+      if (now - Number(peer.lastSeenAt || 0) <= this.peerIdleMs) continue;
+      this.peers.delete(key);
+      removed += 1;
+    }
+    if (removed) this.stats.expiredPeers += removed;
+    return removed;
   }
 
   _prepareInbox() {
