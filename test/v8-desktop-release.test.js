@@ -43,7 +43,9 @@ test('desktop data migration preserves an existing destination and reports migra
 });
 
 test('Windows packaging workflow smoke-tests stable Sniffer and emits provenance/checksums', () => {
-  assert.match(workflow, /npm run version:check/);
+  assert.match(workflow, /npm run preflight/);
+  assert.match(workflow, /npm prune --omit=dev/);
+  assert.match(workflow, /npm audit --omit=dev --audit-level=high/);
   assert.match(workflow, /http:\/\/127\.0\.0\.1:18787\/api\/status/);
   assert.match(workflow, /product=Modbus Sniffer/);
   assert.match(workflow, /runtime=unified-modbus-engineering-tool/);
