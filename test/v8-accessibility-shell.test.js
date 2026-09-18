@@ -69,5 +69,6 @@ test('v8 shell retains semantic page/live-status landmarks and release identity'
   assert.match(indexHtml, /aria-label="Primary navigation"/);
   assert.match(indexHtml, /aria-live="polite"/);
   assert.match(indexHtml, /role="alert"/);
-  assert.match(shellJs, /v8\.0\.0 release-candidate workspace/);
+  assert.match(shellJs, /compatibility Modbus engineering shell/);
+  assert.doesNotMatch(shellJs, /release-candidate workspace/);
 });
