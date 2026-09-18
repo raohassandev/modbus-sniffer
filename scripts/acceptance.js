@@ -99,7 +99,7 @@ function main() {
 
   const status = state.getStatus();
   const elapsed = Date.now() - started;
-  console.log('\n=== Modbus Sniffer v4 Software Acceptance ===');
+  console.log('\n=== Modbus Engineering Tool Software Acceptance ===');
   console.log(`PASS  Automatic devices          : ${devices.length}/10`);
   console.log(`PASS  Slave register isolation   : identical addresses kept separate`);
   console.log(`PASS  Poll interval learning     : 1000 ms median`);
