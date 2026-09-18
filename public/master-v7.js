@@ -82,7 +82,7 @@
               <label>Data Type<select id="masterFormat"><option value="uint16">uint16 (0–65535)</option><option value="int16">int16</option><option value="hex">HEX</option><option value="binary">Binary</option></select></label>
               <div><label>Byte Order</label><div class="master-byte-order"><button type="button" class="active">ABCD</button><button type="button" disabled>BADC</button><button type="button" disabled>CDAB</button><button type="button" disabled>DCBA</button></div></div>
               <div class="master-format-grid"><label>Scale<input id="masterScale" type="number" step="any" value="1"></label><label>Offset<input id="masterOffset" type="number" step="any" value="0"></label></div>
-              <div class="master-note">Full 32/64-bit types and byte/word permutations are tracked in the next Monitor Sessions lane. Basic polling does not depend on them.</div>
+              <div class="master-note">Quick Format is intentionally compact. Use Decoder / Data Lab for 32/64-bit values, byte/word permutations, strings, BCD, timestamps, enums and bitfields.</div>
             </div>
           </article>
 
