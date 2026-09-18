@@ -17,7 +17,8 @@ test('unified product keeps one user-facing runtime contract',()=>{
   for(const name of ['start','sniffer','workbench','v7','v8'])assert.equal(pkg.scripts[name],'node src/index-v7.js');
   assert.doesNotMatch(desktop,/MODBUS_DESKTOP_MODE/);
   assert.match(desktop,/desktopMode\(\).*unified/s);
-  assert.match(readme,/former v8 user-facing launch path/i);
+  assert.match(readme,/unified field-oriented Modbus application/i);
+  assert.match(readme,/src\/index-v7\.js/);
 });
 
 test('stable shell loads the final Modbus-only workspaces and grouped navigation',()=>{
@@ -52,6 +53,6 @@ test('canonical docs separate source completion from release evidence',()=>{
   assert.match(todo,/exact-current-head/);
   assert.match(lanes,/Approved source-roadmap completion: 100%/);
   assert.match(lanes,/PENDING EVIDENCE/);
-  assert.match(read('docs/MODBUS_FUNCTION_MATRIX.md'),/FC43\/14/);
+  assert.match(read('docs/MODBUS_FUNCTION_MATRIX.md'),/\|\s*43\/14\s*\|/);
   assert.match(read('docs/PCAP_FEASIBILITY.md'),/do not generate synthetic PCAP\/PCAPNG/);
 });
