@@ -12,6 +12,7 @@ const { reportHtml } = require('./reportGenerator');
 const { collectExportModel, buildWorkbook, buildPdf, streamProjectZip, safeName } = require('./exportBundle');
 const { makeDeviceKey, parseDeviceKey } = require('./transportIdentity');
 const { installActiveDiscoveryRoutes } = require('./activeDiscoveryRoutes');
+const { installSlaveRoutes } = require('./slave/slaveRoutes');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -117,6 +118,9 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     for (const ws of wss.clients) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
   };
   const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null});
+  const slaveRuntime=installSlaveRoutes({app,state,demo,disconnectSerial,masterRuntime:activeDiscovery.masterRuntime,activeDiscovery,broadcast});
+  const onSlaveEvent=event=>broadcast('slave-event',event);
+  slaveRuntime.on('event',onSlaveEvent);
   const active = () => workspaces.getActiveProject();
   const apiError = (r,e,defaultStatus=400) => r.status(e?.code==='AMBIGUOUS_DEVICE'?409:defaultStatus).json({error:e.message,code:e.code||null,deviceKeys:e.deviceKeys||undefined});
   const syncRuntimeChannels = () => {
@@ -246,14 +250,14 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   for (const [ev,fn] of Object.entries(handlers)) state.on(ev,fn);
   tcpProxy.on('status', p=>broadcast('tcp-status',p));
   wss.on('connection', ws => {
-    ws.send(JSON.stringify({type:'hello',payload:{status:state.getStatus(),analysis:state.getAnalysis(),devices:state.getDevices(),replay:replay.status(),project:syncRuntimeChannels(),tcp:tcpProxy.status(),discoveryActive:activeDiscovery.status()}}));
+    ws.send(JSON.stringify({type:'hello',payload:{status:state.getStatus(),analysis:state.getAnalysis(),devices:state.getDevices(),replay:replay.status(),project:syncRuntimeChannels(),tcp:tcpProxy.status(),discoveryActive:activeDiscovery.status(),slave:slaveRuntime.status()}}));
     ws.on('error',()=>{});
   });
 
   await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(options.webPort,options.webHost,resolve); });
   return {
     url:`http://${options.webHost==='0.0.0.0'?'127.0.0.1':options.webHost}:${options.webPort}`,
-    close:async()=>{ await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
+    close:async()=>{ slaveRuntime.off('event',onSlaveEvent); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
   };
 }
 
