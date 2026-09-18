@@ -53,7 +53,7 @@ finish() {
   END_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   END_HEAD="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
   {
-    echo "product=Modbus Engineering Workbench"
+    echo "product=Modbus Engineering Tool"
     echo "release=8.0.0"
     echo "status=$STATUS"
     echo "exit_code=$rc"
@@ -80,7 +80,7 @@ trap finish EXIT
 
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-echo "=== Modbus Engineering Workbench 8.0.0 Local Mac Release Gate ==="
+echo "=== Modbus Engineering Tool 8.0.0 Local Mac Release Gate ==="
 echo "UTC start : $START_UTC"
 echo "Branch    : ${START_BRANCH:-detached}"
 echo "HEAD      : $START_HEAD"
