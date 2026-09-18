@@ -71,10 +71,12 @@ test('Master owns a single Traffic/counter control set and Logger shortcut toler
 test('stable server cleanup releases active resources and export manifest follows product version',()=>{
   const server=read('src/platformWebServerV61.js');
   assert.match(server,/version:PRODUCT_VERSION/);
-  assert.match(server,/await masterRuntime\.disconnect\(\)/);
-  assert.match(server,/await slaveRuntime\.shutdown\(\)/);
-  assert.match(server,/await activeDiscovery\.close\(\)/);
-  assert.match(server,/await tcpProxy\.stop\(\)/);
+  assert.match(server,/Promise\.allSettled/);
+  assert.match(server,/masterRuntime\.disconnect\(\)/);
+  assert.match(server,/slaveRuntime\.shutdown\(\)/);
+  assert.match(server,/activeDiscovery\.close\(\)/);
+  assert.match(server,/tcpProxy\.stop\(\)/);
+  assert.match(server,/if\(failed\)throw failed\.reason/);
 });
 
 test('unified Playwright acceptance spec parses and covers loopback read plus no-transmit write rejection',()=>{
