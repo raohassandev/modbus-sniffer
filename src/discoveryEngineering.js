@@ -50,8 +50,8 @@ class DiscoveryEngineeringService extends EventEmitter{
   }
 
   async scanRange(input={}){
-    this._assertMaster();
-    const unitId=int(input.unitId,1,{min:1,max:255,field:'unitId'}),functionCode=int(input.functionCode,3,{min:1,max:4,field:'functionCode'});
+    const status=this._assertMaster(),framing=status.config?.type||'rtu';
+    const unitId=int(input.unitId,1,{min:1,max:framing==='tcp'?255:247,field:'unitId'}),functionCode=int(input.functionCode,3,{min:1,max:4,field:'functionCode'});
     const start=int(input.addressStart,0,{min:0,max:65535,field:'addressStart'}),end=int(input.addressEnd,start+31,{min:start,max:65535,field:'addressEnd'});
     const chunkMax=functionCode<=2?2000:125,chunk=int(input.chunk,Math.min(16,end-start+1),{min:1,max:chunkMax,field:'chunk'});
     if(end-start+1>4096)throw new DiscoveryEngineeringError('SCAN_TOO_LARGE','Address scan is limited to 4096 points per run.');
@@ -96,8 +96,8 @@ class DiscoveryEngineeringService extends EventEmitter{
   }
 
   async probeQuantities(input={}){
-    this._assertMaster();
-    const unitId=int(input.unitId,1,{min:1,max:255,field:'unitId'}),functionCode=int(input.functionCode,3,{min:1,max:4,field:'functionCode'}),address=int(input.address,0,{min:0,max:65535,field:'address'}),timeoutMs=int(input.timeoutMs,500,{min:50,max:60000,field:'timeoutMs'});
+    const status=this._assertMaster(),framing=status.config?.type||'rtu';
+    const unitId=int(input.unitId,1,{min:1,max:framing==='tcp'?255:247,field:'unitId'}),functionCode=int(input.functionCode,3,{min:1,max:4,field:'functionCode'}),address=int(input.address,0,{min:0,max:65535,field:'address'}),timeoutMs=int(input.timeoutMs,500,{min:50,max:60000,field:'timeoutMs'});
     const max=functionCode<=2?2000:125,defaultQ=functionCode<=2?[1,8,32,64,128,256,512,1000,2000]:[1,2,4,8,16,32,64,100,125];
     const quantities=[...new Set((Array.isArray(input.quantities)&&input.quantities.length?input.quantities:defaultQ).map(x=>int(x,undefined,{min:1,max,field:'quantity'})))].sort((a,b)=>a-b),results=[];
     for(const quantity of quantities){
