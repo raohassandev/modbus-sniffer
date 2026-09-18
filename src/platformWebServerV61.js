@@ -122,7 +122,15 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     if(bucket.count>600)return res.status(429).json({error:'Too many state-changing requests. Retry shortly.',code:'MUTATION_RATE_LIMIT'});
     next();
   });
-  app.use(express.json({ limit: '25mb' }));
+  const largeJsonPaths=new Set(['/api/capture/import','/api/workspace/import']);
+  app.use((req,res,next)=>{
+    const parser=express.json({limit:largeJsonPaths.has(req.path)?'25mb':'2mb'});
+    parser(req,res,error=>{
+      if(error?.type==='entity.too.large')return res.status(413).json({error:'Request body exceeds the allowed JSON size.',code:'REQUEST_BODY_TOO_LARGE'});
+      if(error)return res.status(400).json({error:'Invalid JSON request body.',code:'INVALID_JSON_BODY'});
+      next();
+    });
+  });
 
   const broadcast = (type,payload) => {
     const msg = JSON.stringify({ type, payload });
