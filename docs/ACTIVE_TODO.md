@@ -129,7 +129,7 @@ Next:
 **Current integration:** a bounded active Evidence Hub now feeds the existing Traffic stream while passive Analyzer learning/capture remains isolated. Next: raw Discovery bridging, richer decoded active PDU context, mismatch diagnostics and selected-evidence export.
 
 - [x] stable Traffic source layer merges passive Sniffer + active Master/Slave packets plus Test Sequence/Discovery annotations without altering passive inference
-- [ ] bridge raw Discovery request/response frames into the unified packet stream
+- [x] bridge raw TCP/RTU Discovery FC43 request/response/timeout evidence into unified Traffic
 - [ ] Tx/Rx raw HEX + decoded PDU/ADU
 - [ ] CRC/LRC/MBAP validation
 - [ ] request/response matching
