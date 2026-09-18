@@ -44,16 +44,24 @@
         <div id="rawLabPreviewResult" class="rawlab-result">No frame preview yet.</div>
       </div></article>
 
-      <article class="rawlab-card rawlab-wide"><div class="rawlab-head"><div><h3>4. Reusable Cases</h3><p>Save raw regression strings with expectations.</p></div><button class="secondary" id="rawLabRefreshCases">Refresh</button></div><div class="rawlab-body rawlab-form">
+      <article class="rawlab-card rawlab-wide"><div class="rawlab-head"><div><h3>4. Reusable Cases</h3><p>Save/import/export raw regression strings with expectations.</p></div><div class="rawlab-actions"><button class="secondary" id="rawLabRefreshCases">Refresh</button><a class="button secondary" href="/api/raw-lab/cases/export.json">Export Cases</a></div></div><div class="rawlab-body rawlab-form">
         <label>Case name<input id="rawLabCaseName" placeholder="FC03 basic read"></label><button class="secondary" id="rawLabSaveCase">Save Current</button>
+        <label class="rawlab-wide">Import case bundle<input id="rawLabCaseImportFile" type="file" accept=".json,application/json"></label><button class="secondary" id="rawLabImportCases">Import / Merge</button>
         <div class="rawlab-wide rawlab-table-wrap"><table><thead><tr><th>Name</th><th>Framing</th><th>HEX</th><th>Actions</th></tr></thead><tbody id="rawLabCasesBody"><tr><td colspan="4" class="muted">No cases.</td></tr></tbody></table></div>
       </div></article>
 
-      <article class="rawlab-card rawlab-wide"><div class="rawlab-head"><div><h3>5. Audit</h3><p>Every Raw Lab transmission remains visible and auditable.</p></div><button class="secondary" id="rawLabRefreshAudit">Refresh</button></div><div class="rawlab-body rawlab-table-wrap"><table><thead><tr><th>Time</th><th>Intent</th><th>Result</th><th>Request</th><th>Response</th><th>Error</th></tr></thead><tbody id="rawLabAuditBody"><tr><td colspan="6" class="muted">No transmissions yet.</td></tr></tbody></table></div></article>
+      <article class="rawlab-card rawlab-wide"><div class="rawlab-head"><div><h3>5. Conformance Presets</h3><p>Boundary and exception-response checks generated for the active RTU/ASCII/TCP framing.</p></div><div class="rawlab-actions"><button class="secondary" id="rawLabLoadPresets">Refresh Presets</button><button class="primary" id="rawLabRunSuite">Run Selected Suite</button></div></div><div class="rawlab-body">
+        <div class="rawlab-form"><label>Target Unit ID<input id="rawLabPresetUnit" type="number" min="1" max="255" value="1"></label><div class="rawlab-wide rawlab-note">Safe boundary reads run normally. Illegal-function/address/value cases require LAB armed + raw confirmation. Skipped LAB cases remain visible in the evidence result.</div></div>
+        <div class="rawlab-table-wrap"><table><thead><tr><th>Run</th><th>Preset</th><th>Category</th><th>LAB</th><th>Description</th><th>Action</th></tr></thead><tbody id="rawLabPresetBody"><tr><td colspan="6" class="muted">Open a connection to generate framing-specific presets.</td></tr></tbody></table></div>
+        <div id="rawLabSuiteResult" class="rawlab-result">No conformance run yet.</div>
+        <div class="rawlab-run-list" id="rawLabRuns"></div>
+      </div></article>
+
+      <article class="rawlab-card rawlab-wide"><div class="rawlab-head"><div><h3>6. Audit</h3><p>Every Raw Lab transmission remains visible and auditable.</p></div><button class="secondary" id="rawLabRefreshAudit">Refresh</button></div><div class="rawlab-body rawlab-table-wrap"><table><thead><tr><th>Time</th><th>Intent</th><th>Result</th><th>Request</th><th>Response</th><th>Error</th></tr></thead><tbody id="rawLabAuditBody"><tr><td colspan="6" class="muted">No transmissions yet.</td></tr></tbody></table></div></article>
     </div>
   </div></section>`);
   const q=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  let cases=[];
+  let cases=[],presets=[],runs=[];
   async function api(url,opt={}){const r=await fetch(url,opt),body=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(body.error||`HTTP ${r.status}`);e.code=body.code;e.details=body.details;throw e;}return body;}
   async function ports(){try{const rows=await api('/api/ports');q('rawLabPort').innerHTML='<option value="">Select port…</option>'+rows.map(x=>'<option value="'+esc(x.path)+'">'+esc(x.path)+(x.manufacturer?' — '+esc(x.manufacturer):'')+'</option>').join('');}catch{}}
   function syncType(){const serial=q('rawLabType').value!=='tcp';document.querySelectorAll('.rawlab-serial').forEach(x=>x.hidden=!serial);document.querySelectorAll('.rawlab-tcp').forEach(x=>x.hidden=serial);}
@@ -66,11 +74,39 @@
   async function send(repeat=false){try{const p=framePayload();if(repeat){p.count=Number(q('rawLabRepeatCount').value);p.intervalMs=Number(q('rawLabRepeatInterval').value);}const r=await api(repeat?'/api/raw-lab/repeat':'/api/raw-lab/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(p)});const last=Array.isArray(r)?r.at(-1):r;q('rawLabPreviewResult').innerHTML='<strong>PASS</strong> · intent '+esc(last.intent)+' · RTT '+esc(last.rttMs==null?'—':Number(last.rttMs).toFixed(2)+' ms')+'<br><code>TX '+esc(last.requestRawHex||'')+'</code><br><code>RX '+esc(last.responseRawHex||'—')+'</code>';await audit();}catch(e){q('rawLabPreviewResult').innerHTML='<strong>FAILED</strong> · '+esc(e.message);}}
   async function loadCases(){try{cases=await api('/api/raw-lab/cases');q('rawLabCasesBody').innerHTML=cases.length?cases.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.framing)+'</td><td class="mono">'+esc(x.hex)+'</td><td><button class="ghost" data-case-load="'+esc(x.id)+'">Load</button> <button class="ghost" data-case-remove="'+esc(x.id)+'">Remove</button></td></tr>').join(''):'<tr><td colspan="4" class="muted">No cases.</td></tr>';}catch{}}
   async function saveCase(){const p=framePayload();p.name=q('rawLabCaseName').value.trim()||'Raw case';p.framing=q('rawLabType').value;await api('/api/raw-lab/cases',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(p)});await loadCases();}
+  async function importCases(){
+    const file=q('rawLabCaseImportFile').files?.[0];if(!file)return;
+    try{const bundle=JSON.parse(await file.text());await api('/api/raw-lab/cases/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({bundle,replace:false})});await loadCases();q('rawLabPreviewResult').textContent='Case bundle imported.';}catch(e){q('rawLabPreviewResult').textContent='Case import failed: '+e.message;}
+  }
+  async function loadPresets(){
+    try{
+      presets=await api('/api/raw-lab/presets?unitId='+encodeURIComponent(q('rawLabPresetUnit').value||1)+'&timeoutMs='+encodeURIComponent(q('rawLabTimeout').value||1000));
+      q('rawLabPresetBody').innerHTML=presets.map(x=>'<tr><td><input type="checkbox" class="rawlab-preset-select" data-preset-id="'+esc(x.id)+'" checked></td><td><strong>'+esc(x.name)+'</strong></td><td>'+esc(x.category)+'</td><td>'+(x.labRequired?'Required':'No')+'</td><td>'+esc(x.description)+'</td><td><button class="ghost" data-preset-load="'+esc(x.id)+'">Load</button></td></tr>').join('')||'<tr><td colspan="6" class="muted">No presets.</td></tr>';
+    }catch(e){q('rawLabPresetBody').innerHTML='<tr><td colspan="6" class="muted">'+esc(e.message)+'</td></tr>';}
+  }
+  function loadPreset(id){
+    const x=presets.find(p=>p.id===id);if(!x)return;q('rawLabHex').value=x.hex;q('rawLabChecksum').checked=false;q('rawLabExpect').checked=x.expectResponse!==false;q('rawLabExpected').value=x.expectedHex||'';q('rawLabMask').value=x.expectedMaskHex||'';q('rawLabPreviewResult').textContent='Loaded preset: '+x.name+(x.labRequired?' · LAB required':'');
+  }
+  async function loadRuns(){
+    try{runs=await api('/api/raw-lab/runs');q('rawLabRuns').innerHTML=runs.slice(0,10).map(r=>'<div class="rawlab-run-row"><div><strong>'+esc(r.runId)+'</strong><small>'+new Date(r.completedAt).toLocaleString()+' · '+r.summary.passed+' passed · '+r.summary.failed+' failed · '+r.summary.skipped+' skipped</small></div><a class="button ghost" href="/api/raw-lab/runs/'+encodeURIComponent(r.runId)+'/export.json">Evidence JSON</a></div>').join('');}catch{}
+  }
+  async function runSuite(){
+    const ids=[...document.querySelectorAll('.rawlab-preset-select:checked')].map(x=>x.dataset.presetId);if(!ids.length)return;
+    q('rawLabRunSuite').disabled=true;q('rawLabSuiteResult').textContent='Running selected conformance cases…';
+    try{
+      const run=await api('/api/raw-lab/suite/run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({presetIds:ids,unitId:Number(q('rawLabPresetUnit').value||1),timeoutMs:Number(q('rawLabTimeout').value||1000),interCaseMs:50,confirmation:{raw:q('rawLabRawConfirm').checked}})});
+      q('rawLabSuiteResult').innerHTML='<strong>Run complete.</strong> '+run.summary.passed+' passed · '+run.summary.failed+' failed · '+run.summary.skipped+' skipped · <a href="/api/raw-lab/runs/'+encodeURIComponent(run.runId)+'/export.json">Export exact evidence</a>';
+      await Promise.all([audit(),loadRuns()]);
+    }catch(e){q('rawLabSuiteResult').innerHTML='<strong>Suite failed.</strong> '+esc(e.message);}
+    finally{q('rawLabRunSuite').disabled=false;}
+  }
+
   async function audit(){try{const rows=await api('/api/raw-lab/audit?limit=200');q('rawLabAuditBody').innerHTML=rows.length?[...rows].reverse().map(x=>'<tr><td>'+new Date(x.transmittedAt).toLocaleTimeString([],{hour12:false})+'</td><td>'+esc(x.intent)+'</td><td>'+esc(x.result)+'</td><td class="mono">'+esc(x.requestRawHex)+'</td><td class="mono">'+esc(x.responseRawHex||'—')+'</td><td>'+esc(x.error?.message||'—')+'</td></tr>').join(''):'<tr><td colspan="6" class="muted">No transmissions yet.</td></tr>';}catch{}}
   q('rawLabType').addEventListener('change',syncType);q('rawLabOpen').addEventListener('click',open);q('rawLabClose').addEventListener('click',async()=>renderStatus(await api('/api/raw-lab/close',{method:'POST'})));
   q('rawLabArm').addEventListener('click',async()=>{try{renderStatus(await api('/api/raw-lab/arm',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirmation:{confirmed:true,raw:q('rawLabRawConfirm').checked},durationMs:Number(q('rawLabArmMs').value)})}));}catch(e){q('rawLabSafetyNote').textContent=e.message;}});
   q('rawLabDisarm').addEventListener('click',async()=>renderStatus(await api('/api/raw-lab/disarm',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})));
-  q('rawLabPreview').addEventListener('click',preview);q('rawLabSend').addEventListener('click',()=>send(false));q('rawLabRepeat').addEventListener('click',()=>send(true));q('rawLabSaveCase').addEventListener('click',saveCase);q('rawLabRefreshCases').addEventListener('click',loadCases);q('rawLabRefreshAudit').addEventListener('click',audit);
+  q('rawLabPreview').addEventListener('click',preview);q('rawLabSend').addEventListener('click',()=>send(false));q('rawLabRepeat').addEventListener('click',()=>send(true));q('rawLabSaveCase').addEventListener('click',saveCase);q('rawLabRefreshCases').addEventListener('click',loadCases);q('rawLabImportCases').addEventListener('click',importCases);q('rawLabLoadPresets').addEventListener('click',loadPresets);q('rawLabRunSuite').addEventListener('click',runSuite);q('rawLabRefreshAudit').addEventListener('click',audit);
+  q('rawLabPresetBody').addEventListener('click',e=>{const b=e.target.closest('[data-preset-load]');if(b)loadPreset(b.dataset.presetLoad);});
   q('rawLabCasesBody').addEventListener('click',async e=>{const load=e.target.closest('[data-case-load]');if(load){const x=cases.find(c=>c.id===load.dataset.caseLoad);if(x){q('rawLabHex').value=x.hex;q('rawLabChecksum').checked=x.autoChecksum!==false;q('rawLabExpect').checked=x.expectResponse!==false;q('rawLabExpected').value=x.expectedHex||'';q('rawLabMask').value=x.expectedMaskHex||'';}return;}const rem=e.target.closest('[data-case-remove]');if(rem){await api('/api/raw-lab/cases/'+encodeURIComponent(rem.dataset.caseRemove),{method:'DELETE'});loadCases();}});
-  ports();syncType();refreshStatus();loadCases();audit();
+  ports();syncType();refreshStatus();loadCases();loadRuns();audit();
 })();
