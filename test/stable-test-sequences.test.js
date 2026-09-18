@@ -113,6 +113,7 @@ test('stable Test Sequences workspace loads and parses',()=>{
   const loader=fs.readFileSync(path.join(root,'public/platform-v6.js'),'utf8');
   const ui=fs.readFileSync(path.join(root,'public/test-sequences-v7.js'),'utf8');
   const css=fs.readFileSync(path.join(root,'public/test-sequences-v7.css'),'utf8');
+  const routes=fs.readFileSync(path.join(root,'src/testSequences/testSequenceRoutes.js'),'utf8');
 
   new vm.Script(ui,{filename:'test-sequences-v7.js'});
   assert.match(loader,/test-sequences-v7\.css/);
@@ -120,9 +121,12 @@ test('stable Test Sequences workspace loads and parses',()=>{
   assert.match(ui,/Modbus Test Sequences/);
   assert.match(ui,/\/api\/test-sequences\/validate/);
   assert.match(ui,/\/api\/test-sequences\/run/);
-  assert.match(ui,/\/api\/test-sequences\/pause/);
-  assert.match(ui,/\/api\/test-sequences\/resume/);
-  assert.match(ui,/\/api\/test-sequences\/stop/);
+  assert.match(ui,/command\('pause'\)/);
+  assert.match(ui,/command\('resume'\)/);
+  assert.match(ui,/command\('stop'\)/);
+  assert.match(routes,/\/api\/test-sequences\/pause/);
+  assert.match(routes,/\/api\/test-sequences\/resume/);
+  assert.match(routes,/\/api\/test-sequences\/stop/);
   assert.match(ui,/one-shot guarded/i);
   assert.match(css,/\.sequence-workspace/);
 });
