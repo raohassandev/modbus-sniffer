@@ -43,7 +43,9 @@ test('Master engineering UI and Monitor counter baseline assets parse',()=>{
   const root=path.resolve(__dirname,'..');
   const ui=fs.readFileSync(path.join(root,'public/master-v7.js'),'utf8');
   const sessions=fs.readFileSync(path.join(root,'public/master-sessions-v7.js'),'utf8');
-  new vm.Script(ui,{filename:'master-v7.js'});new vm.Script(sessions,{filename:'master-sessions-v7.js'});
-  assert.match(ui,/masterRetries/);assert.match(ui,/masterRtsMode/);assert.match(ui,/masterOpenTraffic/);
+  const write=fs.readFileSync(path.join(root,'public/master-write-v7.js'),'utf8');
+  new vm.Script(ui,{filename:'master-v7.js'});new vm.Script(sessions,{filename:'master-sessions-v7.js'});new vm.Script(write,{filename:'master-write-v7.js'});
+  assert.match(ui,/masterRetries/);assert.match(ui,/masterRtsMode/);
+  assert.match(write,/masterOpenTraffic/);
   assert.match(sessions,/ModbusMasterSessionCounters/);assert.match(sessions,/counterBaseline/);
 });
