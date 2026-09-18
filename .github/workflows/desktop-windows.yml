@@ -25,7 +25,7 @@ jobs:
         run: npm --prefix desktop ci
       - name: Build NSIS installer
         run: npm --prefix desktop run dist:win
-      - name: Smoke launch packaged Modbus Sniffer
+      - name: Smoke launch packaged Modbus Engineering Tool
         shell: pwsh
         run: |
           $exe = Get-ChildItem "desktop/dist/win-unpacked" -Filter "*.exe" -File |
@@ -45,7 +45,7 @@ jobs:
                 if ($response.StatusCode -eq 200) { $ready = $true; break }
               } catch {}
             }
-            if (-not $ready) { throw "Packaged desktop app did not expose the stable Modbus Sniffer health endpoint." }
+            if (-not $ready) { throw "Packaged desktop app did not expose the unified Modbus Engineering Tool health endpoint." }
           } finally {
             if ($proc -and -not $proc.HasExited) {
               & taskkill /PID $proc.Id /T /F | Out-Null
@@ -57,7 +57,7 @@ jobs:
           $rootVersion = node -p "require('./package.json').version"
           $desktopVersion = node -p "require('./desktop/package.json').version"
           @(
-            "product=Modbus Sniffer",
+            "product=Modbus Engineering Tool",
             "runtime=unified-modbus-engineering-tool",
             "root_version=$rootVersion",
             "desktop_version=$desktopVersion",
@@ -81,6 +81,6 @@ jobs:
           $lines | Set-Content "desktop/dist/SHA256SUMS.txt" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
-          name: modbus-sniffer-windows
+          name: modbus-engineering-tool-windows
           path: desktop/dist/*
           if-no-files-found: error
