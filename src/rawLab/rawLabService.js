@@ -35,7 +35,7 @@ function normalizeConfig(input={}){
 }
 function resultView(result){
   if(!result)return null;
-  return Object.freeze({ok:Boolean(result.ok),intent:result.intent||null,classification:result.classification||null,requestRawHex:result.requestRaw?Buffer.from(result.requestRaw).toString('hex').toUpperCase():null,responseRawHex:result.responseRaw?Buffer.from(result.responseRaw).toString('hex').toUpperCase():null,rttMs:result.rttMs??null});
+  return Object.freeze({ok:Boolean(result.ok),intent:result.intent||null,classification:result.classification||null,responseValidation:result.responseValidation||null,requestRawHex:result.requestRaw?Buffer.from(result.requestRaw).toString('hex').toUpperCase():null,responseRawHex:result.responseRaw?Buffer.from(result.responseRaw).toString('hex').toUpperCase():null,rttMs:result.rttMs??null});
 }
 class StableRawLabService extends EventEmitter{
   constructor({dataDir=path.join(process.cwd(),'data','raw-lab')}={}){
@@ -82,7 +82,7 @@ class StableRawLabService extends EventEmitter{
       }else{
         const start=Date.now();
         try{
-          const result=await this.send({hex:item.hex,autoChecksum:false,expectResponse:item.expectResponse,timeoutMs:item.timeoutMs,expectedHex:item.expectedHex,expectedMaskHex:item.expectedMaskHex,confirmation:{raw:confirmation?.raw===true,write:false}});
+          const result=await this.send({hex:item.hex,autoChecksum:false,expectResponse:item.expectResponse,timeoutMs:item.timeoutMs,expectedHex:item.expectedHex,expectedMaskHex:item.expectedMaskHex,responsePolicy:item.labRequired?'matching':'success',confirmation:{raw:confirmation?.raw===true,write:false}});
           results.push({id:item.id,name:item.name,status:'passed',labRequired:item.labRequired,elapsedMs:Date.now()-start,result});
         }catch(error){
           results.push({id:item.id,name:item.name,status:'failed',labRequired:item.labRequired,elapsedMs:Date.now()-start,error:{code:error?.code||null,message:String(error?.message||error),details:error?.details||null}});
