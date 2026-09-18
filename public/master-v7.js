@@ -43,6 +43,8 @@
                     <label>Data Bits<select id="masterDataBits"><option selected>8</option><option>7</option></select></label>
                     <label>Stop Bits<select id="masterStopBits"><option selected>1</option><option>2</option></select></label>
                     <label>Echo Suppression<select id="masterEcho"><option value="false" selected>Off</option><option value="true">On</option></select></label>
+                    <label>RS-485 RTS Mode<select id="masterRtsMode"><option value="none" selected>None</option><option value="high-during-tx">High during TX</option><option value="low-during-tx">Low during TX</option></select></label>
+                    <label>RTS Settle (ms)<input id="masterRtsSettle" type="number" min="0" max="60000" value="0"></label>
                   </div>
                 </div>
                 <div class="master-connection-fields span-2" id="masterTcpFields" hidden>
@@ -50,6 +52,9 @@
                 </div>
                 <label>Timeout (ms)<input id="masterTimeout" type="number" min="50" max="60000" value="1000"></label>
                 <label>Poll Interval (ms)<input id="masterPollInterval" type="number" min="50" max="60000" value="1000"></label>
+                <label>Read Retries<input id="masterRetries" type="number" min="0" max="10" value="0"></label>
+                <label>Retry Delay (ms)<input id="masterRetryDelay" type="number" min="0" max="60000" value="100"></label>
+                <label>Inter-request Delay (ms)<input id="masterInterRequestDelay" type="number" min="0" max="60000" value="0"></label>
               </div>
               <div class="master-button-row"><button class="master-primary" id="masterConnect">Connect</button><button class="master-secondary" id="masterDisconnect" disabled>Disconnect</button><button class="master-secondary" id="masterRefreshPorts">Refresh Ports</button></div>
               <div class="master-note" id="masterConnectionNote" style="margin-top:11px"><strong>Disconnected.</strong> Choose a connection and press Connect.</div>
@@ -66,8 +71,8 @@
                 <label>Quantity<input id="masterQuantity" type="number" min="1" max="125" value="10"></label>
                 <div class="span-2"><label>Address Mode</label><div class="master-segments" id="masterAddressMode"><button type="button" class="active" data-address-mode="raw">0-based (PDU)</button><button type="button" data-address-mode="reference">Reference (0xxxx / 1xxxx / 3xxxx / 4xxxx)</button><button type="button" disabled id="masterAddressHint">Raw request uses PDU address</button></div></div>
               </div>
-              <div class="master-button-row"><button class="master-secondary" id="masterReadOnce" disabled>▶ Read Once</button><button class="master-primary" id="masterStartPolling" disabled>↻ Start Polling</button><button class="master-secondary" id="masterPausePolling" disabled>Ⅱ Pause</button><button class="master-secondary" id="masterStopPolling" disabled>■ Stop</button></div>
-              <div class="master-counters"><div class="master-counter"><span>Tx Requests</span><strong id="masterTx">0</strong></div><div class="master-counter"><span>Rx Responses</span><strong id="masterRx">0</strong></div><div class="master-counter"><span>Errors</span><strong id="masterErrors">0</strong></div><div class="master-counter"><span>Timeouts</span><strong id="masterTimeouts">0</strong></div><div class="master-counter"><span>Avg RTT</span><strong id="masterAvgRtt">—</strong></div></div>
+              <div class="master-button-row"><button class="master-secondary" id="masterReadOnce" disabled>▶ Read Once</button><button class="master-primary" id="masterStartPolling" disabled>↻ Start Polling</button><button class="master-secondary" id="masterPausePolling" disabled>Ⅱ Pause</button><button class="master-secondary" id="masterStopPolling" disabled>■ Stop</button><button class="master-secondary" id="masterOpenTraffic">Open Traffic</button><button class="master-secondary" id="masterResetCounters">Reset Counters</button></div>
+              <div class="master-counters"><div class="master-counter"><span>Tx Requests</span><strong id="masterTx">0</strong></div><div class="master-counter"><span>Rx Responses</span><strong id="masterRx">0</strong></div><div class="master-counter"><span>Errors</span><strong id="masterErrors">0</strong></div><div class="master-counter"><span>Timeouts</span><strong id="masterTimeouts">0</strong></div><div class="master-counter"><span>Retries</span><strong id="masterRetryCount">0</strong></div><div class="master-counter"><span>Avg RTT</span><strong id="masterAvgRtt">—</strong></div></div>
             </div>
           </article>
 
@@ -131,15 +136,17 @@
   }
 
   function renderStats(stats = {}) {
-    q('masterTx').textContent = Number(stats.txRequests || 0).toLocaleString();
-    q('masterRx').textContent = Number(stats.rxResponses || 0).toLocaleString();
-    q('masterErrors').textContent = Number(stats.errors || 0).toLocaleString();
-    q('masterTimeouts').textContent = Number(stats.timeouts || 0).toLocaleString();
-    q('masterAvgRtt').textContent = stats.avgRttMs == null ? '—' : `${Number(stats.avgRttMs).toFixed(Number(stats.avgRttMs) < 10 ? 1 : 0)} ms`;
+    const display = window.ModbusMasterSessionCounters?.apply?.(stats) || stats;
+    q('masterTx').textContent = Number(display.txRequests || 0).toLocaleString();
+    q('masterRx').textContent = Number(display.rxResponses || 0).toLocaleString();
+    q('masterErrors').textContent = Number(display.errors || 0).toLocaleString();
+    q('masterTimeouts').textContent = Number(display.timeouts || 0).toLocaleString();
+    if(q('masterRetryCount'))q('masterRetryCount').textContent=Number(display.retryAttempts||0).toLocaleString();
+    q('masterAvgRtt').textContent = display.avgRttMs == null ? '—' : `${Number(display.avgRttMs).toFixed(Number(display.avgRttMs) < 10 ? 1 : 0)} ms`;
   }
 
   function connectionPayload() {
-    const common = { type: app.type, timeoutMs: Number(q('masterTimeout').value || 1000) };
+    const common = { type: app.type, timeoutMs: Number(q('masterTimeout').value || 1000), retries:Number(q('masterRetries').value||0), retryDelayMs:Number(q('masterRetryDelay').value||100), interRequestDelayMs:Number(q('masterInterRequestDelay').value||0) };
     if (app.type === 'tcp') return { ...common, host: q('masterTcpHost').value.trim(), port: Number(q('masterTcpPort').value || 502) };
     return {
       ...common,
@@ -149,6 +156,8 @@
       dataBits: Number(q('masterDataBits').value || 8),
       stopBits: Number(q('masterStopBits').value || 1),
       echoSuppression: q('masterEcho').value === 'true',
+      rtsTxMode:q('masterRtsMode').value,
+      rtsSettleMs:Number(q('masterRtsSettle').value||0),
     };
   }
 
@@ -184,6 +193,9 @@
       address: normalizedPduAddress(),
       quantity: Number(q('masterQuantity').value || 1),
       timeoutMs: Number(q('masterTimeout').value || 1000),
+      retries:Number(q('masterRetries').value||0),
+      retryDelayMs:Number(q('masterRetryDelay').value||100),
+      interRequestDelayMs:Number(q('masterInterRequestDelay').value||0),
     };
   }
 
@@ -244,6 +256,10 @@
         if (confirm(`Modbus Slave currently owns ${port}. Stop Slave and switch this port to active Master mode?`)) {
           return connect({ ...extra, confirmSlaveStop: true });
         }
+      }
+      if (error.code === 'RAW_LAB_ACTIVE') {
+        const port = error.details?.port || q('masterSerialPort').value;
+        if (confirm(`Raw Frame Lab currently owns ${port}. Close Raw Lab and switch this port to active Master mode?`)) return connect({ ...extra, confirmRawLabClose:true });
       }
       if (error.code === 'PASSIVE_CAPTURE_ACTIVE') {
         const port = error.details?.port || q('masterSerialPort').value;
@@ -349,6 +365,18 @@
 
   masterNav.addEventListener('click', () => { try { go('master'); } catch {} refreshStatus(); loadPorts(); });
   q('masterConnectionType').addEventListener('click', event => { const button = event.target.closest('[data-master-type]'); if (button && !app.connected) setType(button.dataset.masterType); });
+  q('masterOpenTraffic').addEventListener('click',()=>{
+    const unit=q('masterUnitId').value,fc=q('masterFunction').value;
+    try{go('traffic');}catch{}
+    const source=document.getElementById('trafficSource'),slave=document.getElementById('trafficSlave'),func=document.getElementById('trafficFc');
+    if(source){source.value='Master';source.dispatchEvent(new Event('change',{bubbles:true}));}
+    if(slave){slave.value=unit;slave.dispatchEvent(new Event('input',{bubbles:true}));}
+    if(func){func.value=fc;func.dispatchEvent(new Event('input',{bubbles:true}));}
+  });
+  q('masterResetCounters').addEventListener('click',async()=>{
+    if(window.ModbusMasterSessionCounters?.resetCurrent){await window.ModbusMasterSessionCounters.resetCurrent();await refreshStatus();return;}
+    try{await request('/api/master/stats/reset',{method:'POST'});await refreshStatus();}catch(error){setNote('<strong>Counter reset failed.</strong> '+esc(error.message),'master-error');}
+  });
   q('masterConnect').addEventListener('click', connect);
   q('masterDisconnect').addEventListener('click', disconnect);
   q('masterRefreshPorts').addEventListener('click', loadPorts);
