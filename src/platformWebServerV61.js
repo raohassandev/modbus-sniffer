@@ -20,6 +20,7 @@ const { EvidenceHub, mergeEvidence } = require('./evidence/evidenceHub');
 const { analyzeProtocolTraffic } = require('./evidence/protocolDiagnostics');
 const registerCodec = require('./register/registerCodec');
 const { installLoggerTrendRoutes } = require('./loggerTrend/loggerTrendRoutes');
+const { installCompareRoutes } = require('./compare/compareRoutes');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -136,6 +137,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   const deviceClone=installDeviceCloneRoutes({app,state,slaveRuntime,broadcast});
   const testSequences=installTestSequenceRoutes({app,masterRuntime,broadcast});
   const loggerTrend=installLoggerTrendRoutes({app,state,masterRuntime,broadcast});
+  installCompareRoutes({app});
 
   const publishEvidenceRow = row => { if(row){ loggerTrend.ingestEvidence(row); broadcast('transaction',row); } };
   const onMasterEvent = event => publishEvidenceRow(evidence.ingest(event,{sourceType:'Master'}));
