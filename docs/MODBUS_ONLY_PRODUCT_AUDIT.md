@@ -173,7 +173,37 @@ Decision:
 
 A small read-only register watch panel, table or trend is still allowed inside Master/Analyzer because it directly supports Modbus testing. A free-form HMI builder is not.
 
-## 4. Current transport capability audit
+## 4. Critical architecture debt
+
+The current branch intentionally contains both the stable v7 product shell and the experimental v8 Workbench. It also contains a stable-shell Master integration (`src/master/**`, `public/master-v7.js`) while the earlier v8 Master/workspaces still exist.
+
+That is acceptable as a temporary recovery state, but **not** as the final architecture.
+
+Risks:
+- two user shells can diverge in terminology and behavior
+- duplicate Master UI/runtime paths can implement the same function differently
+- multiple connection abstractions can confuse resource ownership
+- fixes may land in one surface and not the other
+- tests can pass against a path users do not actually run
+- product scope can drift again because old workspaces remain visible
+
+Target:
+- one desktop/web product shell
+- one shared Modbus protocol core
+- one shared transport layer
+- one central connection/resource ownership model
+- one evidence/event model
+- Sniffer, Master, Slave, Discovery and Test Center as clients of the same core
+- advanced tools consume the same Traffic/Register evidence instead of creating parallel data models
+
+Migration rule:
+- stable v7 remains the accepted default during migration
+- do not add a third implementation of any Modbus function
+- new protocol/transport logic belongs in reusable core modules, not page-specific code
+- converge the two Master paths before declaring Master complete
+- retire the experimental v8 shell only after its valuable Modbus capabilities have been migrated into the unified product
+
+## 5. Current transport capability audit
 
 Core transport code already contains:
 
@@ -197,7 +227,7 @@ Connection UI also exposes:
 
 Roadmap requirement: these must become **Modbus Transport Lab** capabilities with consistent Master/Slave/Test Center support and explicit labeling of standard versus convenience/non-standard encapsulations.
 
-## 5. Function-code capability audit
+## 6. Function-code capability audit
 
 Protocol core already implements or contains primitives for a broad set including:
 
@@ -223,7 +253,7 @@ Protocol core already implements or contains primitives for a broad set includin
 
 The major gap is not only protocol-core support; it is **consistent UI/test exposure, simulator behavior, evidence and conformance coverage**.
 
-## 6. Missing high-value Modbus capabilities
+## 7. Missing high-value Modbus capabilities
 
 ### Master / Client
 
@@ -324,7 +354,7 @@ Existing TLS transport should be developed only as **Modbus TCP Security** tooli
 
 Do not turn this into generic network-security tooling.
 
-## 7. Navigation target
+## 8. Navigation target
 
 Recommended product navigation:
 
@@ -361,7 +391,7 @@ Remove:
 - generic Historian
 - generic Digital Twin terminology
 
-## 8. Product UX rules
+## 9. Product UX rules
 
 - Sniffer, Master and Slave must each be usable without creating a Project.
 - Every advanced tool must clearly state what Modbus question it answers.
@@ -373,7 +403,7 @@ Remove:
 - Advanced complexity belongs behind expandable/advanced controls, not on the basic first-read path.
 - Help explains protocol behavior; it must not compensate for unclear primary workflows.
 
-## 9. Repository cleanup plan
+## 10. Repository cleanup plan
 
 ### Phase A — scope lock
 - [x] define Modbus-only product contract
@@ -404,7 +434,7 @@ Remove:
 - [ ] archive/delete HMI implementation after dependency audit
 - [ ] remove any generic automation/historian wording and APIs that do not serve Modbus testing
 
-## 10. Definition of done
+## 11. Definition of done
 
 The product is ready only when an engineer can use one application to:
 
