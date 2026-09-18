@@ -22,11 +22,12 @@ test('normal and compatibility launch commands use the unified Modbus runtime', 
   assert.equal(rootPackage.scripts['v8:cli'], undefined);
 });
 
-test('desktop defaults to stable sniffer while retaining explicit v8 opt-in and diagnostics', () => {
-  assert.match(main, /MODBUS_DESKTOP_MODE/);
-  assert.match(main, /\? 'index-v8\.js' : 'index-v7\.js'/);
-  assert.match(main, /\? '\/api\/v8\/status' : '\/api\/status'/);
-  assert.match(main, /\? '\/v8\/' : '\/'/);
+test('desktop launches only the unified runtime and retains diagnostics', () => {
+  assert.doesNotMatch(main, /MODBUS_DESKTOP_MODE/);
+  assert.match(main, /function desktopMode\(\) \{ return 'unified'; \}/);
+  assert.match(main, /src', 'index-v7\.js'/);
+  assert.match(main, /function healthPath\(\) \{ return '\/api\/status'; \}/);
+  assert.match(main, /function uiPath\(\) \{ return '\/'; \}/);
   assert.match(main, /workbench-desktop\.log/);
   assert.match(main, /uncaughtExceptionMonitor/);
   assert.match(main, /render-process-gone/);
