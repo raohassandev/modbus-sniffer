@@ -80,7 +80,7 @@ test('Raw Frame Studio success policy rejects structurally invalid FC03 payloads
   const responder=(async()=>{
     const req=await pair.b.receive({timeoutMs:500});
     const adu=protocol.decodeRtuAdu(req);
-    await pair.b.send(protocol.encodeRtuAdu(adu.unitId,Buffer.from([0x03,0x01,0x7F])));
+    await pair.b.send(protocol.encodeRtuAdu(adu.unitId,Buffer.from([0x03,0x03,0x00,0x01,0x02])));
   })();
   await assert.rejects(
     ()=>studio.send({hex:'01 03 00 00 00 01',autoChecksum:true,timeoutMs:500,responsePolicy:'success'}),
