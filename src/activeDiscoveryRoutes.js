@@ -14,10 +14,10 @@ function adoptionStatus(error){
 function bool(v){return v===true;}
 function n(v,d){const x=Number(v);return Number.isFinite(x)?x:d;}
 
-function installActiveDiscoveryRoutes({app,state,demo=false,broadcast=()=>{},workspaces=null,getActiveProjectId=null,manager:providedManager=null}={}){
+function installActiveDiscoveryRoutes({app,state,demo=false,broadcast=()=>{},workspaces=null,getActiveProjectId=null,manager:providedManager=null,masterRuntime:providedMasterRuntime=null}={}){
   if(!app)throw new Error('Express app is required for active discovery routes.');
   const manager=providedManager||new ActiveDiscoveryManager(),jobProjects=new Map(),savedJobs=new Map();
-  const masterRuntime=installMasterRoutes({app,state,demo});
+  const masterRuntime=providedMasterRuntime||installMasterRoutes({app,state,demo});
   const managerClose=typeof manager.close==='function'?manager.close.bind(manager):async()=>{};
   manager.close=async()=>{await masterRuntime.disconnect();return managerClose();};
   manager.masterRuntime=masterRuntime;
