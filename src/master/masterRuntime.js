@@ -353,7 +353,9 @@ class MasterRuntime {
       };
       throw error;
     }
-  }  resetStats() {
+  }
+
+  resetStats() {
     const connectedAt = this.stats.connectedAt;
     this.stats = this._newStats();
     this.stats.connectedAt = connectedAt;
