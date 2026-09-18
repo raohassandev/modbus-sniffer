@@ -210,9 +210,16 @@
     if(typeof go==='function')go('loggerTrend');
   };
 
-  const masterStrip=document.querySelector('#page-master .master-write-actions');
-  if(masterStrip&&!document.getElementById('masterOpenLoggerTrend')){
+  function installMasterShortcut(){
+    const masterStrip=document.querySelector('#page-master .master-write-actions');
+    if(!masterStrip||document.getElementById('masterOpenLoggerTrend'))return Boolean(masterStrip);
     const b=document.createElement('button');b.type='button';b.className='master-secondary';b.id='masterOpenLoggerTrend';b.textContent='Logger / Trend';b.addEventListener('click',window.openLoggerTrendFromMaster);masterStrip.insertBefore(b,masterStrip.firstChild);
+    return true;
+  }
+  if(!installMasterShortcut()){
+    const observer=new MutationObserver(()=>{if(installMasterShortcut())observer.disconnect();});
+    observer.observe(document.getElementById('page-master')||document.body,{childList:true,subtree:true});
+    setTimeout(()=>observer.disconnect(),10000);
   }
 
   refresh();
