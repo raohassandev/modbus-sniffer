@@ -30,6 +30,8 @@ test('v8 local Mac release gate is the npm-exposed deterministic exact-head gate
     /uname -s/,
     /Darwin/,
     /git rev-parse HEAD/,
+    /require\('\.\/package\.json'\)\.version/,
+    /release=\$PRODUCT_VERSION/,
     /git status --porcelain/,
     /\.release-evidence/,
     /summary\.txt/,
