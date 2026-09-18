@@ -118,6 +118,18 @@ npm --prefix desktop start
 npm --prefix desktop run dist:win
 ```
 
+For an exact-checkout local validation before manual field testing:
+
+```bash
+npm ci && npm run version:check && npm run lint && npm run check:v8 && npm audit --omit=dev --audit-level=high && npm test && npm run smoke && npm run acceptance
+```
+
+Browser E2E is a separate local gate because Chromium may need to be installed first:
+
+```bash
+npx playwright install chromium && npm run e2e
+```
+
 GitHub Actions release/build workflows remain manual-only.
 
 ## Current completion boundary
