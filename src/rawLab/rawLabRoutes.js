@@ -59,6 +59,13 @@ function installRawLabRoutes({
   app.post('/api/raw-lab/repeat',async(req,res)=>{try{res.json(await service.repeat(req.body||{}));}catch(error){sendError(res,error);}});
   app.get('/api/raw-lab/audit',(req,res)=>{try{res.json(service.audit(Number(req.query.limit||200)));}catch(error){sendError(res,error);}});
   app.get('/api/raw-lab/cases',(_req,res)=>{try{res.json(service.listCases());}catch(error){sendError(res,error);}});
+  app.get('/api/raw-lab/cases/export.json',(_req,res)=>{try{res.setHeader('Content-Disposition','attachment; filename="modbus-raw-lab-cases.json"');res.json(service.exportCases());}catch(error){sendError(res,error);}});
+  app.post('/api/raw-lab/cases/import',(req,res)=>{try{res.json(service.importCases(req.body?.bundle||req.body||{}, {replace:req.body?.replace===true}));}catch(error){sendError(res,error);}});
+  app.get('/api/raw-lab/presets',(req,res)=>{try{res.json(service.presets({unitId:Number(req.query.unitId||1),timeoutMs:req.query.timeoutMs==null?null:Number(req.query.timeoutMs)}));}catch(error){sendError(res,error);}});
+  app.post('/api/raw-lab/suite/run',async(req,res)=>{try{const run=await service.runConformanceSuite(req.body||{});broadcast('raw-lab-suite',run);res.json(run);}catch(error){sendError(res,error);}});
+  app.get('/api/raw-lab/runs',(_req,res)=>{try{res.json(service.listRuns());}catch(error){sendError(res,error);}});
+  app.get('/api/raw-lab/runs/:id/export.json',(req,res)=>{try{const run=service.getRun(req.params.id);res.setHeader('Content-Disposition',`attachment; filename="modbus-conformance-${req.params.id}.json"`);res.json(run);}catch(error){sendError(res,error);}});
+
   app.post('/api/raw-lab/cases',(req,res)=>{try{res.json(service.saveCase(req.body||{}));}catch(error){sendError(res,error);}});
   app.delete('/api/raw-lab/cases/:id',(req,res)=>{try{res.json({ok:service.removeCase(req.params.id)});}catch(error){sendError(res,error);}});
 
