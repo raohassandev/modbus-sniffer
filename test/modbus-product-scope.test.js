@@ -21,8 +21,9 @@ test('product shell remains Modbus-only and does not expose HMI Builder',()=>{
   assert.match(index,/>Slave<\/span>/);
   assert.match(index,/>Logger \/ Trend<\/span>/);
   assert.match(index,/>Test Sequences<\/span>/);
-  assert.match(shell,/experimental Modbus-only integration/);
+  assert.match(shell,/compatibility Modbus engineering shell/);
   assert.doesNotMatch(shell,/release-candidate workspace/);
+  assert.match(shell,/Unified Modbus Engineering Tool/);
 });
 
 test('generic workspace names stay reframed around Modbus engineering',()=>{
