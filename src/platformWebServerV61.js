@@ -19,7 +19,7 @@ const { installTestSequenceRoutes } = require('./testSequences/testSequenceRoute
 const { EvidenceHub, mergeEvidence } = require('./evidence/evidenceHub');
 const { analyzeProtocolTraffic } = require('./evidence/protocolDiagnostics');
 const registerCodec = require('./register/registerCodec');
-const { PRODUCT_VERSION } = require('./v8/version');
+const { PRODUCT_NAME, PRODUCT_VERSION } = require('./v8/version');
 const { installLoggerTrendRoutes } = require('./loggerTrend/loggerTrendRoutes');
 const { installCompareRoutes } = require('./compare/compareRoutes');
 const { installTransportLabRoutes } = require('./transportLab/transportLabRoutes');
@@ -266,7 +266,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     });
   };
 
-  app.get('/api/status', (_q,r) => r.json(state.getStatus()));
+  app.get('/api/status', (_q,r) => r.json({ productName:PRODUCT_NAME, productVersion:PRODUCT_VERSION, ...state.getStatus() }));
   app.get('/api/analysis', (_q,r) => r.json(state.getAnalysis()));
   app.get('/api/channels', (_q,r) => { syncRuntimeChannels(); r.json(state.getChannels?.()||[]); });
   app.get('/api/transactions', (q,r) => { try{r.json(unifiedTransactions(q.query));}catch(e){apiError(r,e);} });
