@@ -5,7 +5,11 @@ const {
   ConnectionBroker,
   SerialTransport,
   TcpServerTransport,
-  VirtualSlaveServer,
+  TlsServerTransport,
+  UdpServerTransport,
+  TunnelTcpServerTransport,
+  LabVirtualSlaveServer,
+  DynamicValueEngine,
   VirtualDevice,
 } = require('../modbusCore');
 
@@ -37,19 +41,41 @@ function integer(value, fallback, { min = 0, max = 65535, field = 'value' } = {}
   return n;
 }
 
+function framingForType(type) {
+  if (['tcp','tls','udp'].includes(type)) return 'tcp';
+  if (['rtu','rtu-tcp','rtu-udp'].includes(type)) return 'rtu';
+  if (['ascii','ascii-tcp','ascii-udp'].includes(type)) return 'ascii';
+  throw new SlaveRuntimeError('INVALID_TRANSPORT', 'Unsupported Slave transport', { type });
+}
+function isSerialType(type) { return type === 'rtu' || type === 'ascii'; }
+function isNetworkType(type) { return !isSerialType(type); }
+
 function normalizeConfig(input = {}) {
   const type = String(input.type || 'tcp').trim().toLowerCase();
-  if (!['rtu', 'ascii', 'tcp'].includes(type)) throw new SlaveRuntimeError('INVALID_TRANSPORT', 'Slave type must be RTU, ASCII or TCP', { type });
+  const supported = ['rtu','ascii','tcp','tls','udp','rtu-tcp','ascii-tcp','rtu-udp','ascii-udp'];
+  if (!supported.includes(type)) throw new SlaveRuntimeError('INVALID_TRANSPORT', 'Unsupported Slave transport', { type, supported });
 
-  if (type === 'tcp') {
+  if (isNetworkType(type)) {
     const host = String(input.host || '127.0.0.1').trim();
-    if (!host) throw new SlaveRuntimeError('INVALID_ARGUMENT', 'TCP listen host is required');
+    if (!host) throw new SlaveRuntimeError('INVALID_ARGUMENT', 'Network listen host is required');
+    const tls = type === 'tls' ? Object.freeze({
+      cert: String(input.cert || input.tls?.cert || '').trim(),
+      key: String(input.key || input.tls?.key || '').trim(),
+      ca: String(input.ca || input.tls?.ca || '').trim() || null,
+      requestCert: input.requestCert === true || input.tls?.requestCert === true,
+      rejectUnauthorized: input.rejectUnauthorized === true || input.tls?.rejectUnauthorized === true,
+      minVersion: String(input.minVersion || input.tls?.minVersion || 'TLSv1.2'),
+    }) : null;
+    if (type === 'tls' && (!tls.cert || !tls.key)) throw new SlaveRuntimeError('TLS_MATERIAL_REQUIRED', 'TLS Slave requires certificate and private key');
     return Object.freeze({
       type,
+      framing: framingForType(type),
       host,
-      port: integer(input.port, 502, { min: 0, max: 65535, field: 'port' }),
+      port: integer(input.port, type === 'tls' ? 802 : 502, { min: 0, max: 65535, field: 'port' }),
       maxClients: integer(input.maxClients, 32, { min: 1, max: 256, field: 'maxClients' }),
+      maxPeers: integer(input.maxPeers, 256, { min: 1, max: 4096, field: 'maxPeers' }),
       idleTimeoutMs: integer(input.idleTimeoutMs, 0, { min: 0, max: 24 * 60 * 60 * 1000, field: 'idleTimeoutMs' }),
+      tls,
     });
   }
 
@@ -63,6 +89,7 @@ function normalizeConfig(input = {}) {
 
   return Object.freeze({
     type,
+    framing: type,
     path,
     baudRate: integer(input.baudRate, 9600, { min: 50, max: 4000000, field: 'baudRate' }),
     parity,
@@ -154,6 +181,10 @@ class SlaveRuntime extends EventEmitter {
     this.events = [];
     this.sequence = 0;
     this._relay = null;
+    this.generators = new DynamicValueEngine({ resolveDevice: (_serverId, unitId) => this.server?.getDevice(Number(unitId)) || null });
+    this._generatorRelay = (event) => this._recordEvent(event);
+    this.generators.on('event', this._generatorRelay);
+    this.generators.start();
   }
 
   status() {
@@ -168,6 +199,8 @@ class SlaveRuntime extends EventEmitter {
       events: this.events.length,
       listenAddress: this.transport?.address?.() || null,
       transportStatus: this.transport?.status?.() || null,
+      lab: this.server?.faultLab?.snapshot?.() || null,
+      generators: this.generators.snapshot(),
     });
   }
 
@@ -181,29 +214,29 @@ class SlaveRuntime extends EventEmitter {
     this.config = next;
     this.connectionId = `stable-slave-${Date.now().toString(36)}`;
     this.transport = this._createTransport(next);
-    const resourceKey = next.type === 'tcp'
-      ? `tcp-listen:${next.host.toLowerCase()}:${next.port}`
+    const resourceKey = isNetworkType(next.type)
+      ? `${next.type}-listen:${next.host.toLowerCase()}:${next.port}`
       : `serial:${next.path.toLowerCase()}`;
     this.broker.defineConnection({
       connectionId: this.connectionId,
       resourceKey,
-      transportKind: next.type === 'tcp' ? 'tcp-server' : `serial-${next.type}`,
+      transportKind: isNetworkType(next.type) ? `${next.type}-server` : `serial-${next.type}`,
       transport: this.transport,
-      metadata: { productMode: 'slave', framing: next.type },
+      metadata: { productMode: 'slave', framing: next.framing, transportType: next.type },
       exclusive: true,
     });
 
-    this.server = new VirtualSlaveServer({
+    this.server = new LabVirtualSlaveServer({
       broker: this.broker,
       connectionId: this.connectionId,
       ownerId: 'stable-slave',
-      framing: next.type,
+      framing: next.framing,
       receivePollMs: 25,
     });
     this._relay = (event) => this._recordEvent(event);
     this.server.on('event', this._relay);
 
-    const definitions = existing.length ? existing : [normalizeDevice({ unitId: 1 }, next.type)];
+    const definitions = existing.length ? existing : [normalizeDevice({ unitId: 1 }, next.framing)];
     for (const definition of definitions) this._materialize(definition);
     return this.status();
   }
@@ -228,6 +261,7 @@ class SlaveRuntime extends EventEmitter {
   }
 
   async shutdown() {
+    this.generators.stop();
     await this._disposeServer();
   }
 
@@ -248,7 +282,7 @@ class SlaveRuntime extends EventEmitter {
 
   addDevice(input = {}) {
     if (!this.server || !this.config) throw new SlaveRuntimeError('SLAVE_NOT_CONFIGURED', 'Configure the Slave connection before adding devices');
-    const definition = normalizeDevice(input, this.config.type);
+    const definition = normalizeDevice(input, this.config.framing || framingForType(this.config.type));
     if (this.server.getDevice(definition.unitId)) throw new SlaveRuntimeError('UNIT_ID_CONFLICT', `Unit ID ${definition.unitId} already exists`, { unitId: definition.unitId });
     const device = this._materialize(definition);
     this._recordSynthetic('slave.device-added', { unitId: device.unitId });
@@ -326,6 +360,31 @@ class SlaveRuntime extends EventEmitter {
     return Object.freeze({ unitId: device.unitId, address: pointer, values: Object.freeze(device.readFifo(pointer)) });
   }
 
+  armLab(policy = {}, confirmation = {}) {
+    if (!this.server) throw new SlaveRuntimeError('SLAVE_NOT_CONFIGURED', 'Configure the Slave before arming LAB behavior');
+    return this.server.armFaultLab(policy, confirmation);
+  }
+
+  disarmLab() {
+    if (!this.server) throw new SlaveRuntimeError('SLAVE_NOT_CONFIGURED', 'Configure the Slave before changing LAB behavior');
+    return this.server.disarmFaultLab();
+  }
+
+  listGenerators() {
+    return this.generators.list({ serverId: 'stable' });
+  }
+
+  saveGenerator(input = {}) {
+    if (!this.server) throw new SlaveRuntimeError('SLAVE_NOT_CONFIGURED', 'Configure the Slave before adding generators');
+    const unitId = integer(input.unitId, undefined, { min: 1, max: 255, field: 'unitId' });
+    this._device(unitId);
+    return this.generators.upsert({ ...input, serverId: 'stable', unitId });
+  }
+
+  removeGenerator(generatorId) {
+    return this.generators.remove(String(generatorId));
+  }
+
   listClients() {
     return typeof this.transport?.listClients === 'function' ? this.transport.listClients() : [];
   }
@@ -351,7 +410,7 @@ class SlaveRuntime extends EventEmitter {
       throw new SlaveRuntimeError('INVALID_IMPORT', 'Slave import schemaVersion must be 1');
     }
     const config = normalizeConfig(payload.config || {});
-    const definitions = Array.isArray(payload.devices) ? payload.devices.map((item) => normalizeDevice(item, config.type)) : [];
+    const definitions = Array.isArray(payload.devices) ? payload.devices.map((item) => normalizeDevice(item, config.framing || framingForType(config.type))) : [];
     await this._disposeServer();
     this.broker = this.brokerFactory();
     this.config = config;
@@ -359,45 +418,35 @@ class SlaveRuntime extends EventEmitter {
     this.transport = this._createTransport(config);
     this.broker.defineConnection({
       connectionId: this.connectionId,
-      resourceKey: config.type === 'tcp' ? `tcp-listen:${config.host.toLowerCase()}:${config.port}` : `serial:${config.path.toLowerCase()}`,
-      transportKind: config.type === 'tcp' ? 'tcp-server' : `serial-${config.type}`,
+      resourceKey: isNetworkType(config.type) ? `${config.type}-listen:${config.host.toLowerCase()}:${config.port}` : `serial:${config.path.toLowerCase()}`,
+      transportKind: isNetworkType(config.type) ? `${config.type}-server` : `serial-${config.type}`,
       transport: this.transport,
-      metadata: { productMode: 'slave', framing: config.type },
+      metadata: { productMode: 'slave', framing: config.framing, transportType: config.type },
       exclusive: true,
     });
-    this.server = new VirtualSlaveServer({
+    this.server = new LabVirtualSlaveServer({
       broker: this.broker,
       connectionId: this.connectionId,
       ownerId: 'stable-slave',
-      framing: config.type,
+      framing: config.framing,
       receivePollMs: 25,
     });
     this._relay = (event) => this._recordEvent(event);
     this.server.on('event', this._relay);
-    for (const definition of definitions.length ? definitions : [normalizeDevice({ unitId: 1 }, config.type)]) this._materialize(definition);
+    for (const definition of definitions.length ? definitions : [normalizeDevice({ unitId: 1 }, config.framing || framingForType(config.type))]) this._materialize(definition);
     this._recordSynthetic('slave.imported', { devices: this.server.devices.size });
     return this.status();
   }
 
   _createTransport(config) {
-    if (config.type === 'tcp') {
-      return new TcpServerTransport({
-        host: config.host,
-        port: config.port,
-        maxClients: config.maxClients,
-        idleTimeoutMs: config.idleTimeoutMs,
-      });
-    }
+    if (config.type === 'tcp') return new TcpServerTransport({ host: config.host, port: config.port, maxClients: config.maxClients, idleTimeoutMs: config.idleTimeoutMs });
+    if (config.type === 'tls') return new TlsServerTransport({ host: config.host, port: config.port, maxClients: config.maxClients, idleTimeoutMs: config.idleTimeoutMs, cert: config.tls.cert, key: config.tls.key, ca: config.tls.ca, requestCert: config.tls.requestCert, rejectUnauthorized: config.tls.rejectUnauthorized, minVersion: config.tls.minVersion });
+    if (config.type === 'udp' || config.type === 'rtu-udp' || config.type === 'ascii-udp') return new UdpServerTransport({ host: config.host, port: config.port, maxPeers: config.maxPeers });
+    if (config.type === 'rtu-tcp') return new TunnelTcpServerTransport({ host: config.host, port: config.port, maxClients: config.maxClients, idleTimeoutMs: config.idleTimeoutMs, framing: 'rtu' });
+    if (config.type === 'ascii-tcp') return new TunnelTcpServerTransport({ host: config.host, port: config.port, maxClients: config.maxClients, idleTimeoutMs: config.idleTimeoutMs, framing: 'ascii' });
     return new SerialTransport({
-      path: config.path,
-      baudRate: config.baudRate,
-      parity: config.parity,
-      dataBits: config.dataBits,
-      stopBits: config.stopBits,
-      framing: config.type,
-      echoSuppression: config.echoSuppression,
-      rtsTxMode: config.rtsTxMode,
-      rtsSettleMs: config.rtsSettleMs,
+      path: config.path, baudRate: config.baudRate, parity: config.parity, dataBits: config.dataBits, stopBits: config.stopBits,
+      framing: config.type, echoSuppression: config.echoSuppression, rtsTxMode: config.rtsTxMode, rtsSettleMs: config.rtsSettleMs,
     });
   }
 
@@ -488,4 +537,7 @@ module.exports = {
   SlaveRuntimeError,
   normalizeConfig,
   normalizeDevice,
+  framingForType,
+  isSerialType,
+  isNetworkType,
 };
