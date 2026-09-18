@@ -15,6 +15,7 @@ const protocol = require('./v8/protocol');
 const { VirtualSlaveServer } = require('./v8/slave/virtualSlaveServer');
 const { VirtualDevice, VirtualDeviceError, MemoryArea, normalizeWritableAreas } = require('./v8/slave/virtualDevice');
 const { WriteAuditTrail, WriteSafetyController, WriteSafetyError, describeWritePdu } = require('./v8/master/writeSafety');
+const registerCodec = require('./register/registerCodec');
 
 module.exports = Object.freeze({
   ConnectionBroker,
@@ -36,4 +37,5 @@ module.exports = Object.freeze({
   WriteSafetyController,
   WriteSafetyError,
   describeWritePdu,
+  registerCodec,
 });
