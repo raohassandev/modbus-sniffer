@@ -6,7 +6,6 @@ window.addEventListener('DOMContentLoaded',()=>{
     const link=document.createElement('link');link.rel='stylesheet';link.href=href;document.head.appendChild(link);
   }
 
-  const badge=document.querySelector('.version-badge');if(badge)badge.textContent='UI v7.0';
 
   const main=document.createElement('script');
   main.src='/platform-v62-main.js?v=20260914-2';
