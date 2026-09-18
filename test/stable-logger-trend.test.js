@@ -63,8 +63,9 @@ test('stable Logger/Trend persists profile definitions and logs protocol evidenc
     intervalMs:500,
   });
   service.ingestEvidence({timestamp:1234,sourceType:'Master',direction:'REQ',unitId:2,functionCode:3,connectionId:'c1',rawHex:'010300000001'});
+  service.ingestPoint({timestamp:1300,sourceType:'Sniffer',unitId:2,functionCode:3,address:5,rawValue:55,value:55,quality:'good'});
   assert.equal(service.recentEvents({limit:10}).length,1);
-  assert.equal(service.status().logger.stats.written,1);
+  assert.equal(service.status().logger.stats.written,2);
   service.shutdown();
 
   const state2=new FakeState(),master2=new FakeMaster();
@@ -72,6 +73,8 @@ test('stable Logger/Trend persists profile definitions and logs protocol evidenc
   t.after(()=>{service.shutdown();fs.rmSync(dir,{recursive:true,force:true});});
   assert.equal(service.listProfiles().length,1);
   assert.equal(service.getProfile('persisted').label,'Persisted');
+  assert.deepEqual(service.querySeries('persisted',{maxPoints:100}).map(x=>x.value),[55]);
+  assert.equal(service.status().hydration.recordsLoaded,1);
 });
 
 test('stable Logger/Trend browser workspace loads and parses',()=>{
