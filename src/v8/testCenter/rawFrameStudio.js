@@ -74,6 +74,83 @@ function maskMatches(actual, expected, mask = null) {
   }
   return true;
 }
+function decodeAdu(framing, raw) {
+  if (framing === 'rtu') return protocol.decodeRtuAdu(raw);
+  if (framing === 'ascii') return protocol.decodeAsciiAdu(raw);
+  if (framing === 'tcp') return protocol.decodeTcpAdu(raw);
+  throw new RawFrameStudioError('INVALID_FRAMING', 'framing must be rtu, ascii or tcp', { framing });
+}
+
+function validateResponseSemantics({ framing, requestRaw, responseRaw, policy = 'matching' } = {}) {
+  if (!['matching', 'success'].includes(policy)) {
+    throw new RawFrameStudioError('INVALID_RESPONSE_POLICY', 'responsePolicy must be any, matching or success', { policy });
+  }
+  let request;
+  let response;
+  try {
+    request = decodeAdu(framing, Buffer.from(requestRaw ?? []));
+  } catch (error) {
+    throw new RawFrameStudioError('INVALID_REQUEST_FRAME', 'Cannot semantically validate a malformed request frame', {
+      causeCode: error?.code || null,
+      cause: String(error?.message || error),
+    });
+  }
+  try {
+    response = decodeAdu(framing, Buffer.from(responseRaw ?? []));
+  } catch (error) {
+    throw new RawFrameStudioError('INVALID_RESPONSE_FRAME', 'Response failed Modbus framing/checksum validation', {
+      causeCode: error?.code || null,
+      cause: String(error?.message || error),
+    });
+  }
+
+  if (response.unitId !== request.unitId) {
+    throw new RawFrameStudioError('RESPONSE_UNIT_MISMATCH', 'Response Unit ID does not match the request', {
+      requestUnitId: request.unitId,
+      responseUnitId: response.unitId,
+    });
+  }
+  if (framing === 'tcp' && response.transactionId !== request.transactionId) {
+    throw new RawFrameStudioError('RESPONSE_TID_MISMATCH', 'Response Transaction ID does not match the request', {
+      requestTransactionId: request.transactionId,
+      responseTransactionId: response.transactionId,
+    });
+  }
+
+  const requestFunctionCode = request.pdu[0];
+  const responseFunctionCode = response.pdu[0];
+  if ((responseFunctionCode & 0x7F) !== requestFunctionCode) {
+    throw new RawFrameStudioError('RESPONSE_FUNCTION_MISMATCH', 'Response function does not match the request', {
+      requestFunctionCode,
+      responseFunctionCode,
+    });
+  }
+
+  const exception = Boolean(responseFunctionCode & 0x80);
+  let exceptionCode = null;
+  if (exception) {
+    exceptionCode = protocol.decodeExceptionPdu(response.pdu).exceptionCode;
+    if (policy === 'success') {
+      throw new RawFrameStudioError('MODBUS_EXCEPTION', `Modbus exception ${exceptionCode} returned instead of a successful response`, {
+        requestFunctionCode,
+        responseFunctionCode,
+        exceptionCode,
+      });
+    }
+  }
+
+  return Object.freeze({
+    policy,
+    unitId: response.unitId,
+    functionCode: responseFunctionCode,
+    requestFunctionCode,
+    exception,
+    exceptionCode,
+    transactionId: response.transactionId ?? null,
+    pduHex: Buffer.from(response.pdu).toString('hex').toUpperCase(),
+  });
+}
+
 
 function sleep(ms, signal = null) {
   if (!ms) return Promise.resolve();
@@ -211,9 +288,13 @@ class RawFrameStudio extends EventEmitter {
     confirmation = null,
     expectedHex = null,
     expectedMaskHex = null,
+    responsePolicy = 'any',
     signal = null,
   } = {}) {
     if (signal?.aborted) throw new RawFrameStudioError('ABORTED', 'Operation was aborted');
+    if (!['any', 'matching', 'success'].includes(responsePolicy)) {
+      throw new RawFrameStudioError('INVALID_RESPONSE_POLICY', 'responsePolicy must be any, matching or success', { responsePolicy });
+    }
     const raw = this.prepare({ hex, ascii, bytes, autoChecksum });
     const classification = this.classify(raw);
     let intent = classification.category;
@@ -230,6 +311,7 @@ class RawFrameStudio extends EventEmitter {
     const transmittedAt = Date.now();
     const started = process.hrtime.bigint();
     let response = null;
+    let responseValidation = null;
     let failure = null;
     try {
       await this.broker.transmit(this.connectionId, { ownerId: this.ownerId, bytes: raw, intent });
@@ -242,6 +324,15 @@ class RawFrameStudio extends EventEmitter {
           : null;
         response = await this.broker.receive(this.connectionId, { ownerId: this.ownerId, timeoutMs, signal, match });
         this._emit('traffic.rx', { rawHex: response.toString('hex').toUpperCase(), intent, classification });
+      }
+
+      if (response && responsePolicy !== 'any') {
+        responseValidation = validateResponseSemantics({
+          framing: this.framing,
+          requestRaw: raw,
+          responseRaw: response,
+          policy: responsePolicy,
+        });
       }
 
       if (expectedHex != null) {
@@ -263,6 +354,7 @@ class RawFrameStudio extends EventEmitter {
         classification,
         requestRaw: Buffer.from(raw),
         responseRaw: response ? Buffer.from(response) : null,
+        responseValidation,
         rttMs: response ? Number(process.hrtime.bigint() - started) / 1e6 : null,
       });
     } catch (error) {
@@ -275,6 +367,7 @@ class RawFrameStudio extends EventEmitter {
         classification,
         requestRawHex: raw.toString('hex').toUpperCase(),
         responseRawHex: response?.toString('hex').toUpperCase() || null,
+        responseValidation,
         result: failure ? 'failed' : 'success',
         error: failure ? { code: failure.code || null, message: String(failure.message || failure) } : null,
       });
@@ -326,4 +419,6 @@ module.exports = {
   NORMAL_READ_FUNCTIONS,
   parseHexText,
   maskMatches,
+  decodeAdu,
+  validateResponseSemantics,
 };
