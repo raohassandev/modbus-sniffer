@@ -139,6 +139,18 @@ function cloneJson(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
+function publicConfig(config, { forExport = false } = {}) {
+  if (!config) return null;
+  const out = cloneJson(config);
+  if (out.tls) {
+    const hasKey = Boolean(config.tls?.key);
+    out.tls.key = null;
+    out.tls.keyConfigured = hasKey;
+    if (forExport) out.tls.credentialsRequired = hasKey;
+  }
+  return out;
+}
+
 function sparseArea(area) {
   const out = [];
   const values = area?.values;
@@ -192,7 +204,7 @@ class SlaveRuntime extends EventEmitter {
     return Object.freeze({
       configured: Boolean(this.server && this.config),
       running: Boolean(snapshot?.running),
-      config: this.config ? Object.freeze({ ...this.config }) : null,
+      config: this.config ? Object.freeze(publicConfig(this.config)) : null,
       server: snapshot,
       devices: Object.freeze(this.listDevices()),
       clients: Object.freeze(this.listClients()),
@@ -247,7 +259,7 @@ class SlaveRuntime extends EventEmitter {
     }
     if (this.server.running) return this.status();
     await this.server.start();
-    this._recordSynthetic('slave.started', { config: this.config, unitIds: this.server.snapshot().unitIds });
+    this._recordSynthetic('slave.started', { config: publicConfig(this.config), unitIds: this.server.snapshot().unitIds });
     return this.status();
   }
 
@@ -402,7 +414,7 @@ class SlaveRuntime extends EventEmitter {
     return Object.freeze({
       schemaVersion: 1,
       exportedAt: new Date().toISOString(),
-      config: this.config ? (() => { const out=cloneJson(this.config); if(out?.tls){ out.tls.key=null; out.tls.credentialsRequired=true; } return out; })() : null,
+      config: publicConfig(this.config, { forExport: true }),
       devices: this._captureDeviceDefinitions(),
     });
   }
@@ -543,4 +555,5 @@ module.exports = {
   framingForType,
   isSerialType,
   isNetworkType,
+  publicConfig,
 };
