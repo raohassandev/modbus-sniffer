@@ -85,17 +85,36 @@ function compareCaptures(leftCapture,rightCapture){
     registerDiff,
   });
 }
+function indexEvidenceOccurrences(evidence=[]){
+  const counts=new Map();
+  return evidence.map((row,index)=>{
+    const stepId=String(row?.stepId??'');
+    const occurrence=(counts.get(stepId)||0)+1;
+    counts.set(stepId,occurrence);
+    return Object.freeze({
+      key:`${stepId}#${occurrence}`,
+      stepId,
+      occurrence,
+      index,
+      row,
+    });
+  });
+}
 function compareTestRuns(left={},right={}){
   const evidenceA=Array.isArray(left.evidence)?left.evidence:[];
   const evidenceB=Array.isArray(right.evidence)?right.evidence:[];
-  const mapA=new Map(evidenceA.map(row=>[String(row.stepId),row])),mapB=new Map(evidenceB.map(row=>[String(row.stepId),row]));
-  const stepIds=sorted([...mapA.keys(),...mapB.keys()]);
+  const indexedA=indexEvidenceOccurrences(evidenceA),indexedB=indexEvidenceOccurrences(evidenceB);
+  const mapA=new Map(indexedA.map(item=>[item.key,item])),mapB=new Map(indexedB.map(item=>[item.key,item]));
+  const keys=sorted([...mapA.keys(),...mapB.keys()]);
   const steps=[];
-  for(const stepId of stepIds){
-    const a=mapA.get(stepId),b=mapB.get(stepId);
+  for(const key of keys){
+    const leftItem=mapA.get(key),rightItem=mapB.get(key);
+    const a=leftItem?.row||null,b=rightItem?.row||null;
+    const stepId=leftItem?.stepId??rightItem?.stepId??'';
+    const occurrence=leftItem?.occurrence??rightItem?.occurrence??1;
     let status='unchanged';
     if(!a)status='added';else if(!b)status='removed';else if(a.result!==b.result||JSON.stringify(a.value)!==JSON.stringify(b.value)||a.error?.code!==b.error?.code)status='changed';
-    steps.push({stepId,status,left:a||null,right:b||null});
+    steps.push({key,stepId,occurrence,status,left:a,right:b,leftIndex:leftItem?.index??null,rightIndex:rightItem?.index??null});
   }
   return Object.freeze({
     left:Object.freeze({runId:left.runId||null,recipeId:left.recipeId||null,passed:Boolean(left.passed),elapsedMs:left.elapsedMs??null,steps:evidenceA.length}),
@@ -105,4 +124,4 @@ function compareTestRuns(left={},right={}){
     steps:Object.freeze(steps),
   });
 }
-module.exports={CompareError,captureSummary,compareCaptures,compareRegisterMaps,compareTestRuns,registersFromCapture};
+module.exports={CompareError,captureSummary,compareCaptures,compareRegisterMaps,compareTestRuns,indexEvidenceOccurrences,registersFromCapture};
