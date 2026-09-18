@@ -8,6 +8,7 @@ function statusFor(error) {
     'SLAVE_RUNNING',
     'PASSIVE_CAPTURE_ACTIVE',
     'MASTER_ACTIVE',
+    'RAW_LAB_ACTIVE',
     'DISCOVERY_ACTIVE',
     'RESOURCE_BUSY',
     'CONNECTION_OWNED',
@@ -35,6 +36,8 @@ function installSlaveRoutes({
   disconnectSerial = null,
   masterRuntime = null,
   activeDiscovery = null,
+  getRawLabStatus = null,
+  disconnectRawLab = null,
   broadcast = () => {},
   runtime = new SlaveRuntime(),
 } = {}) {
@@ -79,6 +82,19 @@ function installSlaveRoutes({
         );
       }
       await masterRuntime.disconnect();
+    }
+
+    const rawLab = typeof getRawLabStatus === 'function' ? getRawLabStatus() : null;
+    const rawSerial = rawLab?.studio?.connectionState === 'open' && ['rtu', 'ascii'].includes(String(rawLab.config?.type || '').toLowerCase());
+    if (rawSerial && sameSerialPort(rawLab.config?.path, config.path)) {
+      if (body.confirmRawLabClose !== true) {
+        throw new SlaveRuntimeError(
+          'RAW_LAB_ACTIVE',
+          `Raw Frame Lab currently owns ${config.path}. Confirm closing Raw Lab before starting Slave mode.`,
+          { port: config.path, requiresConfirmation: true }
+        );
+      }
+      if (typeof disconnectRawLab === 'function') await disconnectRawLab();
     }
 
     const discovery = activeDiscovery?.status?.() || {};
