@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const net = require('net');
 const express = require('express');
 const { WebSocketServer, WebSocket } = require('ws');
 const { PortManager } = require('./portManager');
@@ -56,9 +57,25 @@ function validateSerialConfig(body) {
   return { port, baudRate, dataBits, stopBits, parity, reconnectMs, requestTimeoutMs };
 }
 
+function normalizedHostname(host){
+  const raw=String(host||'').trim();
+  if(!raw)return '';
+  try{return new URL(`http://${raw}`).hostname.replace(/^\[|\]$/g,'').toLowerCase();}
+  catch{return raw.replace(/^\[|\]$/g,'').split(':')[0].toLowerCase();}
+}
+
 function isLoopbackHost(host){
-  const h=String(host||'').trim().toLowerCase();
-  return h==='127.0.0.1'||h==='localhost'||h==='::1'||h==='[::1]';
+  const h=normalizedHostname(host);
+  return h==='localhost'||h==='::1'||/^127(?:\.|$)/.test(h);
+}
+
+function webHostAllowed(hostHeader,bindHost='127.0.0.1'){
+  const host=normalizedHostname(hostHeader);
+  const bind=normalizedHostname(bindHost);
+  if(!host)return false;
+  if(isLoopbackHost(bind))return isLoopbackHost(host);
+  if(bind==='0.0.0.0'||bind==='::')return isLoopbackHost(host)||net.isIP(host)!==0;
+  return isLoopbackHost(host)||host===bind;
 }
 
 function validateTcp(body) {
@@ -101,9 +118,14 @@ function jsonBodyLimitForPath(pathname){
 }
 
 async function startPlatformWebServer({ state, options, configureSerial, disconnectSerial, autoDetectSerial, replay, demo = false, workspaces, history, tcpProxy }) {
+  if(!isLoopbackHost(options.webHost)&&options.confirmWebExternalBind!==true){
+    const error=new Error(`Binding the Modbus Engineering Tool web UI to ${options.webHost} exposes it beyond this computer. Pass --confirm-web-external-bind to acknowledge the exposure.`);
+    error.code='WEB_EXTERNAL_BIND_CONFIRMATION_REQUIRED';
+    throw error;
+  }
   const app = express();
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server, path: '/ws', verifyClient:({origin,req})=>!origin||sameOriginRequest({headers:{...req.headers,origin}}) });
+  const wss = new WebSocketServer({ server, path: '/ws', verifyClient:({origin,req})=>webHostAllowed(req.headers.host,options.webHost)&&(!origin||sameOriginRequest({headers:{...req.headers,origin}})) });
   const publicDir = path.join(__dirname, '..', 'public');
   const baseHtml = fs.readFileSync(path.join(publicDir, 'v4.html'), 'utf8');
   const workbench = baseHtml
@@ -113,6 +135,10 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   const rateBuckets=new Map();
 
   app.disable('x-powered-by');
+  app.use((req,res,next)=>{
+    if(!webHostAllowed(req.headers.host,options.webHost))return res.status(403).json({error:'Host header is not valid for this local Modbus Engineering Tool endpoint.',code:'INVALID_WEB_HOST'});
+    next();
+  });
   app.use((req,res,next) => {
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('X-Frame-Options','DENY');
@@ -399,4 +425,4 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   };
 }
 
-module.exports = { startPlatformWebServer, validateSerialConfig, validateTcp, isLoopbackHost, csvEscape, sameOriginRequest, mutationBodyLimit, jsonBodyLimitForPath };
+module.exports = { startPlatformWebServer, validateSerialConfig, validateTcp, normalizedHostname, isLoopbackHost, webHostAllowed, csvEscape, sameOriginRequest, mutationBodyLimit, jsonBodyLimitForPath };
