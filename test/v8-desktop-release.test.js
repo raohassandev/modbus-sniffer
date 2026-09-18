@@ -13,12 +13,13 @@ const storage = fs.readFileSync(path.join(root, 'desktop/storage.js'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/desktop-windows.yml'), 'utf8');
 const diagnostics = fs.readFileSync(path.join(root, 'docs/DESKTOP_DIAGNOSTICS.md'), 'utf8');
 
-test('normal launch restores the stable Modbus Sniffer and keeps v8 explicit', () => {
+test('normal and compatibility launch commands use the unified Modbus runtime', () => {
   assert.equal(rootPackage.main, 'src/index-v7.js');
   assert.equal(rootPackage.scripts.start, 'node src/index-v7.js');
   assert.equal(rootPackage.scripts.sniffer, 'node src/index-v7.js');
-  assert.equal(rootPackage.scripts.workbench, 'node src/index-v8.js');
-  assert.equal(rootPackage.scripts.v8, 'node src/index-v8.js');
+  assert.equal(rootPackage.scripts.workbench, 'node src/index-v7.js');
+  assert.equal(rootPackage.scripts.v8, 'node src/index-v7.js');
+  assert.equal(rootPackage.scripts['v8:cli'], undefined);
 });
 
 test('desktop defaults to stable sniffer while retaining explicit v8 opt-in and diagnostics', () => {
