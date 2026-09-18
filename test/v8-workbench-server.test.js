@@ -33,7 +33,11 @@ test('v8 shell serves status, safe project UI preferences and connection lifecyc
 
   const shell = await fetch(`${base}/v8/`);
   assert.equal(shell.status, 200);
-  assert.match(await shell.text(), /Modbus Engineering Workbench/);
+  const shellHtml=await shell.text();
+  assert.match(shellHtml, /Modbus Engineering Tool/);
+  assert.match(shellHtml, /Compatibility Lab/);
+  assert.match(shellHtml, /internal compatibility lab/);
+  assert.doesNotMatch(shellHtml, /experimental Modbus-only integration/);
 
   const status = await json(`${base}/api/v8/status`);
   assert.equal(status.response.status, 200);
