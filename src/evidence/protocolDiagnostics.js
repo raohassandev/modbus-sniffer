@@ -40,7 +40,12 @@ function jsonSafe(value){
 }
 function framingOf(row){
   const transport=String(row.transport||row.channel?.transport||'').toUpperCase();
+  // Explicit encapsulation metadata is authoritative. In particular, an
+  // 8-byte RTU read request can accidentally resemble an MBAP header when
+  // bytes 2..5 happen to be 00 00 00 02, so raw-byte heuristics must never
+  // override an explicit RTU/ASCII transport label.
   if(transport.includes('ASCII'))return 'ascii';
+  if(transport.includes('RTU'))return 'rtu';
   if(transport.includes('TCP')||transport.includes('TLS')||transport.includes('UDP'))return 'tcp';
   const raw=String(row.rawHex||'').replace(/\s+/g,'');
   if(raw.startsWith('3A'))return 'ascii';
