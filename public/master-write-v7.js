@@ -20,7 +20,7 @@
     <dialog id="masterWriteDialog" class="master-write-dialog">
       <form id="masterWriteForm" method="dialog">
         <div class="master-write-head">
-          <div><h3>Guarded Modbus Write</h3><p>FC05 / FC06 / FC15 / FC16 / FC22 / FC23 with explicit confirmation, automatic re-lock and write audit.</p></div>
+          <div><h3>Guarded Modbus Write</h3><p>FC05 / FC06 / FC15 / FC16 / FC21 / FC22 / FC23 with explicit confirmation, automatic re-lock and write audit.</p></div>
           <button type="button" class="master-secondary" id="masterWriteClose">×</button>
         </div>
 
@@ -31,14 +31,14 @@
             <option value="5">FC05 — Write Single Coil</option>
             <option value="16">FC16 — Write Multiple Registers</option>
             <option value="15">FC15 — Write Multiple Coils</option>
-            <option value="22">FC22 — Mask Write Register</option>
+            <option value="21">FC21 — Write File Record</option>\n            <option value="22">FC22 — Mask Write Register</option>
             <option value="23">FC23 — Read/Write Multiple Registers</option>
           </select></label>
           <label id="masterWriteAddressLabel">Address<input id="masterWriteAddress" type="number" min="0" max="65535" value="0"></label>
           <label id="masterWriteValueLabel">Value<input id="masterWriteValue" placeholder="0..65535"></label>
 
           <label id="masterWriteValuesLabel" hidden>Values (comma/space separated)<textarea id="masterWriteValues" rows="3" placeholder="100, 200, 300"></textarea></label>
-          <label id="masterWriteAndMaskLabel" hidden>AND Mask<input id="masterWriteAndMask" value="65535"></label>
+          <label id="masterWriteFileRecordsLabel" class="master-write-wide" hidden>FC21 records JSON<textarea id="masterWriteFileRecords" rows="4">[\n  {"fileNumber":0,"recordNumber":0,"values":[1,2]}\n]</textarea></label>\n          <label id="masterWriteAndMaskLabel" hidden>AND Mask<input id="masterWriteAndMask" value="65535"></label>
           <label id="masterWriteOrMaskLabel" hidden>OR Mask<input id="masterWriteOrMask" value="0"></label>
           <label id="masterWriteReadAddressLabel" hidden>FC23 Read Address<input id="masterWriteReadAddress" type="number" min="0" max="65535" value="0"></label>
           <label id="masterWriteReadQtyLabel" hidden>FC23 Read Quantity<input id="masterWriteReadQty" type="number" min="1" max="125" value="1"></label>
@@ -101,8 +101,8 @@
   }
 
   function showFields(){
-    const code=Number(fc.value),bulk=[15,16,23].includes(code),broadcast=Number(unit.value)===0;
-    q('masterWriteValuesLabel').hidden=![15,16,23].includes(code);
+    const code=Number(fc.value),bulk=[15,16,21,23].includes(code),broadcast=Number(unit.value)===0;
+    q('masterWriteValuesLabel').hidden=![15,16,23].includes(code);\n    q('masterWriteFileRecordsLabel').hidden=code!==21;
     q('masterWriteValueLabel').hidden=![5,6].includes(code);
     q('masterWriteAndMaskLabel').hidden=code!==22;
     q('masterWriteOrMaskLabel').hidden=code!==22;
@@ -123,7 +123,7 @@
     if(code===6){const n=Number(q('masterWriteValue').value);if(!Number.isInteger(n)||n<0||n>65535)throw new Error('FC06 value must be 0..65535.');payload.value=n;}
     if(code===15)payload.values=parseValues(q('masterWriteValues').value,{coil:true});
     if(code===16)payload.values=parseValues(q('masterWriteValues').value);
-    if(code===22){
+    if(code===21){\n      let records;\n      try{records=JSON.parse(q('masterWriteFileRecords').value);}catch{throw new Error('FC21 records must be valid JSON.');}\n      if(!Array.isArray(records)||!records.length)throw new Error('FC21 records JSON must be a non-empty array.');\n      payload.records=records;\n    }\n    if(code===22){
       const andMask=Number(q('masterWriteAndMask').value),orMask=Number(q('masterWriteOrMask').value);
       if(!Number.isInteger(andMask)||andMask<0||andMask>65535)throw new Error('AND mask must be 0..65535.');
       if(!Number.isInteger(orMask)||orMask<0||orMask>65535)throw new Error('OR mask must be 0..65535.');
@@ -137,7 +137,7 @@
     }
     payload.confirmation={
       confirmed:q('masterWriteConfirm').checked,
-      bulk:[15,16,23].includes(code)?q('masterWriteBulkConfirm').checked:false,
+      bulk:[15,16,21,23].includes(code)?q('masterWriteBulkConfirm').checked:false,
       broadcast:unitId===0?q('masterWriteBroadcastConfirm').checked:false
     };
     return payload;
@@ -149,7 +149,7 @@
       const connectionType=q('masterConnectionType')?.querySelector('button.active')?.textContent?.trim()||'Connection';
       let values='—';
       if([5,6].includes(code))values=q('masterWriteValue').value||'—';
-      else if([15,16,23].includes(code))values=q('masterWriteValues').value||'—';
+      else if([15,16,23].includes(code))values=q('masterWriteValues').value||'—';\n      else if(code===21)values=q('masterWriteFileRecords').value||'—';
       else if(code===22)values=`AND ${q('masterWriteAndMask').value} / OR ${q('masterWriteOrMask').value}`;
       q('masterWritePreview').innerHTML=`<strong>Target:</strong> ${esc(connectionType)} · Unit ${unitId} · FC${String(code).padStart(2,'0')} · Address ${address}<br><strong>Requested:</strong> ${esc(values)}`;
     }catch{/* preview is advisory */}
@@ -174,7 +174,7 @@
     try{
       const payload=summaryPayload();
       if(!payload.confirmation.confirmed)throw new Error('Confirm the final transmission checkbox before sending.');
-      if(payload.confirmation.bulk!==true&&[15,16,23].includes(payload.functionCode))throw new Error('Confirm the bulk-write checkbox.');
+      if(payload.confirmation.bulk!==true&&[15,16,21,23].includes(payload.functionCode))throw new Error('Confirm the bulk-write checkbox.');
       if(payload.unitId===0&&payload.confirmation.broadcast!==true)throw new Error('Confirm the Unit 0 broadcast checkbox.');
       q('masterWriteSend').disabled=true;
       q('masterWriteResult').hidden=false;
@@ -226,7 +226,7 @@
 
   fc.addEventListener('change',showFields);
   unit.addEventListener('input',showFields);
-  for(const id of ['masterWriteAddress','masterWriteValue','masterWriteValues','masterWriteAndMask','masterWriteOrMask','masterWriteReadAddress','masterWriteReadQty'])q(id)?.addEventListener('input',updatePreview);
+  for(const id of ['masterWriteAddress','masterWriteValue','masterWriteValues','masterWriteFileRecords','masterWriteAndMask','masterWriteOrMask','masterWriteReadAddress','masterWriteReadQty'])q(id)?.addEventListener('input',updatePreview);
   q('masterOpenWrite').addEventListener('click',openDialog);
   q('masterWriteClose').addEventListener('click',()=>dialog.close());
   q('masterWriteCancel').addEventListener('click',()=>dialog.close());
