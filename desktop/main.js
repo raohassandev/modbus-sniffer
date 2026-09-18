@@ -115,13 +115,29 @@ function startBackend(dataDir, selectedPort) {
 
 function waitReady(selectedPort, retries = 80) {
   const pathName = healthPath();
+  const expectedVersion = app.getVersion();
   return new Promise((resolve, reject) => {
     const ping = () => {
       const req = http.get(`http://127.0.0.1:${selectedPort}${pathName}`, res => {
-        res.resume();
-        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 500) resolve();
-        else if (--retries <= 0) reject(new Error(`Backend health check returned HTTP ${res.statusCode}.`));
-        else setTimeout(ping, 250);
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', chunk => { if (body.length < 1024 * 1024) body += chunk; });
+        res.on('end', () => {
+          if (res.statusCode === 200) {
+            try {
+              const status = JSON.parse(body);
+              if (status.productName !== 'Modbus Engineering Tool') throw new Error(`unexpected product name ${status.productName || 'missing'}`);
+              if (status.productVersion !== expectedVersion) throw new Error(`unexpected product version ${status.productVersion || 'missing'}; expected ${expectedVersion}`);
+              resolve();
+              return;
+            } catch (error) {
+              reject(new Error(`Backend health identity check failed: ${error.message}`));
+              return;
+            }
+          }
+          if (--retries <= 0) reject(new Error(`Backend health check returned HTTP ${res.statusCode}.`));
+          else setTimeout(ping, 250);
+        });
       });
       req.on('error', () => {
         if (--retries <= 0) reject(new Error('Backend did not start.'));
