@@ -408,10 +408,26 @@ class MasterRuntime extends EventEmitter {
       this.stats.lastRttMs = result.rttMs ?? null;
       this.stats.lastReadAt = this.now();
       this.stats.lastError = null;
+      const rows = Object.freeze(buildReadRows(request, result.decoded));
+      const timestamp = this.now();
+      for (const row of rows) {
+        this.emit('point', Object.freeze({
+          sourceType: 'Master',
+          sourceKey: `master|${this.connectionId}|${request.unitId}|${request.functionCode}|${row.address}`,
+          connectionId: this.connectionId,
+          unitId: request.unitId,
+          functionCode: request.functionCode,
+          address: row.address,
+          rawValue: row.rawValue,
+          value: row.value,
+          timestamp,
+          quality: 'good',
+        }));
+      }
       return Object.freeze({
         ok: true,
         request,
-        rows: Object.freeze(buildReadRows(request, result.decoded)),
+        rows,
         rttMs: result.rttMs,
         requestRawHex: result.requestRaw ? Buffer.from(result.requestRaw).toString('hex').toUpperCase() : null,
         responseRawHex: result.responseRaw ? Buffer.from(result.responseRaw).toString('hex').toUpperCase() : null,
