@@ -50,6 +50,8 @@ http://127.0.0.1:8080
 
 The desktop application also launches the same unified runtime.
 
+`src/index-v7.js` is the unified runtime entrypoint used by the normal, compatibility and desktop launch paths.
+
 ## First-use workflows
 
 ### Sniffer
