@@ -79,8 +79,8 @@ function normalizeConnectionConfig(input = {}) {
   return Object.freeze({ type, path, baudRate, dataBits, stopBits, parity, timeoutMs, echoSuppression, retries, retryDelayMs, interRequestDelayMs, rtsTxMode, rtsSettleMs });
 }
 
-function normalizeReadRequest(input = {}) {
-  const unitId = intInRange(input.unitId ?? input.slaveId ?? 1, 1, 247, 'unitId');
+function normalizeReadRequest(input = {}, framing = 'rtu') {
+  const unitId = intInRange(input.unitId ?? input.slaveId ?? 1, 1, framing === 'tcp' ? 255 : 247, 'unitId');
   const functionCode = intInRange(input.functionCode ?? 3, 1, 4, 'functionCode');
   if (!READ_FUNCTIONS.has(functionCode)) {
     throw new MasterRuntimeError('INVALID_FUNCTION_CODE', 'Master basic read supports FC01, FC02, FC03 and FC04', { functionCode });
@@ -429,7 +429,7 @@ class MasterRuntime extends EventEmitter {
     if (!this.engine || !this.connectionId) {
       throw new MasterRuntimeError('MASTER_NOT_CONNECTED', 'Connect the Modbus Master before reading');
     }
-    const request = normalizeReadRequest(input);
+    const request = normalizeReadRequest(input, this.config?.type || 'rtu');
     const pdu = protocol.encodeReadRequest({
       functionCode: request.functionCode,
       address: request.address,
