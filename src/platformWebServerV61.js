@@ -370,7 +370,31 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(options.webPort,options.webHost,resolve); });
   return {
     url:`http://${options.webHost==='0.0.0.0'?'127.0.0.1':options.webHost}:${options.webPort}`,
-    close:async()=>{ discoveryEngineering.dispose?.(); rawLab.off('event',onRawLabEvent); await rawLab.dispose?.(); loggerTrend.dispose?.(); testSequences.dispose?.(); masterRuntime.off('event',onMasterEvent); slaveRuntime.off('event',onSlaveEvent); testSequences.off('event',onTestSequenceEvent); activeDiscovery.off('evidence',onDiscoveryEvidence); activeDiscovery.off('status',onDiscoveryStatus); await masterRuntime.disconnect(); await slaveRuntime.shutdown(); await activeDiscovery.close(); await tcpProxy.stop(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
+    close:async()=>{
+      rawLab.off('event',onRawLabEvent);
+      masterRuntime.off('event',onMasterEvent);
+      slaveRuntime.off('event',onSlaveEvent);
+      testSequences.off('event',onTestSequenceEvent);
+      activeDiscovery.off('evidence',onDiscoveryEvidence);
+      activeDiscovery.off('status',onDiscoveryStatus);
+      for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn);
+
+      const cleanup=await Promise.allSettled([
+        Promise.resolve().then(()=>discoveryEngineering.dispose?.()),
+        Promise.resolve().then(()=>rawLab.dispose?.()),
+        Promise.resolve().then(()=>loggerTrend.dispose?.()),
+        Promise.resolve().then(()=>testSequences.dispose?.()),
+        Promise.resolve().then(()=>masterRuntime.disconnect()),
+        Promise.resolve().then(()=>slaveRuntime.shutdown()),
+        Promise.resolve().then(()=>activeDiscovery.close()),
+        Promise.resolve().then(()=>tcpProxy.stop())
+      ]);
+
+      for(const ws of wss.clients)ws.close();
+      await new Promise(resolve=>server.close(resolve));
+      const failed=cleanup.find(result=>result.status==='rejected');
+      if(failed)throw failed.reason;
+    }
   };
 }
 
