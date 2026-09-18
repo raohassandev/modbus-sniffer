@@ -14,6 +14,7 @@ const { UdpClientTransport, UdpServerTransport } = require('./v8/transports/udpT
 const protocol = require('./v8/protocol');
 const { VirtualSlaveServer } = require('./v8/slave/virtualSlaveServer');
 const { VirtualDevice, VirtualDeviceError, MemoryArea, normalizeWritableAreas } = require('./v8/slave/virtualDevice');
+const { WriteAuditTrail, WriteSafetyController, WriteSafetyError, describeWritePdu } = require('./v8/master/writeSafety');
 
 module.exports = Object.freeze({
   ConnectionBroker,
@@ -31,4 +32,8 @@ module.exports = Object.freeze({
   VirtualDeviceError,
   MemoryArea,
   normalizeWritableAreas,
+  WriteAuditTrail,
+  WriteSafetyController,
+  WriteSafetyError,
+  describeWritePdu,
 });
