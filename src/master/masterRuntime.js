@@ -152,7 +152,7 @@ function coilValue(value, field) {
 function normalizeWriteRequest(input = {}, framing = 'rtu') {
   const functionCode = intInRange(input.functionCode, 1, 255, 'functionCode');
   if (!WRITE_FUNCTIONS.has(functionCode)) {
-    throw new MasterRuntimeError('INVALID_FUNCTION_CODE', 'Guarded writes support FC05, FC06, FC15, FC16, FC22 and FC23', { functionCode });
+    throw new MasterRuntimeError('INVALID_FUNCTION_CODE', 'Guarded writes support FC05, FC06, FC15, FC16, FC21, FC22 and FC23', { functionCode });
   }
   const unitMin = framing === 'tcp' ? 1 : 0;
   const unitMax = framing === 'tcp' ? 255 : 247;
