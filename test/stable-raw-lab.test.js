@@ -34,6 +34,60 @@ test('Raw Frame Studio appends RTU CRC and validates expected masked response',a
   await studio.close();await pair.b.close();
 });
 
+test('Raw Frame Studio semantic response policy rejects exception where success is required',async()=>{
+  const pair=VirtualLoopbackTransport.createPair();
+  const broker=new ConnectionBroker();
+  broker.defineConnection({connectionId:'semantic-success',resourceKey:'loop:semantic-success',transportKind:'virtual',transport:pair.a,exclusive:true});
+  const studio=new RawFrameStudio({broker,connectionId:'semantic-success',ownerId:'test-semantic',framing:'rtu'});
+  await pair.b.open();await studio.open();
+  const responder=(async()=>{
+    const req=await pair.b.receive({timeoutMs:500});
+    const adu=protocol.decodeRtuAdu(req);
+    await pair.b.send(protocol.encodeRtuAdu(adu.unitId,Buffer.from([0x83,0x02])));
+  })();
+  await assert.rejects(
+    ()=>studio.send({hex:'01 03 00 00 00 01',autoChecksum:true,timeoutMs:500,responsePolicy:'success'}),
+    error=>error?.code==='MODBUS_EXCEPTION'&&error?.details?.exceptionCode===2
+  );
+  await responder;await studio.close();await pair.b.close();
+});
+
+test('Raw Frame Studio matching policy accepts a matching Modbus exception as evidence',async()=>{
+  const pair=VirtualLoopbackTransport.createPair();
+  const broker=new ConnectionBroker();
+  broker.defineConnection({connectionId:'semantic-exception',resourceKey:'loop:semantic-exception',transportKind:'virtual',transport:pair.a,exclusive:true});
+  const studio=new RawFrameStudio({broker,connectionId:'semantic-exception',ownerId:'test-semantic',framing:'rtu'});
+  await pair.b.open();await studio.open();
+  const responder=(async()=>{
+    const req=await pair.b.receive({timeoutMs:500});
+    const adu=protocol.decodeRtuAdu(req);
+    await pair.b.send(protocol.encodeRtuAdu(adu.unitId,Buffer.from([0x83,0x03])));
+  })();
+  const result=await studio.send({hex:'01 03 00 00 00 00',autoChecksum:true,timeoutMs:500,responsePolicy:'matching'});
+  await responder;
+  assert.equal(result.responseValidation.exception,true);
+  assert.equal(result.responseValidation.exceptionCode,3);
+  assert.equal(result.responseValidation.requestFunctionCode,3);
+  await studio.close();await pair.b.close();
+});
+
+test('Raw Frame Studio semantic matching rejects a response from the wrong Unit',async()=>{
+  const pair=VirtualLoopbackTransport.createPair();
+  const broker=new ConnectionBroker();
+  broker.defineConnection({connectionId:'semantic-unit',resourceKey:'loop:semantic-unit',transportKind:'virtual',transport:pair.a,exclusive:true});
+  const studio=new RawFrameStudio({broker,connectionId:'semantic-unit',ownerId:'test-semantic',framing:'rtu'});
+  await pair.b.open();await studio.open();
+  const responder=(async()=>{
+    await pair.b.receive({timeoutMs:500});
+    await pair.b.send(protocol.encodeRtuAdu(2,protocol.encodeReadRegistersResponse({values:[7]})));
+  })();
+  await assert.rejects(
+    ()=>studio.send({hex:'01 03 00 00 00 01',autoChecksum:true,timeoutMs:500,responsePolicy:'matching'}),
+    error=>error?.code==='RESPONSE_UNIT_MISMATCH'
+  );
+  await responder;await studio.close();await pair.b.close();
+});
+
 test('Raw Frame Studio refuses malformed raw frame until LAB armed',async()=>{
   const pair=VirtualLoopbackTransport.createPair();
   const broker=new ConnectionBroker();
