@@ -32,7 +32,8 @@ test('desktop launches only the unified runtime and retains diagnostics', () => 
   assert.match(main, /uncaughtExceptionMonitor/);
   assert.match(main, /render-process-gone/);
   assert.match(main, /BACKEND-ERROR/);
-  assert.equal(desktopPackage.build.productName, 'Modbus Sniffer');
+  assert.equal(desktopPackage.build.productName, 'Modbus Engineering Tool');
+  assert.equal(desktopPackage.build.artifactName, 'Modbus-Engineering-Tool-Setup-${version}.${ext}');
 });
 
 test('desktop data migration preserves an existing destination and reports migration', () => {
@@ -47,11 +48,11 @@ test('Windows packaging workflow smoke-tests stable Sniffer and emits provenance
   assert.match(workflow, /npm prune --omit=dev/);
   assert.match(workflow, /npm audit --omit=dev --audit-level=high/);
   assert.match(workflow, /http:\/\/127\.0\.0\.1:18787\/api\/status/);
-  assert.match(workflow, /product=Modbus Sniffer/);
+  assert.match(workflow, /product=Modbus Engineering Tool/);
   assert.match(workflow, /runtime=unified-modbus-engineering-tool/);
   assert.doesNotMatch(workflow, /experimental_runtime=/);
   assert.match(workflow, /SHA256SUMS\.txt/);
-  assert.match(workflow, /modbus-sniffer-windows/);
+  assert.match(workflow, /modbus-engineering-tool-windows/);
 });
 
 test('desktop support documentation identifies userData storage and external Windows acceptance', () => {
