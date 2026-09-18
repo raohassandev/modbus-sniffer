@@ -9,8 +9,8 @@ const { MasterEngine } = require('./v8/master/masterEngine');
 const { SerialTransport } = require('./v8/transports/serialTransport');
 const { TcpClientTransport } = require('./v8/transports/tcpClientTransport');
 const { TcpServerTransport } = require('./v8/transports/tcpServerTransport');
-const { TlsTransport } = require('./v8/transports/tlsTransport');
-const { UdpTransport } = require('./v8/transports/udpTransport');
+const { TlsClientTransport, TlsServerTransport } = require('./v8/transports/tlsTransport');
+const { UdpClientTransport, UdpServerTransport } = require('./v8/transports/udpTransport');
 const protocol = require('./v8/protocol');
 
 module.exports = Object.freeze({
@@ -19,7 +19,9 @@ module.exports = Object.freeze({
   SerialTransport,
   TcpClientTransport,
   TcpServerTransport,
-  TlsTransport,
-  UdpTransport,
+  TlsClientTransport,
+  TlsServerTransport,
+  UdpClientTransport,
+  UdpServerTransport,
   protocol,
 });
