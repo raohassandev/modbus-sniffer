@@ -18,6 +18,7 @@ const { VirtualSlaveServer } = require('./v8/slave/virtualSlaveServer');
 const { VirtualDevice, VirtualDeviceError, MemoryArea, normalizeWritableAreas } = require('./v8/slave/virtualDevice');
 const { WriteAuditTrail, WriteSafetyController, WriteSafetyError, describeWritePdu } = require('./v8/master/writeSafety');
 const registerCodec = require('./register/registerCodec');
+const { RawFrameStudio, RawFrameStudioError, parseHexText, maskMatches } = require('./v8/testCenter/rawFrameStudio');
 
 module.exports = Object.freeze({
   ConnectionBroker,
@@ -44,4 +45,8 @@ module.exports = Object.freeze({
   WriteSafetyError,
   describeWritePdu,
   registerCodec,
+  RawFrameStudio,
+  RawFrameStudioError,
+  parseHexText,
+  maskMatches,
 });
