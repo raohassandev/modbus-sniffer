@@ -1,5 +1,6 @@
 'use strict';
 
+const { EventEmitter } = require('node:events');
 const {
   ConnectionBroker,
   MasterEngine,
@@ -253,13 +254,14 @@ function defaultTransportFactory(config) {
   });
 }
 
-class MasterRuntime {
+class MasterRuntime extends EventEmitter {
   constructor({
     transportFactory = defaultTransportFactory,
     brokerFactory = () => new ConnectionBroker(),
     engineFactory = (options) => new MasterEngine(options),
     now = () => Date.now(),
   } = {}) {
+    super();
     this.transportFactory = transportFactory;
     this.brokerFactory = brokerFactory;
     this.engineFactory = engineFactory;
@@ -270,6 +272,7 @@ class MasterRuntime {
     this.connectionId = null;
     this.writeAudit = new WriteAuditTrail();
     this.safety = null;
+    this._engineEventRelay = null;
     this.stats = this._newStats();
   }
 
@@ -351,6 +354,9 @@ class MasterRuntime {
     }
 
     const safety = new WriteSafetyController({ master: engine, auditTrail: this.writeAudit, userId: 'stable-local-user', sessionId: 'stable-master' });
+    const relay = (event) => this.emit('event', event);
+    engine.on('event', relay);
+    this._engineEventRelay = relay;
     this.broker = broker;
     this.engine = engine;
     this.safety = safety;
@@ -364,6 +370,9 @@ class MasterRuntime {
   async disconnect() {
     const engine = this.engine;
     const safety = this.safety;
+    const relay = this._engineEventRelay;
+    if (engine && relay) engine.off('event', relay);
+    this._engineEventRelay = null;
     if (safety && engine) { try { safety.lock({ reason: 'disconnect' }); } catch { /* already locked/offline */ } }
     this.engine = null;
     this.safety = null;
