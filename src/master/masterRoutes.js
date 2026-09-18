@@ -4,7 +4,7 @@ const { MasterRuntime, normalizeConnectionConfig } = require('./masterRuntime');
 
 function errorStatus(error) {
   if (['MASTER_NOT_CONNECTED'].includes(error?.code)) return 409;
-  if (['PASSIVE_CAPTURE_ACTIVE'].includes(error?.code)) return 409;
+  if (['PASSIVE_CAPTURE_ACTIVE', 'SLAVE_ACTIVE'].includes(error?.code)) return 409;
   if (['TIMEOUT'].includes(error?.code)) return 504;
   if (['MODBUS_EXCEPTION'].includes(error?.code)) return 502;
   if (String(error?.code || '').startsWith('INVALID_')) return 400;
@@ -25,6 +25,8 @@ function installMasterRoutes({
   disconnectSerial,
   demo = false,
   runtime = new MasterRuntime(),
+  getSlaveStatus = null,
+  disconnectSlave = null,
 } = {}) {
   if (!app) throw new TypeError('app is required');
 
@@ -60,6 +62,19 @@ function installMasterRoutes({
           }
           if (typeof disconnectSerial === 'function') await disconnectSerial();
         }
+
+        const slave = typeof getSlaveStatus === 'function' ? getSlaveStatus() : null;
+        const slaveSerial = slave?.running && ['rtu', 'ascii'].includes(String(slave.config?.type || '').toLowerCase());
+        const slaveSamePort = slaveSerial && String(slave.config?.path || '').toLowerCase() === String(config.path || '').toLowerCase();
+        if (slaveSamePort) {
+          if (req.body?.confirmSlaveStop !== true) {
+            const error = new Error(`Modbus Slave currently owns ${config.path}. Confirm stopping Slave before starting Master mode.`);
+            error.code = 'SLAVE_ACTIVE';
+            error.details = { port: config.path, requiresConfirmation: true };
+            throw error;
+          }
+          if (typeof disconnectSlave === 'function') await disconnectSlave();
+        }
       }
 
       const result = await runtime.connect(config);
@@ -81,6 +96,30 @@ function installMasterRoutes({
   app.post('/api/master/read', async (req, res) => {
     try {
       res.json(await runtime.read(req.body || {}));
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post('/api/master/write', async (req, res) => {
+    try {
+      res.json(await runtime.write(req.body || {}));
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.get('/api/master/write-audit', (req, res) => {
+    try {
+      res.json(runtime.writeAuditEntries({ limit: Number(req.query.limit || 200) }));
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post('/api/master/stats/reset', (_req, res) => {
+    try {
+      res.json({ ok: true, ...runtime.resetStats() });
     } catch (error) {
       sendError(res, error);
     }
