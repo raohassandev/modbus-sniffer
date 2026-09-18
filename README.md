@@ -1,29 +1,29 @@
-# Modbus Sniffer
+# Modbus Engineering Tool
 
-A field-oriented Modbus engineering tool for observing, decoding and reverse-engineering Modbus RTU/RS485 and Modbus TCP traffic.
+A field-oriented advanced Modbus engineering application for **testing, simulation, sniffing, traffic analysis, reverse engineering, protocol research, troubleshooting and evidence**.
+
+## Product boundary
+
+This project is intentionally Modbus-only.
+
+It is **not** a generic HMI, SCADA, PLC-programming, plant-automation, historian or IoT-dashboard product.
+
+The canonical scope audit is:
+
+`docs/MODBUS_ONLY_PRODUCT_AUDIT.md`
 
 ## Current product status
 
-The **stable Sniffer / Analyzer is the default product again**.
-
-The experimental v8 Workbench remains in this branch for continued Master/Slave development, but it is **not** the normal entry point and PR #31 is not release-eligible yet.
-
-Normal commands:
+The stable **Sniffer / Analyzer** remains the default product while Master and Slave are being integrated into the same accepted experience.
 
 ```bash
 npm start
 ```
 
-or explicitly:
+or:
 
 ```bash
 npm run sniffer
-```
-
-Both start the accepted Sniffer / Analyzer runtime:
-
-```text
-src/index-v7.js
 ```
 
 Open:
@@ -32,192 +32,118 @@ Open:
 http://127.0.0.1:8080
 ```
 
-The experimental Workbench is available only when intentionally requested:
+The experimental v8 workspace is still available explicitly:
 
 ```bash
 npm run workbench
 ```
 
-or:
-
-```bash
-npm run v8
-```
-
-Experimental v8 browser endpoint:
-
 ```text
 http://127.0.0.1:8088/v8/
 ```
 
+PR #31 remains experimental and is not release-eligible.
+
 ## Product model
 
-The project is being corrected around three simple primary tools:
+### Sniffer / Analyzer
 
-### 1. Sniffer
+Passive Modbus observation and reverse engineering:
 
-Passive analysis of an existing Modbus bus or TCP exchange.
+- RTU/RS485 capture
+- TCP/proxy analysis
+- request/response decoding
+- Unit/Slave discovery from observed traffic
+- polling interval, RTT, timeout, exception and quality analysis
+- register inference and datatype research
+- capture/replay/export
 
-Use Sniffer when you want to:
+### Master / Client
 
-- listen to existing RTU traffic without polling the device
-- decode requests and responses
-- automatically identify Unit/Slave IDs
-- group registers per device
-- estimate polling intervals
-- measure RTT, timeouts, exceptions and communication quality
-- infer common datatypes / byte orders
-- compare captures and export engineering evidence
+Active Modbus testing:
 
-The normal RTU Sniffer is receive-only by design.
+- RTU / ASCII / TCP
+- multiple polling Monitor Sessions
+- FC01–04 reads
+- guarded writes
+- advanced function-code tests
+- full register datatype/byte-order interpretation
+- discovery, Traffic, Logger and Test Center integration
 
-### 2. Master
+### Slave / Server Simulator
 
-Active Modbus polling, similar to the normal workflow in Modbus Poll / ModScan.
+Controlled Modbus device simulation:
 
-The corrected Master workflow must be:
+- RTU / ASCII / TCP
+- multiple Unit IDs
+- coils, discrete inputs, holding registers and input registers
+- request/write visibility
+- device identity and exception behavior
+- dynamic values and controlled LAB fault/timing behavior
+- Capture-to-Simulator Device Clone
 
-```text
-Connect
-  -> Slave / Unit ID
-  -> Function
-  -> Address
-  -> Quantity
-  -> Poll Interval
-  -> Read Once / Start Polling
-  -> Live Values
-```
+## Advanced Modbus tools
 
-Writes must use the existing guarded write-safety path and must never be silently armed.
+The product roadmap includes only Modbus-related advanced tools:
 
-The v8 Master backend exists, but its UI/workflow is still being simplified before it can become a normal product entry point.
+- Traffic Analyzer
+- Register/Data Lab
+- Discovery & Scan
+- Diagnostics & Conformance
+- Test Center / Raw Frame Studio
+- Device Clone / Capture-to-Simulator
+- Scripted Test Sequences / API
+- Replay / Compare
+- Logger / Trend
+- Reports / Export
+- Transport Lab including UDP/tunnels and Modbus TCP Security/TLS where supported
 
-### 3. Slave
-
-A Modbus slave/server simulator.
-
-The corrected Slave workflow must be:
-
-```text
-Choose RTU / ASCII / TCP server
-  -> configure port/listener
-  -> add Unit ID
-  -> edit Coils / Discrete Inputs / Holding Registers / Input Registers
-  -> Start Server
-  -> observe incoming reads/writes
-```
-
-Dynamic generators and fault injection are advanced/LAB functions, not part of the normal first screen.
+A free-form HMI Builder is out of scope and will be removed from the Modbus product.
 
 ## Install
 
 Requirements:
 
-- Node.js 20 or newer
+- Node.js 20+
 - Windows, Linux or macOS
-- USB-RS485 adapter for live RTU capture
-
-Install:
+- USB-RS485 adapter for live serial work when required
 
 ```bash
 git clone https://github.com/raohassandev/modbus-sniffer.git
 cd modbus-sniffer
 npm install
-```
-
-Run the stable Sniffer:
-
-```bash
 npm start
 ```
 
-## Sniffer serial options
-
-Examples:
-
-```bash
-npm start -- --port COM5 --baud 9600 --parity none
-```
-
-List serial ports:
+## Useful commands
 
 ```bash
 npm run ports
-```
-
-Run demo traffic without hardware:
-
-```bash
 npm run demo
-```
-
-Change web port:
-
-```bash
-npm start -- --web-port 8090
-```
-
-Use another data directory:
-
-```bash
-npm start -- --data-dir data-site-a
-```
-
-## Modbus TCP analyzer
-
-The stable TCP analyzer is an inline forwarding proxy. It forwards existing client/server bytes while analyzing MBAP transactions; it does not fabricate polling requests.
-
-Example options include:
-
-```text
---tcp-proxy
---tcp-listen-host 127.0.0.1
---tcp-listen-port 1502
---tcp-target-host 192.168.1.50
---tcp-target-port 502
-```
-
-## Desktop
-
-The Windows desktop application now defaults to the stable Sniffer runtime.
-
-Development launch:
-
-```bash
+npm test
+npm run workbench
 npm --prefix desktop start
-```
-
-The experimental v8 desktop mode is explicit only:
-
-```text
-MODBUS_DESKTOP_MODE=v8
-```
-
-Windows installer build:
-
-```bash
 npm --prefix desktop run dist:win
 ```
 
 ## Safety
 
-- Passive Sniffer RTU operation must not transmit production requests.
-- Active Master and Discovery operations must remain explicitly separate from passive capture.
+- Passive Sniffer must not silently transmit.
+- Master/Discovery/Test Center active transmissions are explicit.
 - Writes are locked by default.
 - Bulk/broadcast writes require stronger confirmation.
-- Raw/LAB traffic must remain clearly separated from normal validated requests.
-- Persisted configuration must never restore an armed write state.
+- Raw/LAB traffic is clearly separated from validated normal requests.
+- Saved state never restores armed writes or LAB mode.
+- One physical serial resource cannot be silently owned by passive and active runtimes at the same time.
 
-## Development status
+## Active work
 
-PR #31 is currently an **experimental product-recovery branch**, not a release candidate.
+Canonical active checklist:
 
-The active recovery checklist is:
+`docs/ACTIVE_TODO.md`
 
-```text
-docs/ACTIVE_TODO.md
-```
+Master implementation checklist:
 
-The previous v8 planning documents remain useful implementation history, but they no longer override the current product requirement: the application must first make **Sniffer, Master and Slave** obvious and independently usable.
+`docs/MODBUS_MASTER_TODO.md`
 
-Do not merge PR #31 until that product model is implemented, accepted and retested.
+Do not merge PR #31 until the Modbus-only product scope, Sniffer/Master/Slave workflows and applicable exact-head validation are accepted.
