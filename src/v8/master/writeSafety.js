@@ -208,6 +208,44 @@ class WriteSafetyController extends EventEmitter {
     });
   }
 
+  preflight({ unitId, pdu, confirmation = null } = {}) {
+    const descriptor = describeWritePdu(pdu);
+    this._validateConfirmation({ unitId, descriptor, confirmation });
+    return descriptor;
+  }
+
+  auditRejected({ unitId, pdu, error, context = {} } = {}) {
+    let descriptor = null;
+    try { descriptor = describeWritePdu(pdu); } catch { /* keep rejection evidence best-effort */ }
+    const record = this.auditTrail.append({
+      userId: this.userId,
+      sessionId: this.sessionId,
+      connectionId: this.master.connectionId || null,
+      unitId,
+      broadcast: unitId === 0,
+      functionCode: descriptor?.functionCode ?? Buffer.from(pdu || [])[0] ?? null,
+      area: descriptor?.area || null,
+      address: descriptor?.address ?? null,
+      quantity: descriptor?.quantity ?? null,
+      requestedValues: descriptor?.values ? [...descriptor.values] : null,
+      maskWrite: descriptor?.maskWrite ? { andMask: descriptor.andMask, orMask: descriptor.orMask } : null,
+      oldValues: null,
+      pduHex: Buffer.from(pdu || []).toString('hex').toUpperCase(),
+      requestRawHex: null,
+      responseRawHex: null,
+      verification: null,
+      result: 'failed',
+      transmitted: false,
+      preflightRejected: true,
+      error: { code: error?.code || null, message: String(error?.message || error) },
+      elapsedMs: 0,
+      context: context && typeof context === 'object' && !Array.isArray(context) ? { ...context } : {},
+    });
+    this.emit('audit', record);
+    this._emit('write.audit', { auditId: record.auditId, result: record.result, unitId, functionCode: record.functionCode });
+    return record;
+  }
+
   async execute({ unitId, pdu, confirmation = null, captureOldValue = true, readBack = false, context = {} } = {}) {
     const descriptor = describeWritePdu(pdu);
     this._validateConfirmation({ unitId, descriptor, confirmation });
