@@ -47,6 +47,24 @@ function validateStableSequence(recipe, {
   maxExpandedSteps = DEFAULT_MAX_EXPANDED_STEPS,
   maxRepeatDepth = DEFAULT_MAX_REPEAT_DEPTH,
 } = {}) {
+  if (recipe && typeof recipe === 'object' && Array.isArray(recipe.steps)) {
+    const rejectForbidden = (steps, path = 'steps') => {
+      for (let index = 0; index < steps.length; index += 1) {
+        const step = steps[index];
+        const stepPath = `${path}[${index}]`;
+        if (step && typeof step === 'object' && !Array.isArray(step) && typeof step.type === 'string' && !ALLOWED_STEP_TYPES.has(step.type)) {
+          throw new TestSequenceError(
+            'STEP_NOT_ALLOWED',
+            `Step type ${step.type} is not allowed in stable Test Sequences`,
+            { path: stepPath, type: step.type, allowed: [...ALLOWED_STEP_TYPES] }
+          );
+        }
+        if (step?.type === 'repeat' && Array.isArray(step.steps)) rejectForbidden(step.steps, `${stepPath}.steps`);
+      }
+    };
+    rejectForbidden(recipe.steps);
+  }
+
   const budget = validateHardenedRecipe(recipe, { maxExpandedSteps, maxRepeatDepth });
   let writes = 0;
   let reads = 0;
