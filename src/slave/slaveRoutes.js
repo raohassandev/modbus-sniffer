@@ -181,6 +181,32 @@ function installSlaveRoutes({
     }
   });
 
+  app.post('/api/slave/file-records/read', (req, res) => {
+    try { res.json(runtime.readFileRecords(req.body || {})); }
+    catch (error) { sendError(res, error); }
+  });
+
+  app.post('/api/slave/file-records', (req, res) => {
+    try {
+      const result = runtime.seedFileRecords(req.body || {});
+      broadcast('slave-file-records', { unitId: result.unitId, records: result.records.length });
+      res.json(result);
+    } catch (error) { sendError(res, error); }
+  });
+
+  app.get('/api/slave/fifo', (req, res) => {
+    try { res.json(runtime.readFifo({ unitId: Number(req.query.unitId), address: Number(req.query.address || 0) })); }
+    catch (error) { sendError(res, error); }
+  });
+
+  app.post('/api/slave/fifo', (req, res) => {
+    try {
+      const result = runtime.seedFifo(req.body || {});
+      broadcast('slave-fifo', { unitId: result.unitId, address: result.address, quantity: result.values.length });
+      res.json(result);
+    } catch (error) { sendError(res, error); }
+  });
+
   app.get('/api/slave/clients', (_req, res) => {
     try { res.json(runtime.listClients()); } catch (error) { sendError(res, error); }
   });
