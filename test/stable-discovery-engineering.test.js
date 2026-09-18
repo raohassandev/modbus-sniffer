@@ -51,6 +51,16 @@ test('engineering discovery function and quantity probes classify outcomes',asyn
   assert.equal(quantity.result.maxWorkingQuantity,4);
 });
 
+test('engineering discovery enforces serial Unit ID limit before scanning',async()=>{
+  const master=new FakeMaster(),svc=new DiscoveryEngineeringService({masterRuntime:master});
+  master.config={type:'rtu',path:'COM1'};
+  await assert.rejects(()=>svc.scanRange({unitId:248,functionCode:3,addressStart:0,addressEnd:1,interRequestMs:0}),e=>e?.code==='INVALID_ARGUMENT');
+  await assert.rejects(()=>svc.probeQuantities({unitId:248,functionCode:3,address:0,quantities:[1],interRequestMs:0}),e=>e?.code==='INVALID_ARGUMENT');
+  master.config={type:'tcp',host:'127.0.0.1',port:502};
+  const range=await svc.scanRange({unitId:255,functionCode:3,addressStart:0,addressEnd:0,chunk:1,interRequestMs:0});
+  assert.equal(range.result.unitId,255);
+});
+
 test('engineering discovery refuses scans without connected Master and caps range size',async()=>{
   const master=new FakeMaster(),svc=new DiscoveryEngineeringService({masterRuntime:master});
   master.connected=false;
