@@ -42,6 +42,8 @@ function positiveNumber(value, field, { min = 1, max = Number.MAX_SAFE_INTEGER }
   return n;
 }
 
+function sleep(ms) { return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve(); }
+
 function normalizeConnectionConfig(input = {}) {
   const type = String(input.type || input.framing || '').trim().toLowerCase();
   if (!['rtu', 'ascii', 'tcp'].includes(type)) {
@@ -49,11 +51,14 @@ function normalizeConnectionConfig(input = {}) {
   }
 
   const timeoutMs = positiveNumber(input.timeoutMs ?? 1000, 'timeoutMs', { min: 50, max: 60000 });
+  const retries = intInRange(input.retries ?? 0, 0, 10, 'retries');
+  const retryDelayMs = intInRange(input.retryDelayMs ?? 100, 0, 60000, 'retryDelayMs');
+  const interRequestDelayMs = intInRange(input.interRequestDelayMs ?? 0, 0, 60000, 'interRequestDelayMs');
   if (type === 'tcp') {
     const host = String(input.host || input.ipAddress || '').trim();
     if (!host) throw new MasterRuntimeError('INVALID_ARGUMENT', 'TCP host/IP address is required', { field: 'host' });
     const port = intInRange(input.port ?? 502, 1, 65535, 'port');
-    return Object.freeze({ type, host, port, timeoutMs });
+    return Object.freeze({ type, host, port, timeoutMs, retries, retryDelayMs, interRequestDelayMs });
   }
 
   const path = String(input.path || input.port || '').trim();
@@ -69,7 +74,9 @@ function normalizeConnectionConfig(input = {}) {
     throw new MasterRuntimeError('INVALID_ARGUMENT', 'Unsupported serial parity', { field: 'parity', value: parity });
   }
   const echoSuppression = Boolean(input.echoSuppression);
-  return Object.freeze({ type, path, baudRate, dataBits, stopBits, parity, timeoutMs, echoSuppression });
+  const rtsTxMode = ['none','high-during-tx','low-during-tx'].includes(String(input.rtsTxMode || 'none')) ? String(input.rtsTxMode || 'none') : 'none';
+  const rtsSettleMs = intInRange(input.rtsSettleMs ?? 0, 0, 60000, 'rtsSettleMs');
+  return Object.freeze({ type, path, baudRate, dataBits, stopBits, parity, timeoutMs, echoSuppression, retries, retryDelayMs, interRequestDelayMs, rtsTxMode, rtsSettleMs });
 }
 
 function normalizeReadRequest(input = {}) {
@@ -250,6 +257,8 @@ function defaultTransportFactory(config) {
     parity: config.parity,
     framing: config.type,
     echoSuppression: config.echoSuppression,
+    rtsTxMode: config.rtsTxMode,
+    rtsSettleMs: config.rtsSettleMs,
     writeTimeoutMs: Math.min(config.timeoutMs * 3, 10000),
   });
 }
@@ -274,6 +283,7 @@ class MasterRuntime extends EventEmitter {
     this.safety = null;
     this._engineEventRelay = null;
     this.stats = this._newStats();
+    this._lastRequestCompletedAt = 0;
   }
 
   _newStats() {
@@ -291,6 +301,7 @@ class MasterRuntime extends EventEmitter {
       writeOperations: 0,
       writeFailures: 0,
       advancedOperations: 0,
+      retryAttempts: 0,
     };
   }
 
@@ -364,6 +375,7 @@ class MasterRuntime extends EventEmitter {
     this.connectionId = connectionId;
     this.stats = this._newStats();
     this.stats.connectedAt = this.now();
+    this._lastRequestCompletedAt = 0;
     return this.status();
   }
 
@@ -382,7 +394,35 @@ class MasterRuntime extends EventEmitter {
       try { await engine.close({ release: true }); } catch { /* best effort cleanup */ }
     }
     this.broker = this.brokerFactory();
+    this._lastRequestCompletedAt = 0;
     return this.status();
+  }
+
+  async _requestWithRetry({ unitId, pdu, timeoutMs, retries = null, retryDelayMs = null, interRequestDelayMs = null } = {}) {
+    const retryCount = retries == null ? Number(this.config?.retries || 0) : intInRange(retries, 0, 10, 'retries');
+    const retryDelay = retryDelayMs == null ? Number(this.config?.retryDelayMs || 0) : intInRange(retryDelayMs, 0, 60000, 'retryDelayMs');
+    const spacing = interRequestDelayMs == null ? Number(this.config?.interRequestDelayMs || 0) : intInRange(interRequestDelayMs, 0, 60000, 'interRequestDelayMs');
+    const transient = new Set(['TIMEOUT','CONNECTION_LOST','RECONNECTING']);
+    let lastError = null;
+    for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+      const elapsed = Date.now() - Number(this._lastRequestCompletedAt || 0);
+      if (spacing > 0 && elapsed < spacing) await sleep(spacing - elapsed);
+      if (attempt > 0) {
+        this.stats.retryAttempts += 1;
+        if (retryDelay > 0) await sleep(retryDelay);
+      }
+      this.stats.txRequests += 1;
+      try {
+        const result = await this.engine.request({ unitId, pdu, timeoutMs });
+        this._lastRequestCompletedAt = Date.now();
+        return Object.freeze({ result, attempts: attempt + 1 });
+      } catch (error) {
+        this._lastRequestCompletedAt = Date.now();
+        lastError = error;
+        if (attempt >= retryCount || !transient.has(error?.code)) throw error;
+      }
+    }
+    throw lastError;
   }
 
   async read(input) {
@@ -395,13 +435,16 @@ class MasterRuntime extends EventEmitter {
       address: request.address,
       quantity: request.quantity,
     });
-    this.stats.txRequests += 1;
     try {
-      const result = await this.engine.request({
+      const outcome = await this._requestWithRetry({
         unitId: request.unitId,
         pdu,
         timeoutMs: request.timeoutMs || this.config.timeoutMs,
+        retries: input.retries,
+        retryDelayMs: input.retryDelayMs,
+        interRequestDelayMs: input.interRequestDelayMs,
       });
+      const result = outcome.result;
       this.stats.rxResponses += 1;
       this.stats.rttSamples += 1;
       this.stats.rttTotalMs += Number(result.rttMs || 0);
@@ -429,6 +472,7 @@ class MasterRuntime extends EventEmitter {
         request,
         rows,
         rttMs: result.rttMs,
+        attempts: outcome.attempts,
         requestRawHex: result.requestRaw ? Buffer.from(result.requestRaw).toString('hex').toUpperCase() : null,
         responseRawHex: result.responseRaw ? Buffer.from(result.responseRaw).toString('hex').toUpperCase() : null,
         stats: this.status().stats,
@@ -543,13 +587,16 @@ class MasterRuntime extends EventEmitter {
       throw new MasterRuntimeError('MASTER_NOT_CONNECTED', 'Connect the Modbus Master before sending an advanced request');
     }
     const request = normalizeAdvancedRequest(input, this.config?.type || 'rtu');
-    this.stats.txRequests += 1;
     try {
-      const result = await this.engine.request({
+      const outcome = await this._requestWithRetry({
         unitId: request.unitId,
         pdu: request.pdu,
         timeoutMs: input.timeoutMs == null ? this.config.timeoutMs : positiveNumber(input.timeoutMs, 'timeoutMs', { min: 50, max: 60000 }),
+        retries: input.retries,
+        retryDelayMs: input.retryDelayMs,
+        interRequestDelayMs: input.interRequestDelayMs,
       });
+      const result = outcome.result;
       this.stats.rxResponses += 1;
       this.stats.rttSamples += 1;
       this.stats.rttTotalMs += Number(result.rttMs || 0);
@@ -562,6 +609,7 @@ class MasterRuntime extends EventEmitter {
         request: Object.freeze({ ...request, pdu: undefined }),
         decoded: result.decoded ?? null,
         rttMs: result.rttMs ?? null,
+        attempts: outcome.attempts,
         requestRawHex: result.requestRaw ? Buffer.from(result.requestRaw).toString('hex').toUpperCase() : null,
         responseRawHex: result.responseRaw ? Buffer.from(result.responseRaw).toString('hex').toUpperCase() : null,
         responsePduHex: result.responsePdu ? Buffer.from(result.responsePdu).toString('hex').toUpperCase() : null,
