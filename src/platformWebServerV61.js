@@ -12,6 +12,7 @@ const { reportHtml } = require('./reportGenerator');
 const { collectExportModel, buildWorkbook, buildPdf, streamProjectZip, safeName } = require('./exportBundle');
 const { makeDeviceKey, parseDeviceKey } = require('./transportIdentity');
 const { installActiveDiscoveryRoutes } = require('./activeDiscoveryRoutes');
+const { installMasterRoutes } = require('./master/masterRoutes');
 const { installSlaveRoutes } = require('./slave/slaveRoutes');
 
 function csvEscape(v) {
@@ -117,8 +118,14 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     const msg = JSON.stringify({ type, payload });
     for (const ws of wss.clients) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
   };
-  const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null});
-  const slaveRuntime=installSlaveRoutes({app,state,demo,disconnectSerial,masterRuntime:activeDiscovery.masterRuntime,activeDiscovery,broadcast});
+  let slaveRuntime=null;
+  const masterRuntime=installMasterRoutes({
+    app,state,demo,disconnectSerial,
+    getSlaveStatus:()=>slaveRuntime?.status?.()||null,
+    disconnectSlave:async()=>{ if(slaveRuntime) await slaveRuntime.stop(); }
+  });
+  const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null,masterRuntime});
+  slaveRuntime=installSlaveRoutes({app,state,demo,disconnectSerial,masterRuntime,activeDiscovery,broadcast});
   const onSlaveEvent=event=>broadcast('slave-event',event);
   slaveRuntime.on('event',onSlaveEvent);
   const active = () => workspaces.getActiveProject();
