@@ -62,11 +62,9 @@
     const term = row.querySelector('dt');
     const value = row.querySelector('dd');
     if (!term || !value) continue;
-    if (term.textContent.trim() === 'Stable product') {
-      term.textContent = 'Stable product';
-      value.textContent = 'Unified Modbus Engineering Tool';
-    } else if (term.textContent.trim() === 'Workbench') {
-      term.textContent = 'Compatibility shell';
+    if (term.textContent.trim() === 'Unified runtime') {
+      value.textContent = 'src/index-v7.js';
+    } else if (term.textContent.trim() === 'Compatibility lab') {
       value.textContent = 'Internal support surface';
     }
   }
