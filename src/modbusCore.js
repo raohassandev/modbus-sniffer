@@ -11,6 +11,8 @@ const { TcpClientTransport } = require('./v8/transports/tcpClientTransport');
 const { TcpServerTransport } = require('./v8/transports/tcpServerTransport');
 const { TlsClientTransport, TlsServerTransport } = require('./v8/transports/tlsTransport');
 const { UdpClientTransport, UdpServerTransport } = require('./v8/transports/udpTransport');
+const { TunnelTcpClientTransport, TunnelTcpServerTransport } = require('./v8/transports/tunnelTransport');
+const { listLocalAddresses, recommendLocalAddress } = require('./v8/transports/networkAddresses');
 const protocol = require('./v8/protocol');
 const { VirtualSlaveServer } = require('./v8/slave/virtualSlaveServer');
 const { VirtualDevice, VirtualDeviceError, MemoryArea, normalizeWritableAreas } = require('./v8/slave/virtualDevice');
@@ -27,6 +29,10 @@ module.exports = Object.freeze({
   TlsServerTransport,
   UdpClientTransport,
   UdpServerTransport,
+  TunnelTcpClientTransport,
+  TunnelTcpServerTransport,
+  listLocalAddresses,
+  recommendLocalAddress,
   protocol,
   VirtualSlaveServer,
   VirtualDevice,
