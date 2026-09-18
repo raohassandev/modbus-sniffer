@@ -81,6 +81,112 @@ function decodeAdu(framing, raw) {
   throw new RawFrameStudioError('INVALID_FRAMING', 'framing must be rtu, ascii or tcp', { framing });
 }
 
+function validateSuccessfulResponsePdu(requestPdu, responsePdu) {
+  const request = Buffer.from(requestPdu ?? []);
+  const response = Buffer.from(responsePdu ?? []);
+  const fc = request[0];
+  let decoded = null;
+
+  switch (fc) {
+    case protocol.FC.READ_COILS:
+    case protocol.FC.READ_DISCRETE_INPUTS: {
+      const req = protocol.decodeReadRequest(request);
+      decoded = protocol.decodeReadBitsResponse(response, { expectedQuantity: req.quantity });
+      break;
+    }
+    case protocol.FC.READ_HOLDING_REGISTERS:
+    case protocol.FC.READ_INPUT_REGISTERS: {
+      const req = protocol.decodeReadRequest(request);
+      decoded = protocol.decodeReadRegistersResponse(response, { expectedQuantity: req.quantity });
+      break;
+    }
+    case protocol.FC.WRITE_SINGLE_COIL:
+    case protocol.FC.WRITE_SINGLE_REGISTER:
+    case protocol.FC.DIAGNOSTICS:
+    case protocol.FC.WRITE_FILE_RECORD:
+    case protocol.FC.MASK_WRITE_REGISTER: {
+      if (!response.equals(request)) {
+        throw new RawFrameStudioError('RESPONSE_ECHO_MISMATCH', 'Successful Modbus response does not echo the request as required', { functionCode: fc });
+      }
+      if (fc === protocol.FC.DIAGNOSTICS) decoded = protocol.decodeDiagnosticsResponse(response);
+      else if (fc === protocol.FC.WRITE_FILE_RECORD) decoded = protocol.decodeWriteFileRecordResponse(response);
+      else if (fc === protocol.FC.MASK_WRITE_REGISTER) decoded = protocol.decodeMaskWriteRegisterRequest(response);
+      else decoded = protocol.decodeWriteSingleRequest(response);
+      break;
+    }
+    case protocol.FC.WRITE_MULTIPLE_COILS:
+    case protocol.FC.WRITE_MULTIPLE_REGISTERS: {
+      const req = protocol.decodeWriteMultipleRequest(request);
+      decoded = protocol.decodeWriteMultipleResponse(response);
+      if (decoded.address !== req.address || decoded.quantity !== req.quantity) {
+        throw new RawFrameStudioError('RESPONSE_WRITE_MISMATCH', 'Write-multiple response address/quantity does not match the request', {
+          functionCode: fc,
+          requestAddress: req.address,
+          responseAddress: decoded.address,
+          requestQuantity: req.quantity,
+          responseQuantity: decoded.quantity,
+        });
+      }
+      break;
+    }
+    case protocol.FC.READ_WRITE_MULTIPLE_REGISTERS: {
+      const req = protocol.decodeReadWriteMultipleRegistersRequest(request);
+      decoded = protocol.decodeReadRegistersResponse(response, { expectedQuantity: req.readQuantity });
+      break;
+    }
+    case protocol.FC.READ_EXCEPTION_STATUS:
+      protocol.decodeReadExceptionStatusRequest(request);
+      decoded = protocol.decodeReadExceptionStatusResponse(response);
+      break;
+    case protocol.FC.GET_COMM_EVENT_COUNTER:
+      protocol.decodeCommEventCounterRequest(request);
+      decoded = protocol.decodeCommEventCounterResponse(response);
+      break;
+    case protocol.FC.GET_COMM_EVENT_LOG:
+      protocol.decodeCommEventLogRequest(request);
+      decoded = protocol.decodeCommEventLogResponse(response);
+      break;
+    case protocol.FC.REPORT_SERVER_ID:
+      protocol.decodeReportServerIdRequest(request);
+      decoded = protocol.decodeReportServerIdResponse(response);
+      break;
+    case protocol.FC.READ_FILE_RECORD: {
+      const req = protocol.decodeReadFileRecordRequest(request);
+      decoded = protocol.decodeReadFileRecordResponse(response);
+      if (decoded.records.length !== req.records.length) {
+        throw new RawFrameStudioError('RESPONSE_QUANTITY_MISMATCH', 'File-record response count does not match the request', {
+          requestRecords: req.records.length,
+          responseRecords: decoded.records.length,
+        });
+      }
+      for (let index = 0; index < req.records.length; index += 1) {
+        if (decoded.records[index].values.length !== req.records[index].recordLength) {
+          throw new RawFrameStudioError('RESPONSE_QUANTITY_MISMATCH', 'File-record response length does not match the request', {
+            recordIndex: index,
+            requestedLength: req.records[index].recordLength,
+            responseLength: decoded.records[index].values.length,
+          });
+        }
+      }
+      break;
+    }
+    case protocol.FC.READ_FIFO_QUEUE:
+      protocol.decodeReadFifoQueueRequest(request);
+      decoded = protocol.decodeReadFifoQueueResponse(response);
+      break;
+    case protocol.FC.ENCAPSULATED_INTERFACE:
+      protocol.decodeDeviceIdRequest(request);
+      decoded = protocol.decodeDeviceIdResponse(response);
+      break;
+    default:
+      protocol.validatePdu(response);
+      decoded = { functionCode: response[0], vendorOrUnsupported: true };
+      break;
+  }
+
+  return decoded;
+}
+
 function validateResponseSemantics({ framing, requestRaw, responseRaw, policy = 'matching' } = {}) {
   if (!['matching', 'success'].includes(policy)) {
     throw new RawFrameStudioError('INVALID_RESPONSE_POLICY', 'responsePolicy must be any, matching or success', { policy });
@@ -128,6 +234,7 @@ function validateResponseSemantics({ framing, requestRaw, responseRaw, policy = 
 
   const exception = Boolean(responseFunctionCode & 0x80);
   let exceptionCode = null;
+  let decoded = null;
   if (exception) {
     exceptionCode = protocol.decodeExceptionPdu(response.pdu).exceptionCode;
     if (policy === 'success') {
@@ -135,6 +242,17 @@ function validateResponseSemantics({ framing, requestRaw, responseRaw, policy = 
         requestFunctionCode,
         responseFunctionCode,
         exceptionCode,
+      });
+    }
+  } else {
+    try {
+      decoded = validateSuccessfulResponsePdu(request.pdu, response.pdu);
+    } catch (error) {
+      if (error instanceof RawFrameStudioError) throw error;
+      throw new RawFrameStudioError('INVALID_RESPONSE_PDU', 'Response PDU is structurally inconsistent with the request', {
+        requestFunctionCode,
+        causeCode: error?.code || null,
+        cause: String(error?.message || error),
       });
     }
   }
@@ -146,6 +264,8 @@ function validateResponseSemantics({ framing, requestRaw, responseRaw, policy = 
     requestFunctionCode,
     exception,
     exceptionCode,
+    structureValid: true,
+    decoded,
     transactionId: response.transactionId ?? null,
     pduHex: Buffer.from(response.pdu).toString('hex').toUpperCase(),
   });
@@ -420,5 +540,6 @@ module.exports = {
   parseHexText,
   maskMatches,
   decodeAdu,
+  validateSuccessfulResponsePdu,
   validateResponseSemantics,
 };
