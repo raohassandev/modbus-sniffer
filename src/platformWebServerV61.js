@@ -89,8 +89,14 @@ function sameOriginRequest(req){
   try{return new URL(origin).host===String(req.headers.host||'');}catch{return false;}
 }
 
+const LARGE_JSON_PATHS=new Set(['/api/capture/import','/api/workspace/import']);
+
 function mutationBodyLimit(req){
-  return ['/api/capture/import','/api/workspace/import'].includes(req.path) ? 25*1024*1024 : 2*1024*1024;
+  return LARGE_JSON_PATHS.has(req.path) ? 25*1024*1024 : 2*1024*1024;
+}
+
+function jsonBodyLimitForPath(pathname){
+  return LARGE_JSON_PATHS.has(String(pathname||'')) ? '25mb' : '2mb';
 }
 
 async function startPlatformWebServer({ state, options, configureSerial, disconnectSerial, autoDetectSerial, replay, demo = false, workspaces, history, tcpProxy }) {
@@ -122,9 +128,8 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     if(bucket.count>600)return res.status(429).json({error:'Too many state-changing requests. Retry shortly.',code:'MUTATION_RATE_LIMIT'});
     next();
   });
-  const largeJsonPaths=new Set(['/api/capture/import','/api/workspace/import']);
   app.use((req,res,next)=>{
-    const parser=express.json({limit:largeJsonPaths.has(req.path)?'25mb':'2mb'});
+    const parser=express.json({limit:jsonBodyLimitForPath(req.path)});
     parser(req,res,error=>{
       if(error?.type==='entity.too.large')return res.status(413).json({error:'Request body exceeds the allowed JSON size.',code:'REQUEST_BODY_TOO_LARGE'});
       if(error)return res.status(400).json({error:'Invalid JSON request body.',code:'INVALID_JSON_BODY'});
@@ -368,4 +373,4 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   };
 }
 
-module.exports = { startPlatformWebServer, validateSerialConfig, validateTcp, isLoopbackHost, csvEscape, sameOriginRequest, mutationBodyLimit };
+module.exports = { startPlatformWebServer, validateSerialConfig, validateTcp, isLoopbackHost, csvEscape, sameOriginRequest, mutationBodyLimit, jsonBodyLimitForPath };
