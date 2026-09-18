@@ -8,11 +8,11 @@ const path=require('node:path');
 const vm=require('node:vm');
 
 const {ConnectionBroker,RawFrameStudio,protocol}=require('../src/modbusCore');
-const {VirtualLoopbackTransport}=require('../src/v8/transports/virtualLoopback');
+const {createVirtualLoopbackPair}=require('../src/v8/transports/virtualLoopback');
 const {StableRawLabService}=require('../src/rawLab/rawLabService');
 
 test('Raw Frame Studio appends RTU CRC and validates expected masked response',async()=>{
-  const pair=VirtualLoopbackTransport.createPair();
+  const pair=createVirtualLoopbackPair();
   const broker=new ConnectionBroker();
   broker.defineConnection({connectionId:'raw',resourceKey:'loop:raw',transportKind:'virtual',transport:pair.a,exclusive:true});
   const studio=new RawFrameStudio({broker,connectionId:'raw',ownerId:'test-raw',framing:'rtu'});
@@ -20,7 +20,7 @@ test('Raw Frame Studio appends RTU CRC and validates expected masked response',a
   const responder=(async()=>{
     const req=await pair.b.receive({timeoutMs:500});
     const adu=protocol.decodeRtuAdu(req);
-    const rsp=protocol.encodeRtuAdu(adu.unitId,protocol.encodeReadRegistersResponse({values:[0x1234]}));
+    const rsp=protocol.encodeRtuAdu(adu.unitId,protocol.encodeReadRegistersResponse({functionCode:3,values:[0x1234]}));
     await pair.b.send(rsp);
   })();
   const result=await studio.send({
@@ -35,7 +35,7 @@ test('Raw Frame Studio appends RTU CRC and validates expected masked response',a
 });
 
 test('Raw Frame Studio semantic response policy rejects exception where success is required',async()=>{
-  const pair=VirtualLoopbackTransport.createPair();
+  const pair=createVirtualLoopbackPair();
   const broker=new ConnectionBroker();
   broker.defineConnection({connectionId:'semantic-success',resourceKey:'loop:semantic-success',transportKind:'virtual',transport:pair.a,exclusive:true});
   const studio=new RawFrameStudio({broker,connectionId:'semantic-success',ownerId:'test-semantic',framing:'rtu'});
@@ -53,7 +53,7 @@ test('Raw Frame Studio semantic response policy rejects exception where success 
 });
 
 test('Raw Frame Studio matching policy accepts a matching Modbus exception as evidence',async()=>{
-  const pair=VirtualLoopbackTransport.createPair();
+  const pair=createVirtualLoopbackPair();
   const broker=new ConnectionBroker();
   broker.defineConnection({connectionId:'semantic-exception',resourceKey:'loop:semantic-exception',transportKind:'virtual',transport:pair.a,exclusive:true});
   const studio=new RawFrameStudio({broker,connectionId:'semantic-exception',ownerId:'test-semantic',framing:'rtu'});
@@ -72,7 +72,7 @@ test('Raw Frame Studio matching policy accepts a matching Modbus exception as ev
 });
 
 test('Raw Frame Studio success policy rejects structurally invalid FC03 payloads',async()=>{
-  const pair=VirtualLoopbackTransport.createPair();
+  const pair=createVirtualLoopbackPair();
   const broker=new ConnectionBroker();
   broker.defineConnection({connectionId:'semantic-pdu',resourceKey:'loop:semantic-pdu',transportKind:'virtual',transport:pair.a,exclusive:true});
   const studio=new RawFrameStudio({broker,connectionId:'semantic-pdu',ownerId:'test-semantic',framing:'rtu'});
@@ -90,14 +90,14 @@ test('Raw Frame Studio success policy rejects structurally invalid FC03 payloads
 });
 
 test('Raw Frame Studio semantic matching rejects a response from the wrong Unit',async()=>{
-  const pair=VirtualLoopbackTransport.createPair();
+  const pair=createVirtualLoopbackPair();
   const broker=new ConnectionBroker();
   broker.defineConnection({connectionId:'semantic-unit',resourceKey:'loop:semantic-unit',transportKind:'virtual',transport:pair.a,exclusive:true});
   const studio=new RawFrameStudio({broker,connectionId:'semantic-unit',ownerId:'test-semantic',framing:'rtu'});
   await pair.b.open();await studio.open();
   const responder=(async()=>{
     await pair.b.receive({timeoutMs:500});
-    await pair.b.send(protocol.encodeRtuAdu(2,protocol.encodeReadRegistersResponse({values:[7]})));
+    await pair.b.send(protocol.encodeRtuAdu(2,protocol.encodeReadRegistersResponse({functionCode:3,values:[7]})));
   })();
   await assert.rejects(
     ()=>studio.send({hex:'01 03 00 00 00 01',autoChecksum:true,timeoutMs:500,responsePolicy:'matching'}),
@@ -107,7 +107,7 @@ test('Raw Frame Studio semantic matching rejects a response from the wrong Unit'
 });
 
 test('Raw Frame Studio refuses malformed raw frame until LAB armed',async()=>{
-  const pair=VirtualLoopbackTransport.createPair();
+  const pair=createVirtualLoopbackPair();
   const broker=new ConnectionBroker();
   broker.defineConnection({connectionId:'raw',resourceKey:'loop:raw2',transportKind:'virtual',transport:pair.a,exclusive:true});
   const studio=new RawFrameStudio({broker,connectionId:'raw',ownerId:'test-raw',framing:'rtu'});
