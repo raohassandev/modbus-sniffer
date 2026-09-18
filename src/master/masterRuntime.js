@@ -431,51 +431,85 @@ class MasterRuntime {
     return this.writeAudit.list({ limit: Math.max(1, Math.min(5000, Number(limit) || 200)) });
   }
 
-  async write(input = {}) {
+  async writePdu({
+    unitId,
+    pdu,
+    confirmation = null,
+    readBack = true,
+    captureOldValue = true,
+    autoLockMs = 10000,
+    comment = '',
+    source = 'stable-master',
+  } = {}) {
     if (!this.engine || !this.connectionId || !this.safety) {
       throw new MasterRuntimeError('MASTER_NOT_CONNECTED', 'Connect the Modbus Master before writing');
     }
-    const request = normalizeWriteRequest(input, this.config?.type || 'rtu');
-    const confirmation = input.confirmation && typeof input.confirmation === 'object' ? { ...input.confirmation } : {};
-    const autoLockMs = positiveNumber(input.autoLockMs ?? 10000, 'autoLockMs', { min: 250, max: 60000 });
-    const isBroadcast = request.unitId === 0;
-    const readBack = isBroadcast ? false : input.readBack !== false;
-    const captureOldValue = isBroadcast ? false : input.captureOldValue !== false;
+    const framing = this.config?.type || 'rtu';
+    const minUnit = framing === 'tcp' ? 1 : 0;
+    const maxUnit = framing === 'tcp' ? 255 : 247;
+    const normalizedUnitId = intInRange(unitId, minUnit, maxUnit, 'unitId');
+    const rawPdu = protocol.validatePdu(pdu);
+    const resolvedConfirmation = confirmation && typeof confirmation === 'object' ? { ...confirmation } : {};
+    const lockMs = positiveNumber(autoLockMs, 'autoLockMs', { min: 250, max: 60000 });
+    const broadcast = normalizedUnitId === 0;
+    let unlocked = false;
 
-    this.safety.unlock({ durationMs: autoLockMs, confirmation: { confirmed: confirmation.confirmed === true } });
     try {
+      this.safety.unlock({ durationMs: lockMs, confirmation: { confirmed: resolvedConfirmation.confirmed === true } });
+      unlocked = true;
       const result = await this.safety.execute({
-        unitId: request.unitId,
-        pdu: request.pdu,
-        confirmation,
-        captureOldValue,
-        readBack,
+        unitId: normalizedUnitId,
+        pdu: rawPdu,
+        confirmation: resolvedConfirmation,
+        captureOldValue: broadcast ? false : Boolean(captureOldValue),
+        readBack: broadcast ? false : Boolean(readBack),
         context: {
-          source: 'stable-master',
-          comment: String(input.comment || '').slice(0, 500),
+          source: String(source || 'stable-master').slice(0, 100),
+          comment: String(comment || '').slice(0, 500),
         },
       });
       this.stats.writeOperations += 1;
       this.stats.lastError = null;
       const audit = this.writeAudit.list({ limit: 1 })[0] || null;
       return Object.freeze({
-        ok: true,
-        request: Object.freeze({ ...request, pdu: undefined }),
-        rttMs: result?.rttMs ?? null,
-        requestRawHex: result?.requestRaw ? Buffer.from(result.requestRaw).toString('hex').toUpperCase() : null,
-        responseRawHex: result?.responseRaw ? Buffer.from(result.responseRaw).toString('hex').toUpperCase() : null,
-        decoded: result?.decoded ?? null,
+        ...result,
         verification: audit?.verification || null,
         audit,
-        writeState: this.status().writeState,
       });
     } catch (error) {
       this.stats.writeFailures += 1;
       this.stats.lastError = { code: error?.code || 'MASTER_WRITE_FAILED', message: String(error?.message || error), at: this.now() };
       throw error;
     } finally {
-      try { this.safety.lock({ reason: 'operation-complete' }); } catch { /* connection loss already locks */ }
+      if (unlocked) {
+        try { this.safety.lock({ reason: 'operation-complete' }); } catch { /* connection loss already locks */ }
+      }
     }
+  }
+
+  async write(input = {}) {
+    const request = normalizeWriteRequest(input, this.config?.type || 'rtu');
+    const result = await this.writePdu({
+      unitId: request.unitId,
+      pdu: request.pdu,
+      confirmation: input.confirmation,
+      readBack: input.readBack !== false,
+      captureOldValue: input.captureOldValue !== false,
+      autoLockMs: input.autoLockMs ?? 10000,
+      comment: input.comment,
+      source: 'stable-master',
+    });
+    return Object.freeze({
+      ok: true,
+      request: Object.freeze({ ...request, pdu: undefined }),
+      rttMs: result?.rttMs ?? null,
+      requestRawHex: result?.requestRaw ? Buffer.from(result.requestRaw).toString('hex').toUpperCase() : null,
+      responseRawHex: result?.responseRaw ? Buffer.from(result.responseRaw).toString('hex').toUpperCase() : null,
+      decoded: result?.decoded ?? null,
+      verification: result?.verification || null,
+      audit: result?.audit || null,
+      writeState: this.status().writeState,
+    });
   }
 
 
