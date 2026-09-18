@@ -23,6 +23,7 @@ const { installLoggerTrendRoutes } = require('./loggerTrend/loggerTrendRoutes');
 const { installCompareRoutes } = require('./compare/compareRoutes');
 const { installTransportLabRoutes } = require('./transportLab/transportLabRoutes');
 const { installRawLabRoutes } = require('./rawLab/rawLabRoutes');
+const { installDiscoveryEngineeringRoutes } = require('./discoveryEngineeringRoutes');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -355,7 +356,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(options.webPort,options.webHost,resolve); });
   return {
     url:`http://${options.webHost==='0.0.0.0'?'127.0.0.1':options.webHost}:${options.webPort}`,
-    close:async()=>{ rawLab.off('event',onRawLabEvent); await rawLab.dispose?.(); loggerTrend.dispose?.(); testSequences.dispose?.(); masterRuntime.off('event',onMasterEvent); slaveRuntime.off('event',onSlaveEvent); testSequences.off('event',onTestSequenceEvent); activeDiscovery.off('evidence',onDiscoveryEvidence); activeDiscovery.off('status',onDiscoveryStatus); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
+    close:async()=>{ discoveryEngineering.dispose?.(); rawLab.off('event',onRawLabEvent); await rawLab.dispose?.(); loggerTrend.dispose?.(); testSequences.dispose?.(); masterRuntime.off('event',onMasterEvent); slaveRuntime.off('event',onSlaveEvent); testSequences.off('event',onTestSequenceEvent); activeDiscovery.off('evidence',onDiscoveryEvidence); activeDiscovery.off('status',onDiscoveryStatus); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
   };
 }
 
