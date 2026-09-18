@@ -71,7 +71,7 @@
                 <label>Quantity<input id="masterQuantity" type="number" min="1" max="125" value="10"></label>
                 <div class="span-2"><label>Address Mode</label><div class="master-segments" id="masterAddressMode"><button type="button" class="active" data-address-mode="raw">0-based (PDU)</button><button type="button" data-address-mode="reference">Reference (0xxxx / 1xxxx / 3xxxx / 4xxxx)</button><button type="button" disabled id="masterAddressHint">Raw request uses PDU address</button></div></div>
               </div>
-              <div class="master-button-row"><button class="master-secondary" id="masterReadOnce" disabled>▶ Read Once</button><button class="master-primary" id="masterStartPolling" disabled>↻ Start Polling</button><button class="master-secondary" id="masterPausePolling" disabled>Ⅱ Pause</button><button class="master-secondary" id="masterStopPolling" disabled>■ Stop</button><button class="master-secondary" id="masterOpenTraffic">Open Traffic</button><button class="master-secondary" id="masterResetCounters">Reset Counters</button></div>
+              <div class="master-button-row"><button class="master-secondary" id="masterReadOnce" disabled>▶ Read Once</button><button class="master-primary" id="masterStartPolling" disabled>↻ Start Polling</button><button class="master-secondary" id="masterPausePolling" disabled>Ⅱ Pause</button><button class="master-secondary" id="masterStopPolling" disabled>■ Stop</button></div>
               <div class="master-counters"><div class="master-counter"><span>Tx Requests</span><strong id="masterTx">0</strong></div><div class="master-counter"><span>Rx Responses</span><strong id="masterRx">0</strong></div><div class="master-counter"><span>Errors</span><strong id="masterErrors">0</strong></div><div class="master-counter"><span>Timeouts</span><strong id="masterTimeouts">0</strong></div><div class="master-counter"><span>Retries</span><strong id="masterRetryCount">0</strong></div><div class="master-counter"><span>Avg RTT</span><strong id="masterAvgRtt">—</strong></div></div>
             </div>
           </article>
@@ -365,18 +365,6 @@
 
   masterNav.addEventListener('click', () => { try { go('master'); } catch {} refreshStatus(); loadPorts(); });
   q('masterConnectionType').addEventListener('click', event => { const button = event.target.closest('[data-master-type]'); if (button && !app.connected) setType(button.dataset.masterType); });
-  q('masterOpenTraffic').addEventListener('click',()=>{
-    const unit=q('masterUnitId').value,fc=q('masterFunction').value;
-    try{go('traffic');}catch{}
-    const source=document.getElementById('trafficSource'),slave=document.getElementById('trafficSlave'),func=document.getElementById('trafficFc');
-    if(source){source.value='Master';source.dispatchEvent(new Event('change',{bubbles:true}));}
-    if(slave){slave.value=unit;slave.dispatchEvent(new Event('input',{bubbles:true}));}
-    if(func){func.value=fc;func.dispatchEvent(new Event('input',{bubbles:true}));}
-  });
-  q('masterResetCounters').addEventListener('click',async()=>{
-    if(window.ModbusMasterSessionCounters?.resetCurrent){await window.ModbusMasterSessionCounters.resetCurrent();await refreshStatus();return;}
-    try{await request('/api/master/stats/reset',{method:'POST'});await refreshStatus();}catch(error){setNote('<strong>Counter reset failed.</strong> '+esc(error.message),'master-error');}
-  });
   q('masterConnect').addEventListener('click', connect);
   q('masterDisconnect').addEventListener('click', disconnect);
   q('masterRefreshPorts').addEventListener('click', loadPorts);
