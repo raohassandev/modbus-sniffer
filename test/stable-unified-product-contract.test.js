@@ -99,6 +99,19 @@ test('fast source preflight fails closed across quality audit tests smoke and ac
   assert.match(preflight,/process\.exit\(result\.status\|\|1\)/);
 });
 
+test('unified CLI requires explicit external web exposure and documents the current entrypoint',()=>{
+  const cli=read('src/cli.js');
+  const server=read('src/platformWebServerV61.js');
+  assert.match(cli,/confirmWebExternalBind:false/);
+  assert.match(cli,/--confirm-web-external-bind/);
+  assert.match(cli,/node src\/index-v7\.js/);
+  assert.match(cli,/Modbus Engineering Tool 8\.0\.0/);
+  assert.doesNotMatch(cli,/index-v6\.js/);
+  assert.match(server,/WEB_EXTERNAL_BIND_CONFIRMATION_REQUIRED/);
+  assert.match(server,/INVALID_WEB_HOST/);
+  assert.match(server,/webHostAllowed/);
+});
+
 test('canonical docs separate source completion from release evidence',()=>{
   const todo=read('docs/ACTIVE_TODO.md');
   const lanes=read('docs/MODBUS_PARALLEL_LANES.md');
