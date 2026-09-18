@@ -60,6 +60,16 @@ test('Transport Lab performs MBAP UDP request through existing UDP transport',as
   assert.match(result.note,/non-standard/i);
 });
 
+test('UDP server expires stale peer identities before enforcing peer limit',()=>{
+  const server=new UdpServerTransport({host:'127.0.0.1',port:0,maxPeers:1,peerIdleMs:10});
+  server.peers.set('127.0.0.1:1000',{peerId:'127.0.0.1:1000',remoteAddress:'127.0.0.1',remotePort:1000,family:'IPv4',firstSeenAt:1,lastSeenAt:1,framesRx:1});
+  const removed=server._prunePeers(20);
+  assert.equal(removed,1);
+  assert.equal(server.peers.size,0);
+  assert.equal(server.status().stats.expiredPeers,1);
+  assert.equal(server.status().peerIdleMs,10);
+});
+
 test('Transport Lab builders enforce read-only/LAB boundaries and standard labels',()=>{
   assert.equal(descriptor('tls').defaultPort,802);
   assert.equal(descriptor('tls').standard,true);
