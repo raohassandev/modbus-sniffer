@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
-const {SlaveRuntime,normalizeConfig,framingForType}=require('../src/slave/slaveRuntime');
+const {SlaveRuntime,normalizeConfig,framingForType,publicConfig}=require('../src/slave/slaveRuntime');
 
 test('advanced Slave transport normalization maps wire framing correctly',()=>{
   assert.equal(framingForType('tcp'),'tcp');
@@ -42,14 +42,20 @@ test('Slave generators are bounded behind LAB confirmation',async t=>{
   assert.equal(runtime.removeGenerator('g1'),true);
 });
 
-test('Slave export redacts TLS private key',async t=>{
+test('Slave public status/events/export never expose TLS private key',async t=>{
   const runtime=new SlaveRuntime();
   t.after(()=>runtime.shutdown());
   await runtime.configure({type:'tls',host:'127.0.0.1',port:0,cert:'CERT',key:'TOP-SECRET'});
+  const status=runtime.status();
+  assert.equal(status.config.tls.key,null);
+  assert.equal(status.config.tls.keyConfigured,true);
+  assert.doesNotMatch(JSON.stringify(status),/TOP-SECRET/);
   const exported=runtime.exportConfig();
   assert.equal(exported.config.tls.key,null);
+  assert.equal(exported.config.tls.keyConfigured,true);
   assert.equal(exported.config.tls.credentialsRequired,true);
   assert.doesNotMatch(JSON.stringify(exported),/TOP-SECRET/);
+  assert.equal(publicConfig(runtime.config).tls.key,null);
 });
 
 test('advanced Slave browser assets load and parse',()=>{
