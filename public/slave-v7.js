@@ -122,7 +122,7 @@
 
   const q=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const state={type:'tcp',running:false,configured:false,selectedUnit:null,lastMemory:null,timer:null};
+  const state={type:'tcp',running:false,configured:false,selectedUnit:null,lastMemory:null,timer:null,connectionDirty:true,tlsKeyConfigured:false};
 
   async function api(url,options={}){
     const response=await fetch(url,options);
@@ -137,7 +137,11 @@
     const network=['tcp','tls','udp','rtu-tcp','ascii-tcp','rtu-udp','ascii-udp'].includes(state.type);
     if(network){
       const out={type:state.type,host:q('slaveTcpHost').value.trim()||'127.0.0.1',port:Number(q('slaveTcpPort').value||(state.type==='tls'?802:502)),maxClients:Number(q('slaveMaxClients').value||32),maxPeers:Number(q('slaveMaxPeers').value||256),idleTimeoutMs:Number(q('slaveIdleTimeout').value||0)};
-      if(state.type==='tls')Object.assign(out,{cert:q('slaveTlsCert').value,key:q('slaveTlsKey').value,ca:q('slaveTlsCa').value||null,requestCert:q('slaveTlsRequestCert').checked,rejectUnauthorized:q('slaveTlsRejectUnauthorized').checked,minVersion:q('slaveTlsMinVersion').value});
+      if(state.type==='tls'){
+        const key=q('slaveTlsKey').value;
+        if(!key&&state.tlsKeyConfigured&&state.connectionDirty)throw new Error('TLS private key is stored only in the running backend. Re-enter the private key before changing TLS server settings.');
+        Object.assign(out,{cert:q('slaveTlsCert').value,key,ca:q('slaveTlsCa').value||null,requestCert:q('slaveTlsRequestCert').checked,rejectUnauthorized:q('slaveTlsRejectUnauthorized').checked,minVersion:q('slaveTlsMinVersion').value});
+      }
       return out;
     }
     return {type:state.type,path:q('slaveSerialPort').value,baudRate:Number(q('slaveBaud').value||9600),parity:q('slaveParity').value,dataBits:Number(q('slaveDataBits').value||8),stopBits:Number(q('slaveStopBits').value||1),echoSuppression:q('slaveEcho').value==='true',rtsTxMode:q('slaveRtsMode').value,rtsSettleMs:Number(q('slaveRtsSettle').value||0)};
@@ -207,8 +211,10 @@
   async function start(extra={}){
     try{
       note('<strong>Starting…</strong> Opening the active Slave server.');
-      const body={...config(),...extra};
+      const body=state.configured&&!state.connectionDirty?{reuseConfigured:true,...extra}:{...config(),...extra};
       const status=await api('/api/slave/start',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+      state.connectionDirty=false;
+      if(state.type==='tls'){state.tlsKeyConfigured=true;q('slaveTlsKey').value='';}
       renderStatus(status);note('<strong>Running.</strong> The Slave is ready for external Modbus Master requests.','good');
       await loadMemory();
     }catch(error){
@@ -233,7 +239,7 @@
   async function ensureConfigured(){
     if(state.configured)return;
     const status=await api('/api/slave/configure',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(config())});
-    renderStatus(status);
+    renderStatus(status);state.connectionDirty=false;if(state.type==='tls'){state.tlsKeyConfigured=true;q('slaveTlsKey').value='';}
   }
 
   async function addDevice(){
@@ -279,8 +285,15 @@
     const file=q('slaveImportFile').files?.[0];if(!file)return note('<strong>Select a JSON simulator map first.</strong>','error');
     try{
       const payload=JSON.parse(await file.text());
+      if(payload?.config?.type==='tls'&&!payload?.config?.tls?.key){
+        const key=q('slaveTlsKey').value.trim();
+        if(!key)throw new Error('TLS exports intentionally exclude the private key. Paste the server private key in the TLS field before importing this map.');
+        payload.config.tls={...(payload.config.tls||{}),key};
+      }
       const status=await api('/api/slave/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
       if(status.config){state.type=status.config.type||'tcp';syncTypeUi();applyConfig(status.config);}
+      state.connectionDirty=false;
+      if(state.type==='tls'){state.tlsKeyConfigured=true;q('slaveTlsKey').value='';}
       renderStatus(status);await loadMemory();note('<strong>Map imported.</strong> Review the connection and press Start Server.','good');
     }catch(error){note('<strong>Import failed.</strong> '+esc(error.message),'error');}
   }
@@ -290,8 +303,13 @@
     const network=['tcp','tls','udp','rtu-tcp','ascii-tcp','rtu-udp','ascii-udp'].includes(cfg.type);
     if(network){
       q('slaveTcpHost').value=cfg.host||'127.0.0.1';q('slaveTcpPort').value=cfg.port??(cfg.type==='tls'?802:502);q('slaveMaxClients').value=cfg.maxClients??32;q('slaveMaxPeers').value=cfg.maxPeers??256;q('slaveIdleTimeout').value=cfg.idleTimeoutMs??0;
-      if(cfg.tls){q('slaveTlsCert').value=cfg.tls.cert||'';q('slaveTlsKey').value=cfg.tls.key||'';q('slaveTlsCa').value=cfg.tls.ca||'';q('slaveTlsRequestCert').checked=Boolean(cfg.tls.requestCert);q('slaveTlsRejectUnauthorized').checked=Boolean(cfg.tls.rejectUnauthorized);q('slaveTlsMinVersion').value=cfg.tls.minVersion||'TLSv1.2';}
+      if(cfg.tls){
+        q('slaveTlsCert').value=cfg.tls.cert||'';q('slaveTlsKey').value='';q('slaveTlsCa').value=cfg.tls.ca||'';q('slaveTlsRequestCert').checked=Boolean(cfg.tls.requestCert);q('slaveTlsRejectUnauthorized').checked=Boolean(cfg.tls.rejectUnauthorized);q('slaveTlsMinVersion').value=cfg.tls.minVersion||'TLSv1.2';
+        state.tlsKeyConfigured=Boolean(cfg.tls.keyConfigured);
+        q('slaveTlsKey').placeholder=state.tlsKeyConfigured?'Private key stored in backend; re-enter only to change TLS settings':'Server private key PEM';
+      }
     } else {q('slaveSerialPort').value=cfg.path||'';q('slaveBaud').value=cfg.baudRate||9600;q('slaveParity').value=cfg.parity||'none';q('slaveDataBits').value=cfg.dataBits||8;q('slaveStopBits').value=cfg.stopBits||1;q('slaveEcho').value=String(Boolean(cfg.echoSuppression));q('slaveRtsMode').value=cfg.rtsTxMode||'none';q('slaveRtsSettle').value=cfg.rtsSettleMs||0;}
+    state.connectionDirty=false;
   }
 
   function syncTypeUi(){
@@ -303,7 +321,7 @@
     q('slaveType').querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.slaveType===state.type));
   }
 
-  q('slaveType').addEventListener('click',e=>{const b=e.target.closest('[data-slave-type]');if(!b||state.running)return;state.type=b.dataset.slaveType;syncTypeUi();});
+  q('slaveType').addEventListener('click',e=>{const b=e.target.closest('[data-slave-type]');if(!b||state.running)return;state.type=b.dataset.slaveType;state.connectionDirty=true;syncTypeUi();});
   q('slaveStart').addEventListener('click',()=>start());
   q('slaveStop').addEventListener('click',stop);
   q('slaveRefreshPorts').addEventListener('click',loadPorts);
@@ -315,6 +333,10 @@
   q('slaveLoadMemory').addEventListener('click',loadMemory);
   q('slaveSaveMemory').addEventListener('click',saveMemory);
   q('slaveImport').addEventListener('click',importMap);
+  for(const id of ['slaveTcpHost','slaveTcpPort','slaveMaxClients','slaveMaxPeers','slaveIdleTimeout','slaveSerialPort','slaveBaud','slaveParity','slaveDataBits','slaveStopBits','slaveEcho','slaveRtsMode','slaveRtsSettle','slaveTlsMinVersion','slaveTlsRequestCert','slaveTlsRejectUnauthorized','slaveTlsCert','slaveTlsKey','slaveTlsCa']){
+    q(id)?.addEventListener('input',()=>{state.connectionDirty=true;});
+    q(id)?.addEventListener('change',()=>{state.connectionDirty=true;});
+  }
 
   window.addEventListener('message',()=>{});
   syncTypeUi();loadPorts();
