@@ -4,6 +4,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
+const vm=require('node:vm');
 
 const root=path.resolve(__dirname,'..');
 const sessions=fs.readFileSync(path.join(root,'public/master-sessions-v7.js'),'utf8');
@@ -11,7 +12,7 @@ const css=fs.readFileSync(path.join(root,'public/master-sessions-v7.css'),'utf8'
 const loader=fs.readFileSync(path.join(root,'public/platform-v6.js'),'utf8');
 
 test('monitor sessions source parses as JavaScript',()=>{
-  assert.doesNotThrow(()=>new Function(sessions));
+  assert.doesNotThrow(()=>new vm.Script(sessions,{filename:'master-sessions-v7.js'}));
 });
 
 test('monitor sessions load only after the Master workspace exists',()=>{
