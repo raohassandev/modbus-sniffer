@@ -101,6 +101,14 @@ function installMasterRoutes({
     }
   });
 
+  app.post('/api/master/advanced', async (req, res) => {
+    try {
+      res.json(await runtime.advanced(req.body || {}));
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
   app.post('/api/master/write', async (req, res) => {
     try {
       res.json(await runtime.write(req.body || {}));
