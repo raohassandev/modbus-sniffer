@@ -1,7 +1,7 @@
 'use strict';
 
 window.addEventListener('DOMContentLoaded',()=>{
-  for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1','/device-inventory-v62.css?v=20260914-1','/discovery-v63.css?v=20260915-1','/active-discovery-v7.css?v=20260915-1','/intelligence-v7.css?v=20260914-1','/master-v7.css?v=20260917-1','/master-sessions-v7.css?v=20260917-1','/master-register-meta-v7.css?v=20260918-1','/slave-v7.css?v=20260918-1','/master-write-v7.css?v=20260918-1','/master-advanced-v7.css?v=20260918-1','/device-clone-v7.css?v=20260918-1','/test-sequences-v7.css?v=20260918-1','/traffic-evidence-v7.css?v=20260918-1','/protocol-diagnostics-v7.css?v=20260918-1','/data-lab-v7.css?v=20260918-1','/logger-trend-v7.css?v=20260918-1','/compare-v7.css?v=20260918-1']){
+  for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1','/device-inventory-v62.css?v=20260914-1','/discovery-v63.css?v=20260915-1','/active-discovery-v7.css?v=20260915-1','/intelligence-v7.css?v=20260914-1','/master-v7.css?v=20260917-1','/master-sessions-v7.css?v=20260917-1','/master-register-meta-v7.css?v=20260918-1','/slave-v7.css?v=20260918-1','/master-write-v7.css?v=20260918-1','/master-advanced-v7.css?v=20260918-1','/device-clone-v7.css?v=20260918-1','/test-sequences-v7.css?v=20260918-1','/traffic-evidence-v7.css?v=20260918-1','/protocol-diagnostics-v7.css?v=20260918-1','/data-lab-v7.css?v=20260918-1','/logger-trend-v7.css?v=20260918-1','/compare-v7.css?v=20260918-1','/transport-lab-v7.css?v=20260918-1']){
     if(document.querySelector(`link[href="${href}"]`))continue;
     const link=document.createElement('link');link.rel='stylesheet';link.href=href;document.head.appendChild(link);
   }
@@ -61,6 +61,11 @@ window.addEventListener('DOMContentLoaded',()=>{
                                   loggerTrend.onload=()=>{
                                     const compare=document.createElement('script');
                                     compare.src='/compare-v7.js?v=20260918-1';
+                                    compare.onload=()=>{
+                                      const transportLab=document.createElement('script');
+                                      transportLab.src='/transport-lab-v7.js?v=20260918-1';
+                                      document.body.appendChild(transportLab);
+                                    };
                                     document.body.appendChild(compare);
                                   };
                                   document.body.appendChild(loggerTrend);
