@@ -71,6 +71,24 @@ test('Raw Frame Studio matching policy accepts a matching Modbus exception as ev
   await studio.close();await pair.b.close();
 });
 
+test('Raw Frame Studio success policy rejects structurally invalid FC03 payloads',async()=>{
+  const pair=VirtualLoopbackTransport.createPair();
+  const broker=new ConnectionBroker();
+  broker.defineConnection({connectionId:'semantic-pdu',resourceKey:'loop:semantic-pdu',transportKind:'virtual',transport:pair.a,exclusive:true});
+  const studio=new RawFrameStudio({broker,connectionId:'semantic-pdu',ownerId:'test-semantic',framing:'rtu'});
+  await pair.b.open();await studio.open();
+  const responder=(async()=>{
+    const req=await pair.b.receive({timeoutMs:500});
+    const adu=protocol.decodeRtuAdu(req);
+    await pair.b.send(protocol.encodeRtuAdu(adu.unitId,Buffer.from([0x03,0x01,0x7F])));
+  })();
+  await assert.rejects(
+    ()=>studio.send({hex:'01 03 00 00 00 01',autoChecksum:true,timeoutMs:500,responsePolicy:'success'}),
+    error=>error?.code==='INVALID_RESPONSE_PDU'&&error?.details?.causeCode==='BYTE_COUNT_MISMATCH'
+  );
+  await responder;await studio.close();await pair.b.close();
+});
+
 test('Raw Frame Studio semantic matching rejects a response from the wrong Unit',async()=>{
   const pair=VirtualLoopbackTransport.createPair();
   const broker=new ConnectionBroker();
