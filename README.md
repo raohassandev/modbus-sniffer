@@ -1,112 +1,37 @@
 # Modbus Engineering Tool
 
-A field-oriented advanced Modbus engineering application for **testing, simulation, sniffing, traffic analysis, reverse engineering, protocol research, troubleshooting and evidence**.
-
-## Product boundary
-
-This project is intentionally Modbus-only.
-
-It is **not** a generic HMI, SCADA, PLC-programming, plant-automation, historian or IoT-dashboard product.
-
-The canonical scope audit is:
-
-`docs/MODBUS_ONLY_PRODUCT_AUDIT.md`
-
-## Current product status
-
-The stable **Sniffer / Analyzer** remains the default product while Master and Slave are being integrated into the same accepted experience.
-
-```bash
-npm start
-```
-
-or:
-
-```bash
-npm run sniffer
-```
-
-Open:
-
-```text
-http://127.0.0.1:8080
-```
-
-The experimental v8 workspace is still available explicitly:
-
-```bash
-npm run workbench
-```
-
-```text
-http://127.0.0.1:8088/v8/
-```
-
-PR #31 remains experimental and is not release-eligible.
+A unified field-oriented Modbus application for **sniffing, active polling, simulation, traffic analysis, reverse engineering, protocol testing, troubleshooting and evidence**.
 
 ## Product model
 
-### Sniffer / Analyzer
+The application has three primary modes:
 
-Passive Modbus observation and reverse engineering:
+- **Sniffer / Analyzer** — passive observation; never transmits Modbus frames.
+- **Master / Client** — active RTU/ASCII/TCP polling, diagnostics and guarded writes.
+- **Slave / Server Simulator** — controlled Modbus device simulation.
 
-- RTU/RS485 capture
-- TCP/proxy analysis
-- request/response decoding
-- Unit/Slave discovery from observed traffic
-- polling interval, RTT, timeout, exception and quality analysis
-- register inference and datatype research
-- capture/replay/export
+Advanced tools support those three modes:
 
-### Master / Client
-
-Active Modbus testing:
-
-- RTU / ASCII / TCP
-- multiple polling Monitor Sessions
-- FC01–04 reads
-- guarded writes
-- advanced function-code tests
-- full register datatype/byte-order interpretation
-- discovery, Traffic, Logger and Test Center integration
-
-### Slave / Server Simulator
-
-Controlled Modbus device simulation:
-
-- RTU / ASCII / TCP
-- multiple Unit IDs
-- coils, discrete inputs, holding registers and input registers
-- request/write visibility
-- device identity and exception behavior
-- dynamic values and controlled LAB fault/timing behavior
-- Capture-to-Simulator Device Clone
-
-## Advanced Modbus tools
-
-The product roadmap includes only Modbus-related advanced tools:
-
-- Traffic Analyzer
-- Register/Data Lab
+- Traffic Analyzer and Protocol Diagnostics
+- Register / Data Lab
 - Discovery & Scan
-- Diagnostics & Conformance
-- Test Center / Raw Frame Studio
+- Raw Frame / Conformance Lab
 - Device Clone / Capture-to-Simulator
-- Scripted Test Sequences / API
-- Replay / Compare
+- Test Sequences
 - Logger / Trend
-- Reports / Export
-- Transport Lab including UDP/tunnels and Modbus TCP Security/TLS where supported
+- Replay / Compare
+- Transport / Modbus TCP Security Lab
+- Capture/export/report evidence
 
-A free-form HMI Builder is out of scope and will be removed from the Modbus product.
+This project is intentionally Modbus-only. It is not a generic HMI, SCADA, PLC-programming, process-control, historian or IoT-dashboard product.
 
-## Install
+## Run
 
 Requirements:
 
 - Node.js 20+
 - Windows, Linux or macOS
-- USB-RS485 adapter for live serial work when required
+- USB/serial hardware when working with a physical RTU/ASCII bus
 
 ```bash
 git clone https://github.com/raohassandev/modbus-sniffer.git
@@ -115,35 +40,88 @@ npm install
 npm start
 ```
 
+Open:
+
+```text
+http://127.0.0.1:8080
+```
+
+`npm run sniffer`, `npm run workbench`, `npm run v7` and `npm run v8` are compatibility commands that now resolve to the same unified product runtime.
+
+The desktop application also launches the same unified runtime.
+
+## First-use workflows
+
+### Sniffer
+
+`Settings -> Serial port/format -> Apply & reconnect -> Dashboard / Devices / Traffic / Analysis`
+
+The Sniffer is passive/RX-only. Devices, polling groups and registers are learned from observed traffic.
+
+### Master
+
+`Master -> Connection -> Connect -> Unit ID -> Function -> Address/Quantity -> Read Once -> Poll`
+
+Normal reads use FC01–04. Advanced diagnostics and guarded writes are available without being required for the first read.
+
+### Slave
+
+`Slave -> Transport -> Unit IDs / Memory -> Start Server`
+
+The built-in simulator supports normal RTU/ASCII/TCP operation plus advanced TLS, UDP and RTU/ASCII tunnel variants.
+
+## Safety
+
+- Passive Sniffer never silently becomes an active transmitter.
+- One physical serial port cannot be silently shared by Sniffer, Master, Slave, Raw Lab or active Discovery.
+- Serial ownership changes require explicit confirmation.
+- Master writes are locked by default.
+- Guarded writes require explicit confirmation and automatically re-lock.
+- Bulk and Unit 0 broadcast writes require stronger confirmation.
+- Raw/malformed traffic requires explicit LAB arming.
+- Slave fault injection and dynamic generators require explicit LAB confirmation.
+- Saved state does not restore armed write/LAB state.
+- TLS private keys are not included in exported Slave maps.
+
+## Protocol coverage
+
+See:
+
+- `docs/MODBUS_FUNCTION_MATRIX.md`
+- `docs/ACTIVE_TODO.md`
+- `docs/PCAP_FEASIBILITY.md`
+
+Implemented product paths cover FC01–08, FC11/12, FC15–17, FC20–24 and FC43/14 where applicable to Master, Slave, Discovery, Transport Lab and conformance workflows.
+
+## Evidence
+
+Supported evidence includes:
+
+- native `.mbcap` capture/replay
+- unified Traffic raw HEX and decoded context
+- selected Traffic CSV
+- register/value Logger CSV + rotating JSONL
+- Raw Lab exact conformance-run JSON
+- capture/register-map/test-run comparison
+
+Synthetic PCAP/PCAPNG is intentionally not generated because the current evidence model does not retain original Ethernet/IP/TCP packet headers or a universally interoperable serial PCAP link layer.
+
 ## Useful commands
 
 ```bash
 npm run ports
 npm run demo
 npm test
-npm run workbench
+npm run lint
+npm run version:check
 npm --prefix desktop start
 npm --prefix desktop run dist:win
 ```
 
-## Safety
+GitHub Actions release/build workflows remain manual-only.
 
-- Passive Sniffer must not silently transmit.
-- Master/Discovery/Test Center active transmissions are explicit.
-- Writes are locked by default.
-- Bulk/broadcast writes require stronger confirmation.
-- Raw/LAB traffic is clearly separated from validated normal requests.
-- Saved state never restores armed writes or LAB mode.
-- One physical serial resource cannot be silently owned by passive and active runtimes at the same time.
+## Current completion boundary
 
-## Active work
+The approved **source implementation scope is complete** on the integration branch. Release/merge acceptance remains separate and requires exact-head automated tests, browser QA, representative RTU/TCP/TLS hardware/interoperability checks, Windows packaged smoke and soak evidence.
 
-Canonical active checklist:
-
-`docs/ACTIVE_TODO.md`
-
-Master implementation checklist:
-
-`docs/MODBUS_MASTER_TODO.md`
-
-Do not merge PR #31 until the Modbus-only product scope, Sniffer/Master/Slave workflows and applicable exact-head validation are accepted.
+PR #31 must not be merged merely because GitHub reports it mergeable.
