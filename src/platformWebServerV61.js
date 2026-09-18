@@ -18,6 +18,7 @@ const { installDeviceCloneRoutes } = require('./deviceClone/deviceCloneRoutes');
 const { installTestSequenceRoutes } = require('./testSequences/testSequenceRoutes');
 const { EvidenceHub, mergeEvidence } = require('./evidence/evidenceHub');
 const { analyzeProtocolTraffic } = require('./evidence/protocolDiagnostics');
+const registerCodec = require('./register/registerCodec');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -232,7 +233,8 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.get('/api/polls', (q,r) => { try{r.json(state.getPollGroups(q.query));}catch(e){apiError(r,e);} });
   app.get('/api/devices', (q,r) => { try{r.json(state.getDevices(q.query));}catch(e){apiError(r,e);} });
   app.get('/api/devices/:ref', (q,r) => { try{const d=state.getDevice(decodeURIComponent(q.params.ref),{channelId:q.query.channelId||null});if(!d)return r.status(404).json({error:`Device ${q.params.ref} has not been observed.`});r.json(d);}catch(e){apiError(r,e);} });
-  app.get('/api/decode', (q,r) => r.json(state.getDataTypeAnalysis(q.query)));
+  app.get('/api/decode', (q,r) => { try { const base=state.getDataTypeAnalysis(q.query); const words=(base.words||[]).map(item=>Number(item.value)); const advanced=registerCodec.interpretationMatrix(words); r.json({...base,advancedInterpretations:advanced}); } catch(e){apiError(r,e);} });
+  app.post('/api/register/interpret', (q,r) => { try { const words=Array.isArray(q.body?.words)?q.body.words.map(Number):[]; if(!words.length)return r.status(400).json({error:'words must be a non-empty array'}); const definition=q.body?.definition||{}; r.json({definition:registerCodec.normalizeDefinition(definition),result:registerCodec.decodeDefinition(words,definition),matrix:registerCodec.interpretationMatrix(words)}); } catch(e){apiError(r,e);} });
   app.get('/api/config', (_q,r) => r.json({ ...state.config, demo, version:'7.0.0' }));
   app.get('/api/replay/status', (_q,r) => r.json(replay.status()));
   app.get('/api/diagnostics/deep', (_q,r) => r.json(analyzeDeep({ state, config:state.config })));
