@@ -17,7 +17,7 @@
           <button class="master-primary" id="masterSessionSave" type="button">Save Session</button>
           <button class="master-secondary" id="masterSessionDuplicate" type="button">Duplicate</button>
           <button class="master-secondary" id="masterSessionRename" type="button">Rename</button>
-          <button class="master-secondary" id="masterSessionDelete" type="button">Delete</button>
+          <button class="master-secondary" id="masterSessionDelete" type="button">Delete</button><button class="master-secondary" id="masterSessionCounterReset" type="button">Reset Counters</button>
         </div>
       </div>
       <div class="master-session-tabs" id="masterSessionTabs" role="tablist"></div>
@@ -26,12 +26,12 @@
 
   const els={
     tabs:q('masterSessionTabs'),state:q('masterSessionState'),activeName:q('masterSessionActiveName'),
-    new:q('masterSessionNew'),save:q('masterSessionSave'),duplicate:q('masterSessionDuplicate'),rename:q('masterSessionRename'),delete:q('masterSessionDelete')
+    new:q('masterSessionNew'),save:q('masterSessionSave'),duplicate:q('masterSessionDuplicate'),rename:q('masterSessionRename'),delete:q('masterSessionDelete'),counterReset:q('masterSessionCounterReset')
   };
 
   const monitoredIds=[
-    'masterSerialPort','masterBaud','masterParity','masterDataBits','masterStopBits','masterEcho','masterTcpHost','masterTcpPort',
-    'masterTimeout','masterPollInterval','masterUnitId','masterFunction','masterAddress','masterQuantity','masterFormat','masterScale','masterOffset','masterPrecision'
+    'masterSerialPort','masterBaud','masterParity','masterDataBits','masterStopBits','masterEcho','masterRtsMode','masterRtsSettle','masterTcpHost','masterTcpPort',
+    'masterTimeout','masterPollInterval','masterRetries','masterRetryDelay','masterInterRequestDelay','masterUnitId','masterFunction','masterAddress','masterQuantity','masterFormat','masterScale','masterOffset','masterPrecision'
   ];
   let dirty=false,switching=false,store=loadStore();
 
@@ -67,15 +67,15 @@
   function connectionFromDom(){
     return {
       type:connectionType(),path:value('masterSerialPort'),baudRate:num('masterBaud',9600),parity:value('masterParity','none'),
-      dataBits:num('masterDataBits',8),stopBits:num('masterStopBits',1),echoSuppression:value('masterEcho','false')==='true',
-      host:value('masterTcpHost'),port:num('masterTcpPort',502),timeoutMs:num('masterTimeout',1000)
+      dataBits:num('masterDataBits',8),stopBits:num('masterStopBits',1),echoSuppression:value('masterEcho','false')==='true',rtsTxMode:value('masterRtsMode','none'),rtsSettleMs:num('masterRtsSettle',0),
+      host:value('masterTcpHost'),port:num('masterTcpPort',502),timeoutMs:num('masterTimeout',1000),retries:num('masterRetries',0),retryDelayMs:num('masterRetryDelay',100),interRequestDelayMs:num('masterInterRequestDelay',0)
     };
   }
 
   function definitionFromDom(){
     return {
       unitId:num('masterUnitId',1),functionCode:num('masterFunction',3),address:num('masterAddress',0),addressMode:addressMode(),
-      quantity:num('masterQuantity',1),pollIntervalMs:num('masterPollInterval',1000),timeoutMs:num('masterTimeout',1000)
+      quantity:num('masterQuantity',1),pollIntervalMs:num('masterPollInterval',1000),timeoutMs:num('masterTimeout',1000),retries:num('masterRetries',0),retryDelayMs:num('masterRetryDelay',100),interRequestDelayMs:num('masterInterRequestDelay',0)
     };
   }
 
@@ -95,7 +95,7 @@
 
   function buildSession(name){
     const now=Date.now();
-    return {id:id(),name:safeName(name),createdAt:now,updatedAt:now,connection:connectionFromDom(),definition:definitionFromDom(),format:formatFromDom(),snapshot:snapshotFromDom()};
+    return {id:id(),name:safeName(name),createdAt:now,updatedAt:now,connection:connectionFromDom(),definition:definitionFromDom(),format:formatFromDom(),snapshot:snapshotFromDom(),counterBaseline:null};
   }
 
   function active(){return store.sessions.find(x=>x.id===store.activeId)||null;}
@@ -146,8 +146,8 @@
     const c=session.connection||{},d=session.definition||{},f=session.format||{};
     clickSelector('[data-master-type]',c.type||'rtu','data-master-type');
     setValue('masterSerialPort',c.path||'');setValue('masterBaud',c.baudRate??9600);setValue('masterParity',c.parity||'none');
-    setValue('masterDataBits',c.dataBits??8);setValue('masterStopBits',c.stopBits??1);setValue('masterEcho',String(Boolean(c.echoSuppression)));
-    setValue('masterTcpHost',c.host||'');setValue('masterTcpPort',c.port??502);setValue('masterTimeout',d.timeoutMs??c.timeoutMs??1000);setValue('masterPollInterval',d.pollIntervalMs??1000);
+    setValue('masterDataBits',c.dataBits??8);setValue('masterStopBits',c.stopBits??1);setValue('masterEcho',String(Boolean(c.echoSuppression)));setValue('masterRtsMode',c.rtsTxMode||'none');setValue('masterRtsSettle',c.rtsSettleMs??0);
+    setValue('masterTcpHost',c.host||'');setValue('masterTcpPort',c.port??502);setValue('masterTimeout',d.timeoutMs??c.timeoutMs??1000);setValue('masterPollInterval',d.pollIntervalMs??1000);setValue('masterRetries',d.retries??c.retries??0);setValue('masterRetryDelay',d.retryDelayMs??c.retryDelayMs??100);setValue('masterInterRequestDelay',d.interRequestDelayMs??c.interRequestDelayMs??0);
     setValue('masterUnitId',d.unitId??1);setValue('masterFunction',d.functionCode??3);setValue('masterAddress',d.address??0);setValue('masterQuantity',d.quantity??1);
     clickSelector('[data-address-mode]',d.addressMode||'raw','data-address-mode');
     setValue('masterFormat',f.type||'uint16');setValue('masterScale',f.scale??1);setValue('masterOffset',f.offset??0);setValue('masterPrecision',f.precision??3);
@@ -183,6 +183,39 @@
 
   function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function markDirty(){if(switching)return;dirty=true;setState('Unsaved changes in the active monitor.','dirty');}
+
+  let lastAbsoluteStats=null;
+  window.ModbusMasterSessionCounters={
+    apply(stats={}){
+      lastAbsoluteStats={...stats};
+      const session=active();if(!session)return stats;
+      const connectedAt=Number(stats.connectedAt||0);
+      const base=session.counterBaseline;
+      if(!base||Number(base.connectedAt||0)!==connectedAt){
+        session.counterBaseline={connectedAt,txRequests:0,rxResponses:0,errors:0,timeouts:0,retryAttempts:0};
+        localStorage.setItem(STORAGE_KEY,JSON.stringify(store));
+      }
+      const b=session.counterBaseline||{};
+      return {...stats,
+        txRequests:Math.max(0,Number(stats.txRequests||0)-Number(b.txRequests||0)),
+        rxResponses:Math.max(0,Number(stats.rxResponses||0)-Number(b.rxResponses||0)),
+        errors:Math.max(0,Number(stats.errors||0)-Number(b.errors||0)),
+        timeouts:Math.max(0,Number(stats.timeouts||0)-Number(b.timeouts||0)),
+        retryAttempts:Math.max(0,Number(stats.retryAttempts||0)-Number(b.retryAttempts||0))
+      };
+    },
+    async resetCurrent(){
+      const session=active();if(!session)return;
+      let stats=lastAbsoluteStats;
+      try{const status=await fetch('/api/master/status').then(r=>r.ok?r.json():null);if(status?.stats)stats=status.stats;}catch{}
+      stats=stats||{};
+      session.counterBaseline={connectedAt:Number(stats.connectedAt||0),txRequests:Number(stats.txRequests||0),rxResponses:Number(stats.rxResponses||0),errors:Number(stats.errors||0),timeouts:Number(stats.timeouts||0),retryAttempts:Number(stats.retryAttempts||0)};
+      persist();
+      for(const id of ['masterTx','masterRx','masterErrors','masterTimeouts','masterRetryCount'])if(q(id))q(id).textContent='0';
+      setState('Current Monitor counters reset. Runtime connection statistics remain intact.','saved');
+    }
+  };
+  els.counterReset?.addEventListener('click',()=>window.ModbusMasterSessionCounters.resetCurrent());
 
   async function ensureInitial(){
     if(!store.sessions.length){const first=buildSession('Monitor 1');store.sessions.push(first);store.activeId=first.id;persist();}
