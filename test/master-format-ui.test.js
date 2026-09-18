@@ -4,6 +4,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
+const vm=require('node:vm');
 
 const root=path.resolve(__dirname,'..');
 const format=fs.readFileSync(path.join(root,'public/master-format-v7.js'),'utf8');
@@ -11,7 +12,7 @@ const sessions=fs.readFileSync(path.join(root,'public/master-sessions-v7.js'),'u
 const loader=fs.readFileSync(path.join(root,'public/platform-v6.js'),'utf8');
 
 test('Master format extension parses and loads before Monitor Sessions',()=>{
-  assert.doesNotThrow(()=>new Function(format));
+  assert.doesNotThrow(()=>new vm.Script(format,{filename:'master-format-v7.js'}));
   const master=loader.indexOf("master.src='/master-v7.js");
   const formatter=loader.indexOf("format.src='/master-format-v7.js",master);
   const sessionsIndex=loader.indexOf("sessions.src='/master-sessions-v7.js",formatter);
