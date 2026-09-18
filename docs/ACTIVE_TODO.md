@@ -40,17 +40,17 @@ Explicitly out of product scope:
 ## Scope cleanup
 
 - [x] canonical Modbus-only scope audit created
-- [ ] remove HMI from product navigation
-- [ ] stop HMI Builder feature development
-- [ ] remove HMI from Help/product roadmap
-- [ ] rename/reframe `Automation` as `Test Sequences / API`
-- [ ] rename/reframe `Historian` as `Logger / Trend`
+- [x] remove HMI from product navigation
+- [x] stop HMI Builder feature development in the Modbus product
+- [x] remove HMI from Help/product roadmap
+- [x] rename/reframe visible `Automation` product wording as `Test Sequences / API`
+- [x] rename/reframe visible `Historian` product wording as `Logger / Trend`
 - [ ] rename/reframe `Digital Twin` as `Device Clone / Capture-to-Simulator`
 - [ ] ensure Device Clone remains capture/register-evidence -> Modbus simulator only
 - [ ] ensure scripting APIs expose Modbus test operations only
 - [ ] classify/remove any remaining non-Modbus UI/routes/services
-- [ ] inventory duplicate v7/v8 Master, connection and evidence paths
-- [ ] define one canonical shared Modbus core boundary
+- [x] inventory duplicate v7/v8 Master, connection and evidence paths
+- [x] define one canonical shared Modbus core boundary (`src/modbusCore.js`)
 - [ ] converge Master onto one runtime/UI contract
 - [ ] migrate valuable v8 Modbus-only capabilities into the unified product shell
 - [ ] retire duplicate experimental shell paths after migration/acceptance
@@ -89,7 +89,8 @@ Implemented source:
 
 Next:
 
-- [ ] per-register alias/name/unit/bitfield metadata
+- [x] per-register alias/name/unit/notes mapping foundation
+- [ ] bitfield and richer register metadata
 - [ ] clear/reset per-monitor counters
 - [ ] open current monitor directly in Traffic
 - [ ] direct Modbus Logger/Trend from monitor
