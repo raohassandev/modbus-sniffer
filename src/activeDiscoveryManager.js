@@ -33,7 +33,9 @@ class ActiveDiscoveryManager extends EventEmitter{
       job.progress={current:Number(p?.current)||0,total:Number(p?.total)||0,unitId:p?.unitId??null,transport:p?.transport||transport};this._emit();
     };
     const runner=transport==='TCP'?this.scanTcp:this.scanRtu;
-    const scanConfig={...config,transport:undefined,signal:controller.signal,onProgress};delete scanConfig.transport;
+    const externalEvidence=typeof config.onEvidence==='function'?config.onEvidence:null;
+    const onEvidence=e=>{const event={...e,details:{...(e?.details||{}),jobId}};this.emit('evidence',event);externalEvidence?.(event);};
+    const scanConfig={...config,transport:undefined,signal:controller.signal,onProgress,onEvidence};delete scanConfig.transport;
     this.promise=Promise.resolve().then(()=>runner(scanConfig)).then(result=>{
       if(this.job?.jobId!==jobId)return result;
       job.result=result;job.results=Array.isArray(result?.results)?result.results.map(x=>({...x})):job.results;job.state='completed';job.running=false;job.completedAt=Date.now();job.error=null;this.controller=null;this._emit();return result;
