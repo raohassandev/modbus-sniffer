@@ -12,7 +12,7 @@
     "v7": "node src/index-v7.js",
     "ports": "node src/index-v7.js --list-ports",
     "demo": "node src/index-v7.js --demo",
-    "test": "node --test",
+    "test": "node scripts/run-root-tests.js",
     "lint": "eslint .",
     "check:v8": "node scripts/check-v8-syntax.js",
     "version:check": "node scripts/version-sync.js",
