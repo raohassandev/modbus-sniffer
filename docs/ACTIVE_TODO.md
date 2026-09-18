@@ -49,6 +49,11 @@ Explicitly out of product scope:
 - [ ] ensure Device Clone remains capture/register-evidence -> Modbus simulator only
 - [ ] ensure scripting APIs expose Modbus test operations only
 - [ ] classify/remove any remaining non-Modbus UI/routes/services
+- [ ] inventory duplicate v7/v8 Master, connection and evidence paths
+- [ ] define one canonical shared Modbus core boundary
+- [ ] converge Master onto one runtime/UI contract
+- [ ] migrate valuable v8 Modbus-only capabilities into the unified product shell
+- [ ] retire duplicate experimental shell paths after migration/acceptance
 
 ## Stable Sniffer baseline
 
