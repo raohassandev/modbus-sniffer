@@ -9,14 +9,13 @@
   loadScript('/v8/traffic-register.js');
   loadScript('/v8/diagnostics-workspace.js');
   loadScript('/v8/history-workspace.js');
-  loadScript('/v8/hmi-workspace.js');
   loadScript('/v8/standard-monitor.js');
   loadScript('/v8/help.js');
 
   const workspaceLabels = new Map([
     ['connections', 'Connections'], ['master', 'Master / Poll'], ['discovery', 'Scan / Discovery'], ['traffic', 'Traffic'],
-    ['simulator', 'Simulator'], ['registerLab', 'Register Lab'], ['testCenter', 'Test Center'], ['charts', 'Charts'],
-    ['historian', 'Historian'], ['automation', 'Automation'], ['hmi', 'HMI'], ['help', 'Help'], ['settings', 'Settings'],
+    ['simulator', 'Slave'], ['registerLab', 'Register Lab'], ['testCenter', 'Test Center'], ['charts', 'Live Trend'],
+    ['historian', 'Logger / Trend'], ['automation', 'Test Sequences'], ['help', 'Help'], ['settings', 'Settings'],
   ]);
   const openedTabs = new Set(['connections']);
   let activeTab = 'connections';
@@ -33,6 +32,10 @@
     };
     rename('master', 'Master / Poll');
     rename('discovery', 'Scan / Discovery');
+    rename('simulator', 'Slave');
+    rename('charts', 'Live Trend');
+    rename('historian', 'Logger / Trend');
+    rename('automation', 'Test Sequences');
 
     let help = navList.querySelector('[data-workspace="help"]');
     if (!help) {
@@ -44,7 +47,8 @@
       navList.insertBefore(help, navList.querySelector('[data-workspace="settings"]'));
     }
 
-    const order = ['connections', 'master', 'discovery', 'traffic', 'simulator', 'registerLab', 'testCenter', 'charts', 'historian', 'automation', 'hmi', 'help', 'settings'];
+    navList.querySelector('[data-workspace="hmi"]')?.remove();
+    const order = ['master', 'simulator', 'traffic', 'registerLab', 'discovery', 'testCenter', 'charts', 'historian', 'automation', 'connections', 'help', 'settings'];
     for (const workspace of order) {
       const button = navList.querySelector(`[data-workspace="${workspace}"]`);
       if (button) navList.appendChild(button);
@@ -53,16 +57,17 @@
   ensureStandardNavigation();
 
   const brandSubtitle = document.querySelector('.brand-subtitle');
-  if (brandSubtitle) brandSubtitle.textContent = 'v8.0.0 release-candidate workspace · F1 help · Ctrl/Cmd+K quick open';
+  if (brandSubtitle) brandSubtitle.textContent = 'experimental Modbus-only integration · F1 help · Ctrl/Cmd+K quick open';
   for (const row of document.querySelectorAll('#workspace-settings .details-list > div')) {
     const term = row.querySelector('dt');
     const value = row.querySelector('dd');
     if (!term || !value) continue;
     if (term.textContent.trim() === 'Stable product') {
-      term.textContent = 'Release candidate';
-      value.textContent = 'v8.0.0';
+      term.textContent = 'Stable product';
+      value.textContent = 'v7 Sniffer';
     } else if (term.textContent.trim() === 'Workbench') {
-      value.textContent = 'v8.0.0';
+      term.textContent = 'Integration branch';
+      value.textContent = 'v8 experimental';
     }
   }
 
