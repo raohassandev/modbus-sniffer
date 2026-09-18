@@ -56,8 +56,7 @@ jobs:
           $desktopVersion = node -p "require('./desktop/package.json').version"
           @(
             "product=Modbus Sniffer",
-            "default_runtime=stable-v7-sniffer",
-            "experimental_runtime=v8-workbench-opt-in",
+            "runtime=unified-modbus-engineering-tool",
             "root_version=$rootVersion",
             "desktop_version=$desktopVersion",
             "commit=$env:GITHUB_SHA",
