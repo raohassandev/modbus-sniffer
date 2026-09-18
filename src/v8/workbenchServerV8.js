@@ -19,8 +19,6 @@ const { TestCenterWorkspaceService } = require('./testCenter/testCenterWorkspace
 const { mountTestCenterRoutes } = require('./testCenter/testCenterRoutes');
 const { HistoryWorkspaceService } = require('./history/historyWorkspaceServiceLazy');
 const { mountHistoryRoutes } = require('./history/historyRoutes');
-const { HmiBuilderService } = require('./hmi/hmiBuilderServiceHardened');
-const { mountHmiRoutes } = require('./hmi/hmiRoutes');
 const { mountProjectLifecycleRoutes } = require('./project/projectLifecycleRoutes');
 const { mountReportRoutes } = require('./reporting/reportRoutes');
 
@@ -35,7 +33,6 @@ async function startV8ProductServer(options = {}) {
   const registerLab = new RegisterLabService({ store: options.store, broker: options.broker });
   const digitalTwin = new DigitalTwinService({ store: options.store, registerLab, simulator });
   const history = new HistoryWorkspaceService({ store: options.store, registerLab, dataDir: options.store?.dataDir });
-  const hmi = new HmiBuilderService({ store: options.store, masterWorkspace, testCenter });
 
   const broadcast = (event) => {
     const payload = JSON.stringify({ at: Date.now(), ...event });
@@ -50,7 +47,6 @@ async function startV8ProductServer(options = {}) {
   mountDigitalTwinRoutes({ app: web.app, digitalTwin, flags: options.flags, assertFeature, broadcast });
   mountTestCenterRoutes({ app: web.app, testCenter, flags: options.flags, assertFeature, broadcast });
   mountHistoryRoutes({ app: web.app, history, flags: options.flags, assertFeature, broadcast });
-  mountHmiRoutes({ app: web.app, hmi, flags: options.flags, assertFeature, broadcast });
   const reports = mountReportRoutes({ app: web.app, store: options.store, masterWorkspace, timeline, history });
 
   const capture = (event) => {
@@ -70,7 +66,6 @@ async function startV8ProductServer(options = {}) {
   digitalTwin.on('event', passiveRelay);
   history.on('event', onHistoryEvent);
   history.on('error', onHistoryError);
-  hmi.on('event', passiveRelay);
   options.broker.on('event', onBrokerEvent);
 
   const baseClose = web.close;
@@ -86,10 +81,8 @@ async function startV8ProductServer(options = {}) {
     registerLab,
     digitalTwin,
     history,
-    hmi,
     async close() {
       options.broker.off('event', onBrokerEvent);
-      hmi.off('event', passiveRelay);
       history.off('event', onHistoryEvent);
       history.off('error', onHistoryError);
       digitalTwin.off('event', passiveRelay);
