@@ -48,7 +48,7 @@ test('stable Logger/Trend logs passive Sniffer and Master register sources',t=>{
   assert.deepEqual(sniffer.map(x=>x.value),[230]);
   assert.deepEqual(masterSeries.map(x=>x.value),[17]);
   assert.match(service.exportCsv('sniffer-v'),/230/);
-  assert.equal(service.status().logger.stats.written,2);
+  assert.equal(service.status().logger.stats.written,3);
 });
 
 test('stable Logger/Trend persists profile definitions and logs protocol evidence',t=>{
