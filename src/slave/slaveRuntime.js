@@ -86,6 +86,7 @@ function normalizeDevice(input = {}, framing = 'tcp') {
       coils: input.writableAreas?.coils !== false,
       holdingRegisters: input.writableAreas?.holdingRegisters !== false,
     }),
+    exceptionStatus: integer(input.exceptionStatus, 0, { min: 0, max: 0xFF, field: 'exceptionStatus' }),
     identity: Object.freeze({
       vendorName: String(input.identity?.vendorName || 'Automatrix'),
       productCode: String(input.identity?.productCode || `Virtual-${unitId}`),
@@ -95,6 +96,8 @@ function normalizeDevice(input = {}, framing = 'tcp') {
       userApplicationName: String(input.identity?.userApplicationName || ''),
     }),
     memory: input.memory && typeof input.memory === 'object' ? input.memory : {},
+    fileRecords: Array.isArray(input.fileRecords) ? cloneJson(input.fileRecords) : [],
+    fifoQueues: Array.isArray(input.fifoQueues) ? cloneJson(input.fifoQueues) : [],
   });
 }
 
@@ -229,7 +232,10 @@ class SlaveRuntime extends EventEmitter {
         unitId: device.unitId,
         sizes: Object.freeze(Object.fromEntries(AREAS.map((area) => [area, device.areas[area].size]))),
         writableAreas: Object.freeze({ ...device.writableAreas }),
+        exceptionStatus: device.exceptionStatus,
         identity: Object.freeze(Object.fromEntries([...device.identity.entries()].map(([id, value]) => [String(id), Buffer.from(value).toString('utf8')]))),
+        fileRecordSegments: device.exportFileRecords().length,
+        fifoQueues: device.exportFifoQueues().length,
       }));
   }
 
@@ -268,6 +274,49 @@ class SlaveRuntime extends EventEmitter {
     device.seed(area, start, values);
     this._recordSynthetic('slave.memory-seeded', { unitId: device.unitId, area, address: start, quantity: values.length });
     return this.readMemory({ unitId: device.unitId, area, address: start, quantity: values.length });
+  }
+
+  readFileRecords({ unitId, records = [] } = {}) {
+    const device = this._device(unitId);
+    if (!Array.isArray(records) || !records.length) throw new SlaveRuntimeError('INVALID_FILE_RECORDS', 'records must be a non-empty array');
+    return Object.freeze({
+      unitId: device.unitId,
+      records: Object.freeze(records.map((record, index) => {
+        const fileNumber = integer(record.fileNumber, undefined, { min: 0, max: 0xFFFF, field: `records[${index}].fileNumber` });
+        const recordNumber = integer(record.recordNumber, undefined, { min: 0, max: 0xFFFF, field: `records[${index}].recordNumber` });
+        const recordLength = integer(record.recordLength, undefined, { min: 1, max: 125, field: `records[${index}].recordLength` });
+        return Object.freeze({ fileNumber, recordNumber, values: Object.freeze(device.readFileRecord(fileNumber, recordNumber, recordLength)) });
+      })),
+    });
+  }
+
+  seedFileRecords({ unitId, records = [] } = {}) {
+    const device = this._device(unitId);
+    if (!Array.isArray(records) || !records.length) throw new SlaveRuntimeError('INVALID_FILE_RECORDS', 'records must be a non-empty array');
+    const written = records.map((record, index) => {
+      const fileNumber = integer(record.fileNumber, undefined, { min: 0, max: 0xFFFF, field: `records[${index}].fileNumber` });
+      const recordNumber = integer(record.recordNumber, undefined, { min: 0, max: 0xFFFF, field: `records[${index}].recordNumber` });
+      if (!Array.isArray(record.values) || !record.values.length) throw new SlaveRuntimeError('INVALID_FILE_RECORDS', `records[${index}].values must be non-empty`);
+      const values = record.values.map((value, valueIndex) => integer(value, undefined, { min: 0, max: 0xFFFF, field: `records[${index}].values[${valueIndex}]` }));
+      device.writeFileRecord(fileNumber, recordNumber, values, { seed: true });
+      return { fileNumber, recordNumber, values };
+    });
+    this._recordSynthetic('slave.file-records-seeded', { unitId: device.unitId, records: written.length });
+    return Object.freeze({ unitId: device.unitId, records: Object.freeze(written) });
+  }
+
+  seedFifo({ unitId, address = 0, values = [] } = {}) {
+    const device = this._device(unitId);
+    const pointer = integer(address, 0, { min: 0, max: 0xFFFF, field: 'address' });
+    const normalized = device.seedFifo(pointer, values.map((value, index) => integer(value, undefined, { min: 0, max: 0xFFFF, field: `values[${index}]` })));
+    this._recordSynthetic('slave.fifo-seeded', { unitId: device.unitId, address: pointer, quantity: normalized.length });
+    return Object.freeze({ unitId: device.unitId, address: pointer, values: Object.freeze(normalized) });
+  }
+
+  readFifo({ unitId, address = 0 } = {}) {
+    const device = this._device(unitId);
+    const pointer = integer(address, 0, { min: 0, max: 0xFFFF, field: 'address' });
+    return Object.freeze({ unitId: device.unitId, address: pointer, values: Object.freeze(device.readFifo(pointer)) });
   }
 
   listClients() {
@@ -351,6 +400,9 @@ class SlaveRuntime extends EventEmitter {
       sizes: definition.sizes,
       identity: definition.identity,
       writableAreas: definition.writableAreas,
+      exceptionStatus: definition.exceptionStatus,
+      fileRecords: definition.fileRecords,
+      fifoQueues: definition.fifoQueues,
     }));
     for (const area of AREAS) {
       const segments = Array.isArray(definition.memory?.[area]) ? definition.memory[area] : [];
@@ -376,7 +428,10 @@ class SlaveRuntime extends EventEmitter {
       unitId: device.unitId,
       sizes: Object.fromEntries(AREAS.map((area) => [area, device.areas[area].size])),
       writableAreas: { ...device.writableAreas },
+      exceptionStatus: device.exceptionStatus,
       identity: Object.fromEntries([...device.identity.entries()].map(([id, value]) => [String(id), Buffer.from(value).toString('utf8')])),
+      fileRecords: device.exportFileRecords(),
+      fifoQueues: device.exportFifoQueues(),
       memory: Object.fromEntries(AREAS.map((area) => [area, sparseArea(device.areas[area])])),
     }));
   }
