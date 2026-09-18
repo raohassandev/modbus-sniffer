@@ -74,7 +74,10 @@ test('stable Logger/Trend persists profile definitions and logs protocol evidenc
   assert.equal(service.listProfiles().length,1);
   assert.equal(service.getProfile('persisted').label,'Persisted');
   assert.deepEqual(service.querySeries('persisted',{maxPoints:100}).map(x=>x.value),[55]);
+  assert.equal(service.recentEvents({limit:10}).length,1);
+  assert.equal(service.recentEvents({limit:10})[0].sourceType,'Master');
   assert.equal(service.status().hydration.recordsLoaded,1);
+  assert.equal(service.status().hydration.eventsLoaded,1);
 });
 
 test('stable Logger/Trend browser workspace loads and parses',()=>{
