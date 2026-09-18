@@ -57,17 +57,17 @@
   ensureStandardNavigation();
 
   const brandSubtitle = document.querySelector('.brand-subtitle');
-  if (brandSubtitle) brandSubtitle.textContent = 'experimental Modbus-only integration · F1 help · Ctrl/Cmd+K quick open';
+  if (brandSubtitle) brandSubtitle.textContent = 'compatibility Modbus engineering shell · F1 help · Ctrl/Cmd+K quick open';
   for (const row of document.querySelectorAll('#workspace-settings .details-list > div')) {
     const term = row.querySelector('dt');
     const value = row.querySelector('dd');
     if (!term || !value) continue;
     if (term.textContent.trim() === 'Stable product') {
       term.textContent = 'Stable product';
-      value.textContent = 'v7 Sniffer';
+      value.textContent = 'Unified Modbus Engineering Tool';
     } else if (term.textContent.trim() === 'Workbench') {
-      term.textContent = 'Integration branch';
-      value.textContent = 'v8 experimental';
+      term.textContent = 'Compatibility shell';
+      value.textContent = 'Internal support surface';
     }
   }
 
