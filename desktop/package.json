@@ -16,8 +16,8 @@
   },
   "build": {
     "appId": "pk.automatrix.modbus-analyzer",
-    "productName": "Modbus Sniffer",
-    "artifactName": "Modbus-Sniffer-Setup-${version}.${ext}",
+    "productName": "Modbus Engineering Tool",
+    "artifactName": "Modbus-Engineering-Tool-Setup-${version}.${ext}",
     "asar": true,
     "files": [
       "main.js",
