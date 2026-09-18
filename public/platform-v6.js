@@ -1,7 +1,7 @@
 'use strict';
 
 window.addEventListener('DOMContentLoaded',()=>{
-  for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1','/device-inventory-v62.css?v=20260914-1','/discovery-v63.css?v=20260915-1','/active-discovery-v7.css?v=20260915-1','/intelligence-v7.css?v=20260914-1','/master-v7.css?v=20260917-1','/master-sessions-v7.css?v=20260917-1','/master-register-meta-v7.css?v=20260918-1','/slave-v7.css?v=20260918-1']){
+  for(const href of ['/platform-v62.css?v=20260914-2','/chart-height-fix.css?v=20260914-1','/device-inventory-v62.css?v=20260914-1','/discovery-v63.css?v=20260915-1','/active-discovery-v7.css?v=20260915-1','/intelligence-v7.css?v=20260914-1','/master-v7.css?v=20260917-1','/master-sessions-v7.css?v=20260917-1','/master-register-meta-v7.css?v=20260918-1','/slave-v7.css?v=20260918-1','/master-write-v7.css?v=20260918-1']){
     if(document.querySelector(`link[href="${href}"]`))continue;
     const link=document.createElement('link');link.rel='stylesheet';link.href=href;document.head.appendChild(link);
   }
@@ -49,6 +49,11 @@ window.addEventListener('DOMContentLoaded',()=>{
                         sessions.onload=()=>{
                           const registerMeta=document.createElement('script');
                           registerMeta.src='/master-register-meta-v7.js?v=20260918-1';
+                          registerMeta.onload=()=>{
+                            const masterWrite=document.createElement('script');
+                            masterWrite.src='/master-write-v7.js?v=20260918-1';
+                            document.body.appendChild(masterWrite);
+                          };
                           document.body.appendChild(registerMeta);
                         };
                         document.body.appendChild(sessions);
