@@ -36,6 +36,7 @@
               <label>Max Clients<input id="slaveMaxClients" type="number" min="1" max="256" value="32"></label>
               <label>Idle Timeout (ms)<input id="slaveIdleTimeout" type="number" min="0" value="0"></label>
               <label id="slaveMaxPeersRow" hidden>Max UDP Peers<input id="slaveMaxPeers" type="number" min="1" max="4096" value="256"></label>
+              <label id="slavePeerIdleRow" hidden>UDP Peer Idle Retention (ms)<input id="slavePeerIdle" type="number" min="0" max="86400000" value="300000"></label>
               <label id="slaveTlsServernameRow" hidden>TLS minimum<select id="slaveTlsMinVersion"><option value="TLSv1.2">TLS 1.2+</option><option value="TLSv1.3">TLS 1.3</option></select></label>
               <label id="slaveTlsVerifyRow" class="slave-check" hidden><input id="slaveTlsRequestCert" type="checkbox"> Request client certificate</label>
               <label id="slaveTlsRejectRow" class="slave-check" hidden><input id="slaveTlsRejectUnauthorized" type="checkbox"> Require trusted client certificate</label>
@@ -136,7 +137,7 @@
   function config(){
     const network=['tcp','tls','udp','rtu-tcp','ascii-tcp','rtu-udp','ascii-udp'].includes(state.type);
     if(network){
-      const out={type:state.type,host:q('slaveTcpHost').value.trim()||'127.0.0.1',port:Number(q('slaveTcpPort').value||(state.type==='tls'?802:502)),maxClients:Number(q('slaveMaxClients').value||32),maxPeers:Number(q('slaveMaxPeers').value||256),idleTimeoutMs:Number(q('slaveIdleTimeout').value||0)};
+      const out={type:state.type,host:q('slaveTcpHost').value.trim()||'127.0.0.1',port:Number(q('slaveTcpPort').value||(state.type==='tls'?802:502)),maxClients:Number(q('slaveMaxClients').value||32),maxPeers:Number(q('slaveMaxPeers').value||256),peerIdleMs:Number(q('slavePeerIdle').value||300000),idleTimeoutMs:Number(q('slaveIdleTimeout').value||0)};
       if(state.type==='tls'){
         const key=q('slaveTlsKey').value;
         if(!key&&state.tlsKeyConfigured&&state.connectionDirty)throw new Error('TLS private key is stored only in the running backend. Re-enter the private key before changing TLS server settings.');
@@ -168,7 +169,7 @@
     const chip=q('slaveRunChip');chip.classList.toggle('running',state.running);chip.querySelector('span').textContent=state.running?'Running':'Stopped';
     q('slaveStart').disabled=state.running;q('slaveStop').disabled=!state.running;
     q('slaveType').querySelectorAll('button').forEach(b=>b.disabled=state.running);
-    for(const id of ['slaveTcpHost','slaveTcpPort','slaveMaxClients','slaveMaxPeers','slaveIdleTimeout','slaveSerialPort','slaveBaud','slaveParity','slaveDataBits','slaveStopBits','slaveEcho','slaveRtsMode','slaveRtsSettle','slaveTlsMinVersion','slaveTlsRequestCert','slaveTlsRejectUnauthorized','slaveTlsCert','slaveTlsKey','slaveTlsCa']){const el=q(id);if(el)el.disabled=state.running;}
+    for(const id of ['slaveTcpHost','slaveTcpPort','slaveMaxClients','slaveMaxPeers','slavePeerIdle','slaveIdleTimeout','slaveSerialPort','slaveBaud','slaveParity','slaveDataBits','slaveStopBits','slaveEcho','slaveRtsMode','slaveRtsSettle','slaveTlsMinVersion','slaveTlsRequestCert','slaveTlsRejectUnauthorized','slaveTlsCert','slaveTlsKey','slaveTlsCa']){const el=q(id);if(el)el.disabled=state.running;}
     const stats=status.server?.stats||{};
     q('slaveRequests').textContent=Number(stats.requests||0).toLocaleString();
     q('slaveResponses').textContent=Number(stats.responses||0).toLocaleString();
@@ -302,7 +303,7 @@
     if(!cfg)return;
     const network=['tcp','tls','udp','rtu-tcp','ascii-tcp','rtu-udp','ascii-udp'].includes(cfg.type);
     if(network){
-      q('slaveTcpHost').value=cfg.host||'127.0.0.1';q('slaveTcpPort').value=cfg.port??(cfg.type==='tls'?802:502);q('slaveMaxClients').value=cfg.maxClients??32;q('slaveMaxPeers').value=cfg.maxPeers??256;q('slaveIdleTimeout').value=cfg.idleTimeoutMs??0;
+      q('slaveTcpHost').value=cfg.host||'127.0.0.1';q('slaveTcpPort').value=cfg.port??(cfg.type==='tls'?802:502);q('slaveMaxClients').value=cfg.maxClients??32;q('slaveMaxPeers').value=cfg.maxPeers??256;q('slavePeerIdle').value=cfg.peerIdleMs??300000;q('slaveIdleTimeout').value=cfg.idleTimeoutMs??0;
       if(cfg.tls){
         q('slaveTlsCert').value=cfg.tls.cert||'';q('slaveTlsKey').value='';q('slaveTlsCa').value=cfg.tls.ca||'';q('slaveTlsRequestCert').checked=Boolean(cfg.tls.requestCert);q('slaveTlsRejectUnauthorized').checked=Boolean(cfg.tls.rejectUnauthorized);q('slaveTlsMinVersion').value=cfg.tls.minVersion||'TLSv1.2';
         state.tlsKeyConfigured=Boolean(cfg.tls.keyConfigured);
@@ -316,7 +317,7 @@
     const network=['tcp','tls','udp','rtu-tcp','ascii-tcp','rtu-udp','ascii-udp'].includes(state.type),tls=state.type==='tls',udp=state.type.includes('udp');
     q('slaveTcpFields').hidden=!network;q('slaveSerialFields').hidden=network;
     for(const id of ['slaveTlsServernameRow','slaveTlsVerifyRow','slaveTlsRejectRow','slaveTlsCertRow','slaveTlsKeyRow','slaveTlsCaRow'])q(id).hidden=!tls;
-    q('slaveMaxPeersRow').hidden=!udp;
+    q('slaveMaxPeersRow').hidden=!udp;q('slavePeerIdleRow').hidden=!udp;
     if(network&&document.activeElement?.id!=='slaveTcpPort')q('slaveTcpPort').value=state.type==='tls'?802:(q('slaveTcpPort').value||502);
     q('slaveType').querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.slaveType===state.type));
   }
