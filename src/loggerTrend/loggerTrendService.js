@@ -88,12 +88,51 @@ function passivePoints(tx){
   return out;
 }
 
+function loadRecentSamples({directory,prefix='modbus',limits=new Map(),maxBytes=64*1024*1024}={}){
+  const wanted=new Map([...limits.entries()].filter(([,limit])=>Number.isInteger(limit)&&limit>0));
+  const collected=new Map([...wanted.keys()].map(id=>[id,[]]));
+  const stats={filesScanned:0,bytesScanned:0,recordsLoaded:0,truncated:false};
+  if(!wanted.size||!directory||!fs.existsSync(directory))return{collected,stats};
+  const files=fs.readdirSync(directory)
+    .filter(name=>name.startsWith(prefix+'-')&&name.endsWith('.jsonl'))
+    .map(name=>({name,full:path.join(directory,name),stat:fs.statSync(path.join(directory,name))}))
+    .sort((a,b)=>b.stat.mtimeMs-a.stat.mtimeMs);
+  const complete=()=>[...wanted.entries()].every(([id,limit])=>(collected.get(id)?.length||0)>=limit);
+  for(const file of files){
+    if(complete())break;
+    if(stats.bytesScanned>=maxBytes){stats.truncated=true;break;}
+    const remaining=Math.max(0,maxBytes-stats.bytesScanned);
+    if(file.stat.size>remaining&&stats.filesScanned>0){stats.truncated=true;break;}
+    let text;
+    try{text=fs.readFileSync(file.full,'utf8');}catch{continue;}
+    stats.filesScanned++;
+    stats.bytesScanned+=Buffer.byteLength(text);
+    const lines=text.split(/?
+/);
+    for(let i=lines.length-1;i>=0;i--){
+      const line=lines[i];if(!line)continue;
+      let row;try{row=JSON.parse(line);}catch{continue;}
+      const id=String(row?.streamId||'');
+      const limit=wanted.get(id),bucket=collected.get(id);
+      if(!limit||!bucket||bucket.length>=limit)continue;
+      const value=typeof row.value==='boolean'?(row.value?1:0):Number(row.value);
+      const timestamp=Number(row.timestamp);
+      if(!Number.isFinite(value)||!Number.isFinite(timestamp))continue;
+      bucket.push({timestamp,value,quality:String(row.quality||'good'),raw:row.metadata?.rawValue??null});
+      stats.recordsLoaded++;
+      if(complete())break;
+    }
+  }
+  for(const bucket of collected.values())bucket.reverse();
+  return{collected,stats};
+}
+
 class StableLoggerTrendService extends EventEmitter{
-  constructor({state,masterRuntime,dataDir=path.join(process.cwd(),'data','logger-trend'),clock=()=>Date.now(),maxEvents=5000}={}){
+  constructor({state,masterRuntime,dataDir=path.join(process.cwd(),'data','logger-trend'),clock=()=>Date.now(),maxEvents=5000,maxHydrateBytes=64*1024*1024}={}){
     super();
     if(!state||typeof state.on!=='function')throw new TypeError('state is required');
     if(!masterRuntime||typeof masterRuntime.on!=='function')throw new TypeError('masterRuntime is required');
-    this.state=state;this.masterRuntime=masterRuntime;this.dataDir=path.resolve(dataDir);this.clock=clock;this.maxEvents=maxEvents;
+    this.state=state;this.masterRuntime=masterRuntime;this.dataDir=path.resolve(dataDir);this.clock=clock;this.maxEvents=maxEvents;this.maxHydrateBytes=Math.max(1024*1024,Number(maxHydrateBytes)||64*1024*1024);this.hydration={filesScanned:0,bytesScanned:0,recordsLoaded:0,truncated:false};
     fs.mkdirSync(this.dataDir,{recursive:true});
     this.profilePath=path.join(this.dataDir,'profiles.json');
     this.profiles=new Map();
@@ -106,6 +145,7 @@ class StableLoggerTrendService extends EventEmitter{
     state.on('transaction',this._onTransaction);
     masterRuntime.on('point',this._onMasterPoint);
     this._loadProfiles();
+    this._hydrateHistory();
   }
 
   _loadProfiles(){
@@ -121,6 +161,16 @@ class StableLoggerTrendService extends EventEmitter{
     fs.writeFileSync(tmp,JSON.stringify(this.listProfiles(),null,2));
     try{fs.rmSync(this.profilePath,{force:true});}catch{}
     fs.renameSync(tmp,this.profilePath);
+  }
+  _hydrateHistory(){
+    const limits=new Map([...this.profiles.values()].filter(p=>p.enabled).map(p=>[p.streamId,p.maxPoints]));
+    const {collected,stats}=loadRecentSamples({directory:path.join(this.dataDir,'samples'),prefix:'modbus',limits,maxBytes:this.maxHydrateBytes});
+    this.hydration={...stats};
+    for(const [streamId,rows] of collected.entries()){
+      for(const row of rows){
+        try{this.chart.appendSample(streamId,'value',row);}catch{/* invalid persisted row is ignored */}
+      }
+    }
   }
   _installProfile(profile,persist=true){
     const existing=this.profiles.get(profile.streamId);
@@ -196,7 +246,7 @@ class StableLoggerTrendService extends EventEmitter{
   }
   exportCsv(streamId){this.getProfile(streamId);return this.chart.exportCsv(streamId);}
   status(){
-    return Object.freeze({profiles:this.listProfiles(),logger:this.logger.status(),eventCount:this.events.length,dataDir:this.dataDir});
+    return Object.freeze({profiles:this.listProfiles(),logger:this.logger.status(),eventCount:this.events.length,dataDir:this.dataDir,hydration:Object.freeze({...this.hydration})});
   }
   shutdown(){
     this.state.off('transaction',this._onTransaction);
@@ -213,4 +263,5 @@ module.exports={
   normalizeSource,
   passivePoints,
   pointMatches,
+  loadRecentSamples,
 };
