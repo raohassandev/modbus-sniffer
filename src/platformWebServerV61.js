@@ -129,19 +129,26 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   };
   const evidence = new EvidenceHub({ maxRows: 20000 });
   let slaveRuntime=null;
+  let rawLab=null;
   const masterRuntime=installMasterRoutes({
     app,state,demo,disconnectSerial,
     getSlaveStatus:()=>slaveRuntime?.status?.()||null,
-    disconnectSlave:async()=>{ if(slaveRuntime) await slaveRuntime.stop(); }
+    disconnectSlave:async()=>{ if(slaveRuntime) await slaveRuntime.stop(); },
+    getRawLabStatus:()=>rawLab?.status?.()||null,
+    disconnectRawLab:async()=>{ if(rawLab) await rawLab.close(); }
   });
   const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null,masterRuntime});
-  slaveRuntime=installSlaveRoutes({app,state,demo,disconnectSerial,masterRuntime,activeDiscovery,broadcast});
+  slaveRuntime=installSlaveRoutes({
+    app,state,demo,disconnectSerial,masterRuntime,activeDiscovery,broadcast,
+    getRawLabStatus:()=>rawLab?.status?.()||null,
+    disconnectRawLab:async()=>{ if(rawLab) await rawLab.close(); }
+  });
   const deviceClone=installDeviceCloneRoutes({app,state,slaveRuntime,broadcast});
   const testSequences=installTestSequenceRoutes({app,masterRuntime,broadcast});
   const loggerTrend=installLoggerTrendRoutes({app,state,masterRuntime,broadcast});
   installCompareRoutes({app});
   installTransportLabRoutes({app});
-  const rawLab=installRawLabRoutes({app,state,demo,disconnectSerial,masterRuntime,slaveRuntime,activeDiscovery,broadcast});
+  rawLab=installRawLabRoutes({app,state,demo,disconnectSerial,masterRuntime,slaveRuntime,activeDiscovery,broadcast});
 
   const publishEvidenceRow = row => { if(row){ loggerTrend.ingestEvidence(row); broadcast('transaction',row); } };
   const onMasterEvent = event => publishEvidenceRow(evidence.ingest(event,{sourceType:'Master'}));
