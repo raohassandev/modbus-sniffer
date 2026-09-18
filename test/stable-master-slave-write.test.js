@@ -61,7 +61,7 @@ test('stable Master guarded writes interoperate with stable Slave and relock',as
   const audit=master.writeAuditEntries({limit:20});
   assert.ok(audit.length>=4);
   assert.ok(audit.some(row=>row.functionCode===6&&row.result==='success'&&row.verification?.matched===true));
-  assert.ok(audit.some(row=>row.functionCode===16&&row.result==='failed'));
+  assert.ok(audit.some(row=>row.functionCode===16&&row.result==='failed'&&row.preflightRejected===true&&row.transmitted===false));
   assert.ok(audit.some(row=>row.functionCode===22&&row.result==='success'));
   assert.ok(audit.some(row=>row.functionCode===23&&row.result==='success'));
 
