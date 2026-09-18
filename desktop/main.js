@@ -16,9 +16,7 @@ let quitInProgress = false;
 let allowFinalQuit = false;
 let desktopLogPath = null;
 
-function desktopMode() {
-  return String(process.env.MODBUS_DESKTOP_MODE || '').toLowerCase() === 'v8' ? 'v8' : 'sniffer';
-}
+function desktopMode() { return 'unified'; }
 
 function appendDesktopLog(level, message) {
   if (!desktopLogPath) return;
@@ -78,29 +76,18 @@ async function chooseBackendPort() {
   return probePort(0);
 }
 
-function backendEntry(root = backendRoot(), mode = desktopMode()) {
-  return path.join(root, 'src', mode === 'v8' ? 'index-v8.js' : 'index-v7.js');
-}
+function backendEntry(root = backendRoot()) { return path.join(root, 'src', 'index-v7.js'); }
 
-function backendArgs(dataDir, selectedPort, mode = desktopMode()) {
-  if (mode === 'v8') {
-    return [backendEntry(backendRoot(), mode), '--port', String(selectedPort), '--host', '127.0.0.1', '--data-dir', dataDir];
-  }
-  return [backendEntry(backendRoot(), mode), '--web-port', String(selectedPort), '--web-host', '127.0.0.1', '--data-dir', dataDir];
-}
+function backendArgs(dataDir, selectedPort) { return [backendEntry(backendRoot()), '--web-port', String(selectedPort), '--web-host', '127.0.0.1', '--data-dir', dataDir]; }
 
-function healthPath(mode = desktopMode()) {
-  return mode === 'v8' ? '/api/v8/status' : '/api/status';
-}
+function healthPath() { return '/api/status'; }
 
-function uiPath(mode = desktopMode()) {
-  return mode === 'v8' ? '/v8/' : '/';
-}
+function uiPath() { return '/'; }
 
 function startBackend(dataDir, selectedPort) {
   const root = backendRoot();
   const mode = desktopMode();
-  const args = backendArgs(dataDir, selectedPort, mode);
+  const args = backendArgs(dataDir, selectedPort);
   appendDesktopLog('INFO', `Starting ${mode} backend on 127.0.0.1:${selectedPort}`);
   backend = spawn(process.execPath, args, {
     cwd: root,
