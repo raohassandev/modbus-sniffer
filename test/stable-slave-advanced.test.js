@@ -15,6 +15,7 @@ test('advanced Slave transport normalization maps wire framing correctly',()=>{
   assert.equal(framingForType('ascii-tcp'),'ascii');
   assert.equal(framingForType('ascii-udp'),'ascii');
   assert.equal(normalizeConfig({type:'udp',host:'127.0.0.1',port:0}).maxPeers,256);
+  assert.equal(normalizeConfig({type:'udp',host:'127.0.0.1',port:0}).peerIdleMs,300000);
   assert.equal(normalizeConfig({type:'tls',host:'127.0.0.1',cert:'CERT',key:'KEY'}).port,802);
   assert.throws(()=>normalizeConfig({type:'tls',host:'127.0.0.1'}),e=>e?.code==='TLS_MATERIAL_REQUIRED');
 });
@@ -64,7 +65,7 @@ test('advanced Slave browser assets load and parse',()=>{
   const lab=fs.readFileSync(path.join(root,'public/slave-lab-v7.js'),'utf8');
   const loader=fs.readFileSync(path.join(root,'public/platform-v6.js'),'utf8');
   new vm.Script(base,{filename:'slave-v7.js'});new vm.Script(lab,{filename:'slave-lab-v7.js'});
-  assert.match(base,/RTU\/TCP/);assert.match(base,/ASCII\/UDP/);assert.match(base,/Server Certificate PEM/);
+  assert.match(base,/RTU\/TCP/);assert.match(base,/ASCII\/UDP/);assert.match(base,/Server Certificate PEM/);assert.match(base,/UDP Peer Idle Retention/);
   assert.match(lab,/Fault \/ Exception Policy/);assert.match(lab,/Dynamic Value Generator/);assert.match(lab,/labConfirmed/);
   assert.match(loader,/slave-lab-v7\.js/);
 });
