@@ -1,339 +1,366 @@
-# Modbus Engineering Workbench v8 — Operator Guide
+# Modbus Engineering Tool — Operator Guide
 
-**Product:** Modbus Engineering Workbench  
-**Release line:** v8.0.0  
-**Audience:** commissioning engineers, controls engineers, test engineers, support engineers and trained operators  
-**Safety rule:** use live writes, raw transmission and LAB/fault-injection functions only on equipment and networks where you are authorized to transmit.
+**Branch status:** product-integration / experimental until exact-head validation and field acceptance  
+**Stable default:** Sniffer / Analyzer on `npm start`  
+**Purpose:** advanced Modbus testing, simulation, analysis, reverse engineering, research and evidence.
 
-This guide is the operational companion to `V8_IMPLEMENTATION_STATUS.md`, `SECURITY.md`, `AUTOMATION_SAFETY.md`, `DIGITAL_TWIN_SAFETY.md`, `LOCAL_MAC_RELEASE_GATE.md` and `SITE_ACCEPTANCE.md`.
+This product is intentionally Modbus-only. It is not an HMI/SCADA builder, PLC programming environment, plant historian or generic automation platform.
 
-## 1. Getting started
+## 1. Start the application
 
-Install the locked dependencies and start the v8 Workbench:
+Install dependencies:
 
 ```bash
 npm ci
+```
+
+Run the accepted Sniffer / Analyzer:
+
+```bash
 npm start
 ```
 
-`npm start` launches the v8 runtime (`src/index-v8.js`). v7 remains available only as an explicit compatibility command:
+Open:
 
-```bash
-npm run v7
+```text
+http://127.0.0.1:8080
 ```
 
-Useful development/commissioning validation commands are:
+The older experimental v8 composition is available only when intentionally requested:
 
 ```bash
-npm run version:check
-npm run quality
-npm test
-npm run smoke
-npm run acceptance
-npm run e2e
+npm run workbench
 ```
 
-For the exact software release gate on a clean Mac checkout, use:
+Do not treat the v8 composition as the release default until the unified Modbus product migration is accepted.
 
-```bash
-npm run release:gate:mac
+## 2. Product modes
+
+### Sniffer / Analyzer
+
+Passive mode. Use it to observe an existing Modbus bus or TCP exchange without generating normal polling traffic.
+
+Primary work:
+- decode requests/responses
+- form devices from Unit/Slave IDs
+- learn polling groups and intervals
+- measure RTT, timeouts, exceptions and noise
+- inspect raw frames
+- infer register maps/data types
+- save captures and engineering evidence
+
+The passive RTU Analyzer is receive-only by design.
+
+### Master / Client
+
+Active mode. Use it to communicate directly with a Modbus device.
+
+Primary work:
+- RTU / ASCII / TCP connection
+- FC01–04 reads and continuous polling
+- saved Monitor Sessions
+- 16/32/64-bit integer/float interpretation
+- byte/word order, scale, offset and precision
+- per-register engineering names/units/notes
+- guarded writes
+- advanced diagnostics/function requests
+- direct Traffic troubleshooting
+
+### Slave / Server
+
+Active server mode. Use it to simulate Modbus devices.
+
+Primary work:
+- RTU / ASCII / TCP server
+- multiple Unit IDs
+- Coils, Discrete Inputs, Holding Registers and Input Registers
+- direct simulator memory editing
+- incoming request/write evidence
+- connected TCP client visibility
+- FC43 identity
+- advanced diagnostic/file/FIFO behavior
+- JSON simulator-map import/export
+
+## 3. Serial ownership safety
+
+A physical serial adapter cannot be silently shared by incompatible modes.
+
+Before switching the same COM/serial port:
+- Sniffer -> Master requires explicit confirmation
+- Sniffer -> Slave requires explicit confirmation
+- Master -> Slave requires explicit confirmation
+- Slave -> Master requires explicit confirmation
+- active RTU Discovery must be stopped before serial Slave mode
+
+A mode switch closes/releases the previous active owner before opening the next one.
+
+## 4. Master basic polling
+
+Normal commissioning flow:
+
+```text
+Connect
+  -> Unit / Slave ID
+  -> Function
+  -> Start Address
+  -> Quantity
+  -> Timeout / Poll Interval
+  -> Read Once or Start Polling
+  -> Live Values
 ```
 
-That command is stricter than the individual development checks: it validates Node 20/22/24, quality/audit, bounded scale/soak, browser E2E and exact-head integrity and retains evidence under `.release-evidence/`.
+Basic reads:
+- FC01 Read Coils
+- FC02 Read Discrete Inputs
+- FC03 Read Holding Registers
+- FC04 Read Input Registers
 
-For CLI automation, inspect the supported commands first:
+Polling requests are serialized so a slow request cannot create an overlapping poll storm.
 
-```bash
-npm run v8:cli -- --help
-```
+## 5. Address notation
 
-The Workbench stores project configuration separately from live transport ownership. A project reopen must not restore a connection owner, an armed write latch or LAB/fault-injection state.
+The protocol uses zero-based PDU addresses. Manuals often show reference notation.
 
-## 2. Main workspaces
+| Area | Function | First reference | PDU address |
+| --- | --- | ---: | ---: |
+| Coils | FC01 | 00001 | 0 |
+| Discrete Inputs | FC02 | 10001 | 0 |
+| Input Registers | FC04 | 30001 | 0 |
+| Holding Registers | FC03 | 40001 | 0 |
 
-The v8 shell exposes the following engineering workspaces:
+Example: manual reference 40011 normally maps to FC03 PDU address 10.
 
-- **Connections** — create, import, export, open, close and inspect transport profiles.
-- **Master** — one-shot requests, poll jobs and guarded writes.
-- **Simulator** — virtual devices, memory maps, generators and LAB-only fault injection.
-- **Traffic** — unified Tx/Rx/error/state/test/discovery evidence.
-- **Register Lab** — datatype, byte/word order, scaling, units and engineering interpretation.
-- **Test Center** — validated requests, raw-frame work and repeatable recipes.
-- **Charts / Historian** — bounded live trends, logging and time-range history.
-- **Discovery** — read-only device/address discovery and evidence handoff.
-- **Automation** — loopback-first API/CLI/SDK workflows.
-- **HMI** — operator screens bound to project tags/registers through the central safety path.
-- **Settings** — safe visual preferences such as theme and density.
+Always verify the vendor manual because some vendors already publish zero-based values.
 
-Use **Ctrl+K** on Windows/Linux or **Cmd+K** on macOS to open the command palette. Workspace document tabs support Left/Right Arrow, Home and End keyboard navigation.
+## 6. Datatype interpretation
 
-## 3. Connection modes
+Monitor Sessions support common engineering interpretations including:
+- uint16 / int16
+- uint32 / int32
+- uint64 / int64
+- float32 / float64
+- HEX
+- binary
+- ASCII
+- ABCD / BADC / CDAB / DCBA policies
+- scale / offset / precision
 
-Connection profiles are configuration records; opening a profile creates the live runtime ownership state.
+Keep raw words visible while testing an interpretation. A numerically plausible float is not proof that the datatype is correct.
 
-Supported connection families include:
+Per-register mapping can store an engineering name/alias, unit and notes for the active Monitor Session.
 
-- Serial RTU
-- Serial ASCII
-- Modbus TCP client/server
-- Modbus UDP client/server
-- RTU over TCP/UDP
-- ASCII over TCP/UDP
-- TLS client/server
-- Virtual transport
+## 7. Guarded writes
 
-### Serial guidance
+Writes are locked by default.
 
-Confirm the correct port, baud rate, parity, data bits and stop bits before opening a bus. Serial resources are exclusively owned by the Connection Broker; two incompatible live modes cannot silently share the same serial resource.
+The stable Master guarded-write path supports:
+- FC05 Write Single Coil
+- FC06 Write Single Register
+- FC15 Write Multiple Coils
+- FC16 Write Multiple Registers
+- FC21 Write File Record
+- FC22 Mask Write Register
+- FC23 Read/Write Multiple Registers
 
-For production RS485 wiring, software validation is not enough. Polarity, termination, biasing, isolation, grounding, adapter behavior and noise must be checked under `SITE_ACCEPTANCE.md`.
+Safety behavior:
+- every operation requires explicit confirmation
+- bulk operations require a separate bulk confirmation
+- Unit 0 serial broadcast requires a separate broadcast confirmation
+- read-back verification is enabled by default where a reply/read-back is possible
+- old values are captured where supported
+- the write latch automatically relocks after the operation
+- audit records are append-only during the process lifetime
+- operator comments can be stored with write evidence
 
-### Network guidance
+Use the built-in Slave simulator for exploratory write tests whenever possible.
 
-For client connections, verify the target host/port and selected local interface. The Connection Center may recommend an interface based on address family/subnet, but the operator remains responsible for selecting the intended plant network.
+## 8. Advanced Master requests
 
-For server/listener modes, bind only to interfaces intended for the engineering task. Avoid exposing a listener outside the required local/plant network.
+The Advanced Modbus panel uses the same connection/Traffic path as normal Master requests.
 
-## 4. Modbus addressing and data formats
+Supported advanced request families:
+- FC07 Read Exception Status — serial
+- FC08 Diagnostics — serial
+- FC11 Get Comm Event Counter — serial
+- FC12 Get Comm Event Log — serial
+- FC17 Report Server ID — serial
+- FC20 Read File Record
+- FC24 Read FIFO Queue
+- FC43/14 Read Device Identification
 
-The Workbench uses a **canonical zero-based internal address**. Display notation can be adjusted without changing the stored address.
+Non-zero FC08 diagnostic subfunctions require explicit LAB confirmation.
 
-When interpreting registers, record all of the following rather than only the displayed value:
+FC21 is intentionally handled by Guarded Write rather than the read/diagnostic path.
 
-- function/memory area
-- canonical address
-- quantity
-- signed/unsigned type
-- 16/32/64-bit width
-- float/integer/string/BCD/timestamp interpretation
-- byte and word order
-- scale and offset
-- engineering unit
-- source/provenance
+## 9. Slave memory and identity
 
-Register Lab is the preferred place to compare alternate interpretations. Do not convert an inference into a confirmed definition without device documentation, controlled testing or repeatable evidence.
+Each simulated Unit ID has independent:
+- Coils
+- Discrete Inputs
+- Holding Registers
+- Input Registers
+- Device Identification objects
+- exception-status byte
+- File Record storage
+- FIFO queues
 
-## 5. Master polling
+The default direct Memory Editor changes simulator state deliberately; it is not a Modbus client write and therefore does not represent external write evidence.
 
-Create poll jobs under the intended connection and Unit/Slave ID. Configure interval, timeout and retry values appropriate for the real device and bus.
+External Master writes remain visible in Slave protocol events.
 
-Operational rules:
+Simulator maps can be exported/imported as JSON. Exported maps preserve connection configuration, Unit IDs, non-zero memory, Device Identification, File Records and FIFO queues.
 
-1. Start conservatively, especially on shared serial buses.
-2. Do not allow a slow/dead device to drive an unnecessarily aggressive retry rate.
-3. Use Traffic evidence to confirm request/response pairing and timing.
-4. Use Register Lab for engineering interpretation rather than changing raw protocol evidence.
-5. Pause or stop jobs before changing transport ownership or performing maintenance that requires exclusive access.
+## 10. Traffic and troubleshooting
 
-Unit ID `0` broadcast semantics are write-specific. A request that requires a response must not be treated as a no-response broadcast.
+Traffic is protocol evidence, not a competing workflow.
 
-## 6. Write safety
+When communication fails, inspect in this order:
+1. active mode and connection ownership
+2. exact Tx bytes
+3. whether a reply arrived
+4. Unit ID/function/address matching
+5. CRC/LRC/MBAP validity
+6. exception response
+7. timeout/RTT/timing
+8. only then datatype/engineering interpretation
 
-Live writes are deliberately harder than reads.
+Master provides a direct **Open Traffic** action with the current Unit/function/address filters.
 
-- Writes are **disabled by default** for every new/restored live connection.
-- Enabling writes is **per connection**.
-- Closing/reopening or restarting returns the connection to the locked state.
-- Replay/offline sources cannot execute live writes.
-- Bulk/write-sensitive functions require stronger confirmation.
-- HMI operations that resolve to effective FC16/multi-register writes require explicit bulk confirmation as well as the normal operator confirmation.
-- Confirmed write/test transmissions produce audit evidence with target, channel/connection, timestamp and raw Tx/Rx evidence where applicable.
+## 11. Discovery and reverse engineering
 
-If a serial write is transmitted but the outcome cannot be determined, the Workbench reports `TRANSMISSION_OUTCOME_UNKNOWN`, places the connection into an error/safety state and re-locks writes until the connection is closed/reopened.
-
-Never use a production plant write as an exploratory probe when a virtual simulator or controlled test device can answer the same engineering question.
-
-## 7. Discovery
-
-Discovery is read-only and cannot inherit Master write permission.
-
-Use the FC43/device-identification path first where supported, then controlled read-only fallback scans. Configure range, rate and timeout to match the bus. On RTU, use the maintenance/exclusive-bus interlock before active scanning a production-connected serial line.
-
-Important classification rule: **silence is not proof of a device**. Preserve exception, timeout and raw evidence when deciding whether an address is confirmed.
-
-Selected discovery results can be adopted into project/Master workflows while preserving channel/device identity.
-
-## 8. Simulator and LAB mode
-
-The Simulator supports multiple Unit/Slave IDs, Modbus memory areas, dynamic value generators and standard exception behavior.
+Discovery is active/read-only testing and must remain separate from passive sniffing.
 
 Use it for:
+- Unit/Slave scan
+- FC43 device identification
+- controlled address/range probing
+- discovery evidence
+- adopting confirmed information into later engineering work
 
-- PLC/HMI development before real hardware is available
-- Master regression testing
-- register-map validation
-- deterministic recipe testing
-- digital-twin drafts
+Silence is not proof that an address or device exists.
 
-Fault injection is a separate **LAB** capability. It can model delay/jitter, dropped responses, exceptions, disconnects and malformed/truncated/late behaviors. LAB fault injection must never be enabled through a production proxy/passive channel.
+Serial active discovery requires maintenance/exclusive-bus confirmation.
 
-Dynamic generator definitions are resource-bounded and formulas use the restricted expression parser rather than arbitrary JavaScript execution.
+## 12. Test Center / LAB
 
-## 9. Traffic and Register Lab
+The protocol Test Center is for repeatable Modbus research:
+- raw RTU/ASCII/TCP frames
+- CRC/LRC helpers
+- expected-response matching/masks
+- validated read/write steps
+- delays
+- repeats
+- assertions
+- recipes
+- malformed/boundary testing under explicit LAB controls
 
-Traffic is the evidence layer. Use filters to isolate connection, direction, device, function, error or test context without changing captured protocol bytes.
+Raw/LAB transmission is not a shortcut around write safety.
 
-When troubleshooting, follow this sequence:
+## 13. Device Clone
 
-1. Confirm the expected connection/owner mode.
-2. Confirm exact Tx bytes.
-3. Confirm whether a response arrived and how it was paired.
-4. Review exception/timeout/timing state.
-5. Only then interpret register payloads in Register Lab.
+The former generic “Digital Twin” direction is restricted to a Modbus-specific capability:
 
-This avoids treating a datatype/scaling mistake as a communication failure or vice versa.
+**Device Clone / Capture-to-Simulator**
 
-Traffic and Register Lab use bounded/virtualized presentation so large retained datasets do not require one rendered DOM row per retained item.
+Its purpose is to turn captured/confirmed Modbus register evidence into a virtual Slave definition for controlled research.
 
-## 10. Test Center and recipes
+A Device Clone must preserve:
+- source connection/device
+- Unit ID
+- memory area/address
+- observed values
+- provenance/confidence
+- uncertain/inferred points
+- explicit writable-area policy
 
-Use normal validated requests for ordinary device testing. Raw/custom frames are intentionally separated from validated production requests.
+It is not a plant/process digital-twin platform.
 
-Raw/LAB transmission requires explicit operator awareness because malformed bytes can trigger unexpected behavior in third-party devices.
+## 14. Test Sequences / API
 
-Recipes provide repeatable engineering tests with variables, reads, guarded writes, delays/waits, assertions, repeats/conditions and evidence. Recipe nesting and expanded execution are bounded before connection/session acquisition so imported recipes cannot create unbounded execution work before safety validation.
+The former generic “Automation” direction is restricted to Modbus test automation.
 
-Before executing a recipe against live plant equipment:
+Allowed:
+- scripted reads/writes
+- simulator start/stop
+- recipes/assertions
+- protocol regression tests
+- evidence collection
 
-- review every write/raw step
-- verify the selected connection and Unit ID
-- confirm ranges and timeouts
-- confirm teardown behavior
-- use the simulator first where practical
+Not allowed:
+- generic plant control
+- arbitrary process automation
+- non-Modbus workflow orchestration
 
-## 11. Charts, Logger and Historian
+Automated writes use the same confirmation/safety model as UI writes.
 
-Charts are for operator visibility; raw Traffic remains the protocol evidence source.
+## 15. Logger / Trend / Replay / Reports
 
-Use bounded time windows/decimation for long histories. Logger/Historian profiles should be sized for the intended sampling interval and retention period. Storage errors must be treated as data-quality issues rather than silently ignored.
+History capabilities exist only as Modbus engineering evidence:
+- register/value trends
+- communication event logs
+- session replay
+- capture comparison
+- test-run evidence
+- bounded exports/reports
 
-The SQLite historian is opened lazily so projects that do not configure historian use do not create unnecessary database handles. Historian is enabled by default for a logger profile unless that profile explicitly sets `historian: false`.
+Do not treat these components as a general plant historian.
 
-For handover, export the required bounded history range instead of copying a live database file while it is actively being written.
+## 16. Modbus transport lab
 
-## 12. HMI Builder
+The shared transport core contains:
+- RTU
+- ASCII
+- TCP client/server
+- UDP client/server
+- RTU/ASCII tunnelling
+- TLS client/server
+- virtual loopback
 
-HMI screens provide operator views/actions on top of the same project/runtime model; they are not a separate bypass path.
+Convenience/non-standard encapsulations must be labeled clearly.
 
-- Live reads use project bindings.
-- Write widgets use the central Master write-lock/audit path.
-- Effective multi-register/FC16 writes require the same explicit bulk confirmation policy as equivalent Master operations.
-- Unsaved HMI edits must be saved before entering Run mode so the browser/runtime cannot act on a definition different from the persisted backend screen.
-- Leaving run/active views stops workspace polling where applicable.
+Modbus TCP Security/TLS work is specifically for Modbus Security testing, not generic network-security analysis.
 
-Before handing an HMI screen to an operator, verify every write binding, Unit ID, address, datatype and engineering scale against a controlled source.
+## 17. Evidence and export
 
-## 13. TLS and certificates
+Engineering outputs may include:
+- raw capture
+- transaction CSV
+- register map
+- polling groups
+- device inventory
+- simulator map
+- write audit
+- discovery/test evidence
+- Excel/PDF/report bundle
 
-TLS transport must fail closed; it must not silently downgrade to plain TCP.
+Review Unit IDs, addresses, datatype assumptions and source provenance before handing results to another engineer/site.
 
-Verify:
+## 18. Validation boundary
 
-- CA trust source
-- server certificate and hostname/SNI
-- certificate validity/expiry
-- client certificate/key where required
-- mutual-TLS policy for server mode
+Source implementation is not the same as release acceptance.
 
-Private-key material must not be copied into reports, normal logs or project handover bundles. Persistent desktop diagnostics and handover exports redact known credential/private-key material; engineering path/reference identity is retained where needed.
+Before release eligibility, the exact final head still requires:
+- full automated test suite
+- stable Sniffer regression
+- representative RTU hardware acceptance
+- representative TCP device acceptance
+- Slave interoperability
+- Test Center/Discovery integration acceptance
+- Windows packaged smoke
+- long polling/simulation soak
+- exact-head clean Mac release gate when release work resumes
 
-External TLS interoperability still requires testing against representative endpoints/certificate policies used at the customer site.
+Any source commit after a release-gate PASS invalidates that PASS for the new head.
 
-## 14. Automation, REST/WebSocket, CLI and SDK
+## 19. Product scope
 
-Automation follows the same ownership/write/audit policy as the UI. It is not a privileged bypass.
+The canonical scope and live work state are:
 
-Prefer loopback/local access unless remote automation is explicitly engineered and secured. Browser mutation requests are same-origin protected and bounded by rate/body limits; browser realtime WebSocket handshakes are same-origin and bounded by client/payload limits. Legitimate non-browser local SDK/automation calls without a browser Origin header remain supported by the local API policy.
-
-Before scripting a write workflow, prove the equivalent operation manually against a simulator or controlled device, then preserve the resulting audit/evidence expectations in the automation.
-
-## 15. Projects, templates and migration
-
-Project clone/Save As and templates copy engineering configuration, not live armed state. A project switch is blocked while a connection is active.
-
-v7-to-v8 migration is explicit and preserves the original source/backup/report path rather than silently rewriting legacy data. After migration, verify the exact connection/channel identity of devices that shared Unit IDs across different physical/logical channels.
-
-Connection import is preflighted as a complete set. A failed import rolls back instead of leaving a partially applied connection inventory. Imported metadata/options are sanitized so credential/private-key material is not persisted as arbitrary profile data; legitimate certificate/key path references remain configuration references.
-
-## 16. Reports and engineering handover
-
-The v8 handover bundle can include project configuration plus bounded Master/write-audit/Traffic/Simulator/Recipe/Historian/Chart/Logger/HMI/Digital-Twin material where available.
-
-Release/handover protections include:
-
-- SHA-256 manifest entries
-- product/version/schema metadata
-- channel/device/register identity preservation
-- spreadsheet formula-injection protection
-- Windows-safe generated filenames
-- known credential/private-key redaction while preserving engineering identity/typed evidence
-
-Always review the manifest and project identity before delivering a bundle to another site/customer.
-
-## 17. Troubleshooting matrix
-
-| Symptom | First checks |
-| --- | --- |
-| Serial device silent | port ownership, A/B polarity, baud/parity, Unit ID, termination/biasing, Traffic Tx bytes |
-| TCP connects but no valid response | host/port, Unit ID, MBAP/TID pairing, device function support, Traffic exception evidence |
-| Values look impossible | datatype width, signedness, byte/word order, scale/offset, canonical address |
-| Polling becomes slow | timeout/retry, dead device, serial inter-request delay, TCP concurrency, excessive job rate |
-| Write control unavailable | live connection state, owner mode, write latch, replay/offline state, safety re-lock after unknown outcome |
-| Discovery finds nothing | FC43 support, scan range/rate, exclusive-bus condition, exceptions vs silence |
-| Historian has gaps | logger profile, storage/disk errors, retention, sampling interval, connection quality |
-| HMI write rejected | saved screen state, central write lock, confirmation, effective FC16 bulk confirmation, binding/address validity |
-| TLS connection fails | CA trust, hostname/SNI, expiry, client cert/key, mTLS policy; do not downgrade to TCP |
-| Imported project/profile rejected | schema/version, size/count bounds, duplicate IDs, unsupported source channel/transport |
-
-## 18. Release and field acceptance boundary
-
-The primary software release validation path is a direct local Mac execution from a clean checkout of the exact release head:
-
-```bash
-npm run release:gate:mac
+```text
+docs/MODBUS_ONLY_PRODUCT_AUDIT.md
+docs/ACTIVE_TODO.md
+docs/MODBUS_PARALLEL_LANES.md
+docs/MODBUS_CORE_CONVERGENCE.md
 ```
 
-The gate requires and records:
-
-- exact starting/ending Git SHA equality
-- clean repository state before and after validation
-- version consistency
-- lint and recursive v8 syntax checks
-- runtime dependency audit
-- Node 20 / 22 / 24 full test/smoke/acceptance suites
-- bounded v8 scale benchmark
-- v7 compatibility benchmark
-- bounded concurrent v8 soak
-- Chromium browser E2E
-- lockfile SHA-256 evidence
-
-A PASS is valid only for the exact head that produced it. Any later source commit requires the complete gate to run again.
-
-GitHub Actions validation is manual-only and optional. The existing Automatrix Mac runner documented in another repository is repository-scoped there and cannot run this repository unless a separate/organization-scoped runner registration is configured.
-
-The following remain separate target/field evidence and must not be claimed from the local software gate alone:
-
-- real RS485 electrical/noise/termination acceptance
-- representative PLC/inverter/meter interoperability
-- representative external TLS/certificate interoperability
-- 24-hour/long-duration plant or virtual soak evidence
-- clean Windows installer execution and customer driver/security-policy acceptance
-- production code signing when a real signing certificate/private key is supplied
-
-Use `LOCAL_MAC_RELEASE_GATE.md` for exact software evidence and `SITE_ACCEPTANCE.md` for field evidence.
-
-## 19. Minimum handover checklist
-
-Before declaring a software build ready for controlled site acceptance:
-
-- exact release commit identified
-- root/desktop package and lockfile version surfaces are 8.0.0
-- local Mac `summary.txt` reports `status=PASS`
-- local Mac `start_head == end_head == current release head`
-- no later commit supersedes the PASS evidence
-- no known open P0 software defect
-- write state confirmed locked by default
-- required project/profile/report bundle exported and manifest reviewed
-- field-only gates explicitly listed as pending rather than silently assumed
-
-A successful software release is the start of controlled field acceptance, not a substitute for it.
+If a proposed feature does not directly support Modbus testing, simulation, analysis, reverse engineering, research, troubleshooting, transport behavior or evidence, it does not belong in this product.
