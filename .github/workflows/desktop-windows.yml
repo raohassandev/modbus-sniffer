@@ -33,6 +33,7 @@ jobs:
             Select-Object -First 1
           if (-not $exe) { throw "Packaged application executable was not found." }
 
+          $expectedVersion = node -p "require('./package.json').version"
           $env:MODBUS_DESKTOP_PORT = "18787"
           $env:ELECTRON_DISABLE_SECURITY_WARNINGS = "true"
           $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--disable-gpu" -PassThru
@@ -42,8 +43,16 @@ jobs:
               Start-Sleep -Milliseconds 500
               try {
                 $response = Invoke-WebRequest -Uri "http://127.0.0.1:18787/api/status" -UseBasicParsing -TimeoutSec 2
-                if ($response.StatusCode -eq 200) { $ready = $true; break }
-              } catch {}
+                if ($response.StatusCode -eq 200) {
+                  $status = $response.Content | ConvertFrom-Json
+                  if ($status.productName -ne "Modbus Engineering Tool") { throw "Unexpected packaged product name: $($status.productName)" }
+                  if ($status.productVersion -ne $expectedVersion) { throw "Unexpected packaged product version: $($status.productVersion), expected $expectedVersion" }
+                  $ready = $true
+                  break
+                }
+              } catch {
+                if ($_.Exception.Message -like "Unexpected packaged product*") { throw }
+              }
             }
             if (-not $ready) { throw "Packaged desktop app did not expose the unified Modbus Engineering Tool health endpoint." }
           } finally {
