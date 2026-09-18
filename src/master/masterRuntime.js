@@ -11,7 +11,9 @@ const {
 } = require('../modbusCore');
 
 const READ_FUNCTIONS = new Set([1, 2, 3, 4]);
-const WRITE_FUNCTIONS = new Set([5, 6, 15, 16, 22, 23]);
+const WRITE_FUNCTIONS = new Set([5, 6, 15, 16, 21, 22, 23]);
+const ADVANCED_READ_FUNCTIONS = new Set([7, 8, 11, 12, 17, 20, 24, 43]);
+const SERIAL_ONLY_ADVANCED_FUNCTIONS = new Set([7, 8, 11, 12, 17]);
 
 class MasterRuntimeError extends Error {
   constructor(code, message, details = {}) {
@@ -82,6 +84,57 @@ function normalizeReadRequest(input = {}) {
   return Object.freeze({ unitId, functionCode, address, quantity, timeoutMs });
 }
 
+function normalizeAdvancedRequest(input = {}, framing = 'rtu') {
+  const functionCode = intInRange(input.functionCode, 1, 255, 'functionCode');
+  if (!ADVANCED_READ_FUNCTIONS.has(functionCode)) {
+    throw new MasterRuntimeError('INVALID_FUNCTION_CODE', 'Advanced request supports FC07, FC08, FC11, FC12, FC17, FC20, FC24 and FC43/14', { functionCode });
+  }
+  if (framing === 'tcp' && SERIAL_ONLY_ADVANCED_FUNCTIONS.has(functionCode)) {
+    throw new MasterRuntimeError('FUNCTION_NOT_APPLICABLE', `FC${String(functionCode).padStart(2, '0')} is exposed here only for serial RTU/ASCII diagnostics`, { functionCode, framing });
+  }
+  const unitMax = framing === 'tcp' ? 255 : 247;
+  const unitId = intInRange(input.unitId ?? input.slaveId ?? 1, 1, unitMax, 'unitId');
+  let pdu;
+  let descriptor = { unitId, functionCode };
+
+  if (functionCode === 7) {
+    pdu = protocol.encodeReadExceptionStatusRequest();
+  } else if (functionCode === 8) {
+    const subFunction = intInRange(input.subFunction ?? 0, 0, 0xFFFF, 'subFunction');
+    const data = intInRange(input.data ?? 0, 0, 0xFFFF, 'data');
+    if (subFunction !== 0 && input.labConfirmed !== true) {
+      throw new MasterRuntimeError('LAB_CONFIRMATION_REQUIRED', 'Non-zero FC08 diagnostic subfunctions require explicit LAB confirmation', { subFunction });
+    }
+    pdu = protocol.encodeDiagnosticsRequest({ subFunction, data });
+    descriptor = { ...descriptor, subFunction, data, labConfirmed: input.labConfirmed === true };
+  } else if (functionCode === 11) {
+    pdu = protocol.encodeCommEventCounterRequest();
+  } else if (functionCode === 12) {
+    pdu = protocol.encodeCommEventLogRequest();
+  } else if (functionCode === 17) {
+    pdu = protocol.encodeReportServerIdRequest();
+  } else if (functionCode === 20) {
+    if (!Array.isArray(input.records) || !input.records.length) throw new MasterRuntimeError('INVALID_ARGUMENT', 'FC20 records must be a non-empty array');
+    const records = input.records.map((record, index) => ({
+      fileNumber: intInRange(record.fileNumber, 0, 0xFFFF, `records[${index}].fileNumber`),
+      recordNumber: intInRange(record.recordNumber, 0, 0xFFFF, `records[${index}].recordNumber`),
+      recordLength: intInRange(record.recordLength, 1, 125, `records[${index}].recordLength`),
+    }));
+    pdu = protocol.encodeReadFileRecordRequest({ records });
+    descriptor = { ...descriptor, records };
+  } else if (functionCode === 24) {
+    const address = intInRange(input.address ?? 0, 0, 0xFFFF, 'address');
+    pdu = protocol.encodeReadFifoQueueRequest({ address });
+    descriptor = { ...descriptor, address };
+  } else if (functionCode === 43) {
+    const readDeviceIdCode = intInRange(input.readDeviceIdCode ?? 1, 1, 4, 'readDeviceIdCode');
+    const objectId = intInRange(input.objectId ?? 0, 0, 0xFF, 'objectId');
+    pdu = protocol.encodeDeviceIdRequest({ readDeviceIdCode, objectId });
+    descriptor = { ...descriptor, meiType: 14, readDeviceIdCode, objectId };
+  }
+  return Object.freeze({ ...descriptor, pdu });
+}
+
 function coilValue(value, field) {
   if ([true, 1, '1', 'true', 'TRUE', 'on', 'ON'].includes(value)) return true;
   if ([false, 0, '0', 'false', 'FALSE', 'off', 'OFF'].includes(value)) return false;
@@ -122,6 +175,17 @@ function normalizeWriteRequest(input = {}, framing = 'rtu') {
     const values = input.values.map((value, index) => intInRange(value, 0, 0xFFFF, `values[${index}]`));
     pdu = protocol.encodeWriteMultipleRegistersRequest({ address, values });
     descriptor = { ...descriptor, values };
+  } else if (functionCode === 21) {
+    if (!Array.isArray(input.records) || !input.records.length) throw new MasterRuntimeError('INVALID_ARGUMENT', 'FC21 records must be a non-empty array');
+    const records = input.records.map((record, index) => ({
+      fileNumber: intInRange(record.fileNumber, 0, 0xFFFF, `records[${index}].fileNumber`),
+      recordNumber: intInRange(record.recordNumber, 0, 0xFFFF, `records[${index}].recordNumber`),
+      values: Array.isArray(record.values) && record.values.length
+        ? record.values.map((value, valueIndex) => intInRange(value, 0, 0xFFFF, `records[${index}].values[${valueIndex}]`))
+        : (() => { throw new MasterRuntimeError('INVALID_ARGUMENT', `records[${index}].values must be a non-empty array`); })(),
+    }));
+    pdu = protocol.encodeWriteFileRecordRequest({ records });
+    descriptor = { ...descriptor, records };
   } else if (functionCode === 22) {
     const andMask = intInRange(input.andMask, 0, 0xFFFF, 'andMask');
     const orMask = intInRange(input.orMask, 0, 0xFFFF, 'orMask');
@@ -223,6 +287,7 @@ class MasterRuntime {
       lastError: null,
       writeOperations: 0,
       writeFailures: 0,
+      advancedOperations: 0,
     };
   }
 
@@ -414,16 +479,57 @@ class MasterRuntime {
   }
 
 
+  async advanced(input = {}) {
+    if (!this.engine || !this.connectionId) {
+      throw new MasterRuntimeError('MASTER_NOT_CONNECTED', 'Connect the Modbus Master before sending an advanced request');
+    }
+    const request = normalizeAdvancedRequest(input, this.config?.type || 'rtu');
+    this.stats.txRequests += 1;
+    try {
+      const result = await this.engine.request({
+        unitId: request.unitId,
+        pdu: request.pdu,
+        timeoutMs: input.timeoutMs == null ? this.config.timeoutMs : positiveNumber(input.timeoutMs, 'timeoutMs', { min: 50, max: 60000 }),
+      });
+      this.stats.rxResponses += 1;
+      this.stats.rttSamples += 1;
+      this.stats.rttTotalMs += Number(result.rttMs || 0);
+      this.stats.lastRttMs = result.rttMs ?? null;
+      this.stats.lastReadAt = this.now();
+      this.stats.advancedOperations += 1;
+      this.stats.lastError = null;
+      return Object.freeze({
+        ok: true,
+        request: Object.freeze({ ...request, pdu: undefined }),
+        decoded: result.decoded ?? null,
+        rttMs: result.rttMs ?? null,
+        requestRawHex: result.requestRaw ? Buffer.from(result.requestRaw).toString('hex').toUpperCase() : null,
+        responseRawHex: result.responseRaw ? Buffer.from(result.responseRaw).toString('hex').toUpperCase() : null,
+        responsePduHex: result.responsePdu ? Buffer.from(result.responsePdu).toString('hex').toUpperCase() : null,
+        stats: this.status().stats,
+      });
+    } catch (error) {
+      this.stats.errors += 1;
+      if (error?.code === 'TIMEOUT') this.stats.timeouts += 1;
+      this.stats.lastError = { code: error?.code || 'MASTER_ADVANCED_FAILED', message: String(error?.message || error), at: this.now() };
+      throw error;
+    }
+  }
+
+
 }
 
 module.exports = {
   READ_FUNCTIONS,
   WRITE_FUNCTIONS,
+  ADVANCED_READ_FUNCTIONS,
+  SERIAL_ONLY_ADVANCED_FUNCTIONS,
   MasterRuntime,
   MasterRuntimeError,
   normalizeConnectionConfig,
   normalizeReadRequest,
   normalizeWriteRequest,
+  normalizeAdvancedRequest,
   referenceAddress,
   buildReadRows,
   defaultTransportFactory,
