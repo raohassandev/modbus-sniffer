@@ -8,17 +8,17 @@ Percentages below are **source-roadmap completion estimates**, not release/accep
 
 | Lane | Scope | Status | Source completion |
 |---|---|---|---:|
-| L0 | Product Scope + Shell Integration | EXECUTING | 70% |
-| L1 | Master / Client Engineering | EXECUTING | 64% |
-| L2 | Shared Core Convergence | EXECUTING | 30% |
-| L3 | Slave / Server Simulator | READY | 30% |
-| L4 | Protocol Functions + Diagnostics / Conformance | READY | 55% |
-| L5 | Traffic + Register Lab + Discovery | READY | 45% |
-| L6 | Test Center + Device Clone + Replay/Test Sequences | READY | 50% |
+| L0 | Product Scope + Shell Integration | EXECUTING | 82% |
+| L1 | Master / Client Engineering | EXECUTING | 82% |
+| L2 | Shared Core Convergence | EXECUTING | 42% |
+| L3 | Slave / Server Simulator | EXECUTING | 72% |
+| L4 | Protocol Functions + Diagnostics / Conformance | EXECUTING | 80% |
+| L5 | Traffic + Register Lab + Discovery | EXECUTING | 50% |
+| L6 | Test Center + Device Clone + Replay/Test Sequences | EXECUTING | 78% |
 | L7 | Logger/Trend + Reports + Transport/Security Lab | READY | 45% |
-| L8 | QA + UX + Reliability + Release Evidence | EXECUTING | 28% |
+| L8 | QA + UX + Reliability + Release Evidence | EXECUTING | 32% |
 
-**Approximate overall source-roadmap completion:** 46%  
+**Approximate overall source-roadmap completion:** 61%  
 **Release/field acceptance:** substantially lower; exact-head suite, packaged smoke, hardware acceptance and soak remain open.
 
 ## Dependency DAG
@@ -53,8 +53,8 @@ Completed:
 - [x] canonical README/roadmap wording corrected
 
 Remaining:
-- [ ] disconnect HMI backend composition/routes after dependency audit
-- [ ] remove/retire HMI tests/assets from Modbus product
+- [x] HMI backend composition/routes disconnected after dependency audit
+- [x] HMI runtime/UI/tests removed; legacy project schema fields retained only for backward-compatible parsing
 - [ ] add category headers Core / Analyze / LAB / Evidence / System in final unified shell
 - [ ] migrate valuable v8 Modbus workspaces into accepted unified shell
 - [ ] retire duplicate shell after acceptance
@@ -79,10 +79,10 @@ Remaining:
 - [ ] bitfield/string/BCD/time interpretations
 - [ ] true per-session counter reset/baselines
 - [ ] Traffic/Logger/Trend direct actions
-- [ ] guarded FC05/06/15/16
-- [ ] FC22/23
-- [ ] diagnostics FC07/08/11/12/17
-- [ ] FC20/21, FC24, FC43/14
+- [x] guarded FC05/06/15/16 with audit/read-back/auto-relock
+- [x] guarded FC22/23 UI/runtime
+- [x] diagnostics FC07/08/11/12/17 with applicability/LAB guards
+- [x] FC20/21, FC24, FC43/14 stable Master exposure
 - [ ] broadcast/retry/inter-request delay/RTS controls
 - [ ] advanced request builder
 - [ ] hardware acceptance
@@ -116,17 +116,20 @@ Existing foundations:
 - TCP server transport
 - device memory model foundations
 
-Remaining:
+Completed source:
 - professional RTU/ASCII/TCP first screen
 - multi-Unit management
-- four Modbus memory tables
-- incoming request/write visibility
-- complete FC behavior matrix
-- identity/diagnostic counters
-- configurable exceptions/latency LAB behavior
-- map import/export
-- Device Clone adoption
-- acceptance tests
+- four Modbus memory areas with direct editing
+- incoming request/write evidence and TCP client visibility
+- FC43 identity plus supported diagnostic/File Record/FIFO behavior
+- simulator map import/export
+- Device Clone adoption from stable Sniffer evidence
+
+Remaining:
+- configurable exceptions/latency/dynamic-value LAB behavior in the stable surface
+- advanced UDP/tunnel/TLS server exposure
+- documented FC behavior matrix
+- exact-head and interoperability acceptance tests
 
 ## L4 — Protocol Functions + Diagnostics / Conformance — 55%
 
@@ -135,13 +138,17 @@ Remaining:
 
 Existing core covers primitives for FC01–08, FC11/12, FC15–17, FC20–24 and FC43/14 families used by the roadmap.
 
+Completed source:
+- stable Master exposure for FC07/08/11/12/17/20/21/24/43
+- transport applicability guards for serial-only diagnostics
+- guarded File Record writes and read-back verification
+- built-in Slave behavior for diagnostics/File Record/FIFO/identity
+
 Remaining:
-- consistent UI/runtime exposure
-- transport applicability guards
-- exception/conformance matrices
-- boundary-value suites
-- server-side behavior coverage
-- documentation/evidence
+- complete exception/conformance matrices
+- broader boundary-value suites
+- documentation/evidence polish
+- exact-head/device interoperability acceptance
 
 ## L5 — Traffic + Register Lab + Discovery — 45%
 
@@ -168,19 +175,20 @@ Remaining:
 **Owner:** LAB lane  
 **Write scope:** Test Center, capture-to-simulator clone, scripted test/replay modules.
 
-Existing foundations:
-- Raw Frame Studio
-- Recipe Engine with assertions/repeat
-- capture-evidence-to-simulator Digital Twin implementation
+Completed source:
+- hardened Recipe Engine with bounded assertions/repeat
+- stable Modbus-only Test Sequences service/UI/API
+- one-shot guarded Test Sequence writes with automatic re-lock
+- Device Clone / Capture-to-Simulator service/UI using stable Sniffer evidence
+- read-only-by-default cloned writable-area policy
 
 Remaining:
-- rename/reframe Digital Twin -> Device Clone
-- expose raw frame composer cleanly
+- expose Raw Frame Studio cleanly in the stable shell
 - reusable test case library
 - malformed/boundary/exception suites
 - replay/compare UX
-- Test Sequences/API terminology and scope cleanup
 - exact evidence bundles
+- exact-head integration validation
 
 ## L7 — Logger/Trend + Reports + Transport/Security Lab — 45%
 
