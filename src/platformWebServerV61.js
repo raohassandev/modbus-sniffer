@@ -19,6 +19,7 @@ const { installTestSequenceRoutes } = require('./testSequences/testSequenceRoute
 const { EvidenceHub, mergeEvidence } = require('./evidence/evidenceHub');
 const { analyzeProtocolTraffic } = require('./evidence/protocolDiagnostics');
 const registerCodec = require('./register/registerCodec');
+const { installLoggerTrendRoutes } = require('./loggerTrend/loggerTrendRoutes');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -134,8 +135,9 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   slaveRuntime=installSlaveRoutes({app,state,demo,disconnectSerial,masterRuntime,activeDiscovery,broadcast});
   const deviceClone=installDeviceCloneRoutes({app,state,slaveRuntime,broadcast});
   const testSequences=installTestSequenceRoutes({app,masterRuntime,broadcast});
+  const loggerTrend=installLoggerTrendRoutes({app,state,masterRuntime,broadcast});
 
-  const publishEvidenceRow = row => { if(row) broadcast('transaction',row); };
+  const publishEvidenceRow = row => { if(row){ loggerTrend.ingestEvidence(row); broadcast('transaction',row); } };
   const onMasterEvent = event => publishEvidenceRow(evidence.ingest(event,{sourceType:'Master'}));
   const onSlaveEvent = event => {
     broadcast('slave-event',event);
@@ -327,7 +329,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(options.webPort,options.webHost,resolve); });
   return {
     url:`http://${options.webHost==='0.0.0.0'?'127.0.0.1':options.webHost}:${options.webPort}`,
-    close:async()=>{ testSequences.dispose?.(); masterRuntime.off('event',onMasterEvent); slaveRuntime.off('event',onSlaveEvent); testSequences.off('event',onTestSequenceEvent); activeDiscovery.off('evidence',onDiscoveryEvidence); activeDiscovery.off('status',onDiscoveryStatus); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
+    close:async()=>{ loggerTrend.dispose?.(); testSequences.dispose?.(); masterRuntime.off('event',onMasterEvent); slaveRuntime.off('event',onSlaveEvent); testSequences.off('event',onTestSequenceEvent); activeDiscovery.off('evidence',onDiscoveryEvidence); activeDiscovery.off('status',onDiscoveryStatus); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
   };
 }
 
