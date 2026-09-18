@@ -49,6 +49,9 @@ test('Windows packaging workflow smoke-tests stable Sniffer and emits provenance
   assert.match(workflow, /npm audit --omit=dev --audit-level=high/);
   assert.match(workflow, /http:\/\/127\.0\.0\.1:18787\/api\/status/);
   assert.match(workflow, /product=Modbus Engineering Tool/);
+  assert.match(workflow, /Unexpected packaged product name/);
+  assert.match(workflow, /Unexpected packaged product version/);
+  assert.match(workflow, /productVersion/);
   assert.match(workflow, /runtime=unified-modbus-engineering-tool/);
   assert.doesNotMatch(workflow, /experimental_runtime=/);
   assert.match(workflow, /SHA256SUMS\.txt/);
