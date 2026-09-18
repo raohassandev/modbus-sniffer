@@ -77,6 +77,24 @@ test('stable server cleanup releases active resources and export manifest follow
   assert.match(server,/await tcpProxy\.stop\(\)/);
 });
 
+test('unified Playwright acceptance spec parses and covers loopback read plus no-transmit write rejection',()=>{
+  const e2e=read('e2e/unified-engineering.spec.js');
+  new vm.Script(e2e,{filename:'unified-engineering.spec.js'});
+  assert.match(e2e,/primary Modbus workspaces are available from one stable shell/);
+  assert.match(e2e,/built-in TCP Slave and stable Master complete a loopback read/);
+  assert.match(e2e,/unsafe bulk write is rejected before transmission/);
+  assert.match(e2e,/BULK_CONFIRMATION_REQUIRED/);
+  assert.match(e2e,/preflightRejected===true&&row\.transmitted===false/);
+});
+
+test('fast source preflight fails closed across quality audit tests smoke and acceptance',()=>{
+  const preflight=read('scripts/source-preflight.js');
+  new vm.Script(preflight,{filename:'source-preflight.js'});
+  for(const command of ['version:check','lint','check:v8','audit:runtime','test','smoke','acceptance'])assert.match(preflight,new RegExp(command.replace(':','\\:')));
+  assert.match(preflight,/SOURCE PREFLIGHT FAIL/);
+  assert.match(preflight,/process\.exit\(result\.status\|\|1\)/);
+});
+
 test('canonical docs separate source completion from release evidence',()=>{
   const todo=read('docs/ACTIVE_TODO.md');
   const lanes=read('docs/MODBUS_PARALLEL_LANES.md');
