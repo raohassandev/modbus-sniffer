@@ -14,6 +14,7 @@ const { makeDeviceKey, parseDeviceKey } = require('./transportIdentity');
 const { installActiveDiscoveryRoutes } = require('./activeDiscoveryRoutes');
 const { installMasterRoutes } = require('./master/masterRoutes');
 const { installSlaveRoutes } = require('./slave/slaveRoutes');
+const { installDeviceCloneRoutes } = require('./deviceClone/deviceCloneRoutes');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -126,6 +127,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   });
   const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null,masterRuntime});
   slaveRuntime=installSlaveRoutes({app,state,demo,disconnectSerial,masterRuntime,activeDiscovery,broadcast});
+  const deviceClone=installDeviceCloneRoutes({app,state,slaveRuntime,broadcast});
   const onSlaveEvent=event=>broadcast('slave-event',event);
   slaveRuntime.on('event',onSlaveEvent);
   const active = () => workspaces.getActiveProject();
