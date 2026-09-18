@@ -16,6 +16,7 @@ const { installMasterRoutes } = require('./master/masterRoutes');
 const { installSlaveRoutes } = require('./slave/slaveRoutes');
 const { installDeviceCloneRoutes } = require('./deviceClone/deviceCloneRoutes');
 const { installTestSequenceRoutes } = require('./testSequences/testSequenceRoutes');
+const { EvidenceHub, mergeEvidence } = require('./evidence/evidenceHub');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -120,6 +121,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     const msg = JSON.stringify({ type, payload });
     for (const ws of wss.clients) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
   };
+  const evidence = new EvidenceHub({ maxRows: 20000 });
   let slaveRuntime=null;
   const masterRuntime=installMasterRoutes({
     app,state,demo,disconnectSerial,
@@ -130,8 +132,57 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   slaveRuntime=installSlaveRoutes({app,state,demo,disconnectSerial,masterRuntime,activeDiscovery,broadcast});
   const deviceClone=installDeviceCloneRoutes({app,state,slaveRuntime,broadcast});
   const testSequences=installTestSequenceRoutes({app,masterRuntime,broadcast});
-  const onSlaveEvent=event=>broadcast('slave-event',event);
+
+  const publishEvidenceRow = row => { if(row) broadcast('transaction',row); };
+  const onMasterEvent = event => publishEvidenceRow(evidence.ingest(event,{sourceType:'Master'}));
+  const onSlaveEvent = event => {
+    broadcast('slave-event',event);
+    publishEvidenceRow(evidence.ingest(event,{sourceType:'Slave'}));
+  };
+  const onTestSequenceEvent = event => publishEvidenceRow(evidence.ingestAnnotation(event,{sourceType:'Test Sequence',direction:'TEST'}));
+  let lastDiscoveryEvidenceKey='';
+  const onDiscoveryStatus = status => {
+    const progress=status?.progress||null;
+    const key=`${status?.jobId||''}:${status?.state||''}:${progress?.current||0}:${progress?.unitId??''}`;
+    if(!status?.jobId||key===lastDiscoveryEvidenceKey)return;
+    lastDiscoveryEvidenceKey=key;
+    const event={
+      timestamp:Date.now(),
+      type:progress?.unitId!=null?'discovery.unit-result':`discovery.${status.state||'status'}`,
+      source:'active-discovery',
+      ownerMode:'discovery',
+      unitId:progress?.unitId??null,
+      functionCode:43,
+      details:{
+        transport:status.transport||progress?.transport||null,
+        jobId:status.jobId,
+        state:status.state,
+        progress:progress?{...progress}:null,
+        summary:status.summary?{...status.summary}:null
+      }
+    };
+    publishEvidenceRow(evidence.ingestAnnotation(event,{sourceType:'Discovery',direction:'DISCOVERY'}));
+  };
+  masterRuntime.on('event',onMasterEvent);
   slaveRuntime.on('event',onSlaveEvent);
+  testSequences.on('event',onTestSequenceEvent);
+  activeDiscovery.on('status',onDiscoveryStatus);
+  const unifiedTransactions = (filters={}) => {
+    const requestedLimit=Math.max(1,Math.min(20000,Number(filters.limit)||1000));
+    const sourceFilter=String(filters.sourceType||'').trim().toLowerCase();
+    const passiveAllowed=!sourceFilter||sourceFilter==='sniffer'||sourceFilter==='passive'||sourceFilter==='passive analyzer';
+    const activeAllowed=!sourceFilter||!passiveAllowed;
+    const passive=passiveAllowed
+      ? state.getTransactions({...filters,limit:requestedLimit}).map(row=>({
+          ...row,
+          sourceType:'Sniffer',
+          source:row.source||'passive-analyzer',
+          ownerMode:row.ownerMode||'sniffer'
+        }))
+      : [];
+    const activeRows=activeAllowed?evidence.list({...filters,limit:requestedLimit}):[];
+    return mergeEvidence(passive,activeRows,{limit:requestedLimit});
+  };
   const active = () => workspaces.getActiveProject();
   const apiError = (r,e,defaultStatus=400) => r.status(e?.code==='AMBIGUOUS_DEVICE'?409:defaultStatus).json({error:e.message,code:e.code||null,deviceKeys:e.deviceKeys||undefined});
   const syncRuntimeChannels = () => {
@@ -171,7 +222,8 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.get('/api/status', (_q,r) => r.json(state.getStatus()));
   app.get('/api/analysis', (_q,r) => r.json(state.getAnalysis()));
   app.get('/api/channels', (_q,r) => { syncRuntimeChannels(); r.json(state.getChannels?.()||[]); });
-  app.get('/api/transactions', (q,r) => { try{r.json(state.getTransactions(q.query));}catch(e){apiError(r,e);} });
+  app.get('/api/transactions', (q,r) => { try{r.json(unifiedTransactions(q.query));}catch(e){apiError(r,e);} });
+  app.get('/api/evidence/status', (_q,r) => r.json(evidence.status()));
   app.get('/api/registers', (q,r) => { try{r.json(state.getRegisters(q.query));}catch(e){apiError(r,e);} });
   app.get('/api/polls', (q,r) => { try{r.json(state.getPollGroups(q.query));}catch(e){apiError(r,e);} });
   app.get('/api/devices', (q,r) => { try{r.json(state.getDevices(q.query));}catch(e){apiError(r,e);} });
@@ -187,12 +239,12 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.post('/api/serial/disconnect', async (_q,r) => { if (demo) return r.status(409).json({ error:'No serial port is active in demo mode.' }); try { await disconnectSerial(); r.json({ ok:true }); } catch(e) { r.status(500).json({ error:e.message }); } });
   app.post('/api/serial/autodetect', async (q,r) => { if (demo) return r.status(409).json({ error:'Serial auto-detection is disabled in demo mode.' }); try { r.json(await autoDetectSerial(q.body || {})); } catch(e) { r.status(400).json({ error:e.message }); } });
 
-  app.post('/api/capture/clear', (_q,r) => { replay.stop(); state.clearCapture(); r.json({ ok:true }); });
+  app.post('/api/capture/clear', (_q,r) => { replay.stop(); evidence.clear(); state.clearCapture(); r.json({ ok:true }); });
   app.get('/api/capture/export.mbcap', (_q,r) => {
     const capture = state.exportCapture(); capture.project = syncRuntimeChannels(); const stamp = new Date().toISOString().replace(/[:.]/g,'-');
     r.setHeader('Content-Type','application/json; charset=utf-8'); r.setHeader('Content-Disposition',`attachment; filename="modbus-${stamp}.mbcap"`); r.send(JSON.stringify(capture,null,2));
   });
-  app.post('/api/capture/import', async (q,r) => { try { if (!demo && state.connection.status === 'open') await disconnectSerial(); replay.load(q.body); const status = state.loadCapture(q.body,{emit:false}); syncRuntimeChannels(); state.setConnection('capture',{path:'CAPTURE',message:`${q.body.transactions.length} captured events loaded`}); r.json({ok:true,status,replay:replay.status()}); } catch(e) { r.status(400).json({ error:e.message }); } });
+  app.post('/api/capture/import', async (q,r) => { try { if (!demo && state.connection.status === 'open') await disconnectSerial(); evidence.clear(); replay.load(q.body); const status = state.loadCapture(q.body,{emit:false}); syncRuntimeChannels(); state.setConnection('capture',{path:'CAPTURE',message:`${q.body.transactions.length} captured events loaded`}); r.json({ok:true,status,replay:replay.status()}); } catch(e) { r.status(400).json({ error:e.message }); } });
   app.post('/api/replay/start', async (q,r) => { try { if (!demo && state.connection.status === 'open') await disconnectSerial(); r.json({ok:true,replay:replay.start({speed:q.body?.speed})}); } catch(e) { r.status(400).json({ error:e.message }); } });
   app.post('/api/replay/stop', (_q,r) => { replay.stop(); r.json({ok:true,replay:replay.status()}); });
 
@@ -235,7 +287,8 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     {id:'zip',label:'Complete Project Backup',href:'/api/export/project.zip',extension:'.zip'}
   ]}));
 
-  app.get('/api/export/transactions.csv', (_q,r) => sendCsv(r,'modbus-transactions.csv',state.getTransactions({limit:20000}),[
+  app.get('/api/export/transactions.csv', (_q,r) => sendCsv(r,'modbus-transactions.csv',unifiedTransactions({limit:20000}),[
+    {label:'sourceType',value:x=>x.sourceType||'Sniffer'},{label:'source',value:x=>x.source||''},{label:'ownerMode',value:x=>x.ownerMode||''},{label:'connectionId',value:x=>x.connectionId||''},
     {label:'id',value:x=>x.id},{label:'timestamp',value:x=>new Date(x.timestamp).toISOString()},{label:'transport',value:x=>x.transport||'RTU'},{label:'channelId',value:x=>x.channelId},{label:'deviceKey',value:x=>x.deviceKey},{label:'unitId',value:x=>x.unitId??x.slaveId},{label:'direction',value:x=>x.direction},{label:'function',value:x=>x.functionCode},{label:'functionName',value:x=>x.functionName},{label:'rttMs',value:x=>x.rttMs},{label:'timeoutMs',value:x=>x.timeoutMs},{label:'exception',value:x=>x.exceptionName||''},{label:'rawHex',value:x=>x.rawHex}
   ]));
   app.get('/api/export/registers.csv', (_q,r) => sendCsv(r,'modbus-registers.csv',state.getRegisters({limit:20000}),[
@@ -268,7 +321,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(options.webPort,options.webHost,resolve); });
   return {
     url:`http://${options.webHost==='0.0.0.0'?'127.0.0.1':options.webHost}:${options.webPort}`,
-    close:async()=>{ testSequences.dispose?.(); slaveRuntime.off('event',onSlaveEvent); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
+    close:async()=>{ testSequences.dispose?.(); masterRuntime.off('event',onMasterEvent); slaveRuntime.off('event',onSlaveEvent); testSequences.off('event',onTestSequenceEvent); activeDiscovery.off('status',onDiscoveryStatus); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
   };
 }
 
