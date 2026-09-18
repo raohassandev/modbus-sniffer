@@ -1,6 +1,6 @@
 'use strict';
 
-const PRODUCT_NAME = 'Modbus Engineering Workbench';
+const PRODUCT_NAME = 'Modbus Engineering Tool';
 const PRODUCT_VERSION = '8.0.0';
 const PRODUCT_SCHEMA_VERSION = 3;
 
