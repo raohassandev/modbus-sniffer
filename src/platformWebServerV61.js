@@ -22,6 +22,7 @@ const registerCodec = require('./register/registerCodec');
 const { installLoggerTrendRoutes } = require('./loggerTrend/loggerTrendRoutes');
 const { installCompareRoutes } = require('./compare/compareRoutes');
 const { installTransportLabRoutes } = require('./transportLab/transportLabRoutes');
+const { installRawLabRoutes } = require('./rawLab/rawLabRoutes');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -140,6 +141,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   const loggerTrend=installLoggerTrendRoutes({app,state,masterRuntime,broadcast});
   installCompareRoutes({app});
   installTransportLabRoutes({app});
+  const rawLab=installRawLabRoutes({app,state,demo,disconnectSerial,masterRuntime,slaveRuntime,activeDiscovery,broadcast});
 
   const publishEvidenceRow = row => { if(row){ loggerTrend.ingestEvidence(row); broadcast('transaction',row); } };
   const onMasterEvent = event => publishEvidenceRow(evidence.ingest(event,{sourceType:'Master'}));
@@ -149,6 +151,18 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   };
   const onTestSequenceEvent = event => publishEvidenceRow(evidence.ingestAnnotation(event,{sourceType:'Test Sequence',direction:'TEST'}));
   const onDiscoveryEvidence = event => publishEvidenceRow(evidence.ingest(event,{sourceType:'Discovery'}));
+  const onRawLabEvent = event => {
+    const details=event?.details||{};
+    if(!['traffic.tx','traffic.rx'].includes(event?.type))return;
+    publishEvidenceRow(evidence.ingest({
+      ...event,
+      rawHex:details.rawHex||event.rawHex||'',
+      unitId:details.classification?.unitId??event.unitId??null,
+      functionCode:details.classification?.functionCode??event.functionCode??null,
+      ownerMode:'test',source:'raw-frame-studio',
+      details:{...details,framing:rawLab.status()?.config?.type||details.framing||null}
+    },{sourceType:'Raw Lab'}));
+  };
   let lastDiscoveryEvidenceKey='';
   const onDiscoveryStatus = status => {
     const progress=status?.progress||null;
@@ -177,6 +191,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   testSequences.on('event',onTestSequenceEvent);
   activeDiscovery.on('evidence',onDiscoveryEvidence);
   activeDiscovery.on('status',onDiscoveryStatus);
+  rawLab.on('event',onRawLabEvent);
   const unifiedTransactions = (filters={}) => {
     const requestedLimit=Math.max(1,Math.min(20000,Number(filters.limit)||1000));
     const sourceFilter=String(filters.sourceType||'').trim().toLowerCase();
@@ -333,7 +348,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(options.webPort,options.webHost,resolve); });
   return {
     url:`http://${options.webHost==='0.0.0.0'?'127.0.0.1':options.webHost}:${options.webPort}`,
-    close:async()=>{ loggerTrend.dispose?.(); testSequences.dispose?.(); masterRuntime.off('event',onMasterEvent); slaveRuntime.off('event',onSlaveEvent); testSequences.off('event',onTestSequenceEvent); activeDiscovery.off('evidence',onDiscoveryEvidence); activeDiscovery.off('status',onDiscoveryStatus); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
+    close:async()=>{ rawLab.off('event',onRawLabEvent); await rawLab.dispose?.(); loggerTrend.dispose?.(); testSequences.dispose?.(); masterRuntime.off('event',onMasterEvent); slaveRuntime.off('event',onSlaveEvent); testSequences.off('event',onTestSequenceEvent); activeDiscovery.off('evidence',onDiscoveryEvidence); activeDiscovery.off('status',onDiscoveryStatus); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
   };
 }
 
