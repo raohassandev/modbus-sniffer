@@ -16,7 +16,7 @@
   <section class="page" id="page-slave">
     <div class="slave-workspace">
       <div class="slave-intro">
-        <div><h2>Modbus Slave / Server</h2><p>Run controlled RTU, ASCII or TCP Modbus devices. This mode receives Master requests and transmits protocol responses.</p></div>
+        <div><h2>Modbus Slave / Server</h2><p>Run controlled Modbus RTU, ASCII, TCP, TLS, UDP and tunnel simulators. This mode receives Master requests and transmits protocol responses.</p></div>
         <div class="slave-statuses">
           <span class="slave-chip" id="slaveRunChip"><i></i><span>Stopped</span></span>
           <span class="slave-chip active">ACTIVE SERVER MODE</span>
@@ -29,12 +29,19 @@
           <div class="slave-card-head"><div><h3><span>1</span>Server Connection</h3><p>Choose framing and the physical/listening interface.</p></div></div>
           <div class="slave-card-body">
             <div class="slave-warning">ACTIVE MODE — the Slave sends Modbus responses. Serial resources cannot be shared silently with Sniffer, Master or Discovery.</div>
-            <div class="slave-segments" id="slaveType"><button type="button" class="active" data-slave-type="tcp">TCP</button><button type="button" data-slave-type="rtu">RTU</button><button type="button" data-slave-type="ascii">ASCII</button></div>
+            <div class="slave-segments" id="slaveType"><button type="button" class="active" data-slave-type="tcp">TCP</button><button type="button" data-slave-type="rtu">RTU</button><button type="button" data-slave-type="ascii">ASCII</button><button type="button" data-slave-type="tls">TLS</button><button type="button" data-slave-type="udp">UDP</button><button type="button" data-slave-type="rtu-tcp">RTU/TCP</button><button type="button" data-slave-type="ascii-tcp">ASCII/TCP</button><button type="button" data-slave-type="rtu-udp">RTU/UDP</button><button type="button" data-slave-type="ascii-udp">ASCII/UDP</button></div>
             <div id="slaveTcpFields" class="slave-fields">
               <label>Listen IP<input id="slaveTcpHost" value="127.0.0.1"></label>
               <label>TCP Port<input id="slaveTcpPort" type="number" min="0" max="65535" value="502"></label>
               <label>Max Clients<input id="slaveMaxClients" type="number" min="1" max="256" value="32"></label>
               <label>Idle Timeout (ms)<input id="slaveIdleTimeout" type="number" min="0" value="0"></label>
+              <label id="slaveMaxPeersRow" hidden>Max UDP Peers<input id="slaveMaxPeers" type="number" min="1" max="4096" value="256"></label>
+              <label id="slaveTlsServernameRow" hidden>TLS minimum<select id="slaveTlsMinVersion"><option value="TLSv1.2">TLS 1.2+</option><option value="TLSv1.3">TLS 1.3</option></select></label>
+              <label id="slaveTlsVerifyRow" class="slave-check" hidden><input id="slaveTlsRequestCert" type="checkbox"> Request client certificate</label>
+              <label id="slaveTlsRejectRow" class="slave-check" hidden><input id="slaveTlsRejectUnauthorized" type="checkbox"> Require trusted client certificate</label>
+              <label id="slaveTlsCertRow" class="slave-wide" hidden>Server Certificate PEM<textarea id="slaveTlsCert" rows="4"></textarea></label>
+              <label id="slaveTlsKeyRow" class="slave-wide" hidden>Server Private Key PEM<textarea id="slaveTlsKey" rows="4"></textarea></label>
+              <label id="slaveTlsCaRow" class="slave-wide" hidden>Client CA PEM <small>(for mTLS)</small><textarea id="slaveTlsCa" rows="4"></textarea></label>
             </div>
             <div id="slaveSerialFields" class="slave-fields" hidden>
               <label>COM / Serial Port<select id="slaveSerialPort"><option value="">Select port…</option></select></label>
@@ -127,7 +134,12 @@
   function note(html,kind=''){q('slaveNote').className=`slave-note${kind?' '+kind:''}`;q('slaveNote').innerHTML=html;}
 
   function config(){
-    if(state.type==='tcp')return {type:'tcp',host:q('slaveTcpHost').value.trim()||'127.0.0.1',port:Number(q('slaveTcpPort').value||502),maxClients:Number(q('slaveMaxClients').value||32),idleTimeoutMs:Number(q('slaveIdleTimeout').value||0)};
+    const network=['tcp','tls','udp','rtu-tcp','ascii-tcp','rtu-udp','ascii-udp'].includes(state.type);
+    if(network){
+      const out={type:state.type,host:q('slaveTcpHost').value.trim()||'127.0.0.1',port:Number(q('slaveTcpPort').value||(state.type==='tls'?802:502)),maxClients:Number(q('slaveMaxClients').value||32),maxPeers:Number(q('slaveMaxPeers').value||256),idleTimeoutMs:Number(q('slaveIdleTimeout').value||0)};
+      if(state.type==='tls')Object.assign(out,{cert:q('slaveTlsCert').value,key:q('slaveTlsKey').value,ca:q('slaveTlsCa').value||null,requestCert:q('slaveTlsRequestCert').checked,rejectUnauthorized:q('slaveTlsRejectUnauthorized').checked,minVersion:q('slaveTlsMinVersion').value});
+      return out;
+    }
     return {type:state.type,path:q('slaveSerialPort').value,baudRate:Number(q('slaveBaud').value||9600),parity:q('slaveParity').value,dataBits:Number(q('slaveDataBits').value||8),stopBits:Number(q('slaveStopBits').value||1),echoSuppression:q('slaveEcho').value==='true',rtsTxMode:q('slaveRtsMode').value,rtsSettleMs:Number(q('slaveRtsSettle').value||0)};
   }
 
@@ -152,7 +164,7 @@
     const chip=q('slaveRunChip');chip.classList.toggle('running',state.running);chip.querySelector('span').textContent=state.running?'Running':'Stopped';
     q('slaveStart').disabled=state.running;q('slaveStop').disabled=!state.running;
     q('slaveType').querySelectorAll('button').forEach(b=>b.disabled=state.running);
-    for(const id of ['slaveTcpHost','slaveTcpPort','slaveMaxClients','slaveIdleTimeout','slaveSerialPort','slaveBaud','slaveParity','slaveDataBits','slaveStopBits','slaveEcho','slaveRtsMode','slaveRtsSettle'])q(id).disabled=state.running;
+    for(const id of ['slaveTcpHost','slaveTcpPort','slaveMaxClients','slaveMaxPeers','slaveIdleTimeout','slaveSerialPort','slaveBaud','slaveParity','slaveDataBits','slaveStopBits','slaveEcho','slaveRtsMode','slaveRtsSettle','slaveTlsMinVersion','slaveTlsRequestCert','slaveTlsRejectUnauthorized','slaveTlsCert','slaveTlsKey','slaveTlsCa']){const el=q(id);if(el)el.disabled=state.running;}
     const stats=status.server?.stats||{};
     q('slaveRequests').textContent=Number(stats.requests||0).toLocaleString();
     q('slaveResponses').textContent=Number(stats.responses||0).toLocaleString();
@@ -205,6 +217,9 @@
       }
       if(error.code==='MASTER_ACTIVE'){
         if(confirm(`Modbus Master currently owns ${error.details?.port||'this serial port'}. Disconnect Master and start Slave mode?`))return start({...extra,confirmMasterDisconnect:true});
+      }
+      if(error.code==='RAW_LAB_ACTIVE'){
+        if(confirm(`Raw Frame Lab currently owns ${error.details?.port||'this serial port'}. Close Raw Lab and start Slave mode?`))return start({...extra,confirmRawLabClose:true});
       }
       note('<strong>Start failed.</strong> '+esc(error.message),'error');
     }
@@ -272,12 +287,19 @@
 
   function applyConfig(cfg){
     if(!cfg)return;
-    if(cfg.type==='tcp'){q('slaveTcpHost').value=cfg.host||'127.0.0.1';q('slaveTcpPort').value=cfg.port??502;q('slaveMaxClients').value=cfg.maxClients??32;q('slaveIdleTimeout').value=cfg.idleTimeoutMs??0;}
-    else{q('slaveSerialPort').value=cfg.path||'';q('slaveBaud').value=cfg.baudRate||9600;q('slaveParity').value=cfg.parity||'none';q('slaveDataBits').value=cfg.dataBits||8;q('slaveStopBits').value=cfg.stopBits||1;q('slaveEcho').value=String(Boolean(cfg.echoSuppression));q('slaveRtsMode').value=cfg.rtsTxMode||'none';q('slaveRtsSettle').value=cfg.rtsSettleMs||0;}
+    const network=['tcp','tls','udp','rtu-tcp','ascii-tcp','rtu-udp','ascii-udp'].includes(cfg.type);
+    if(network){
+      q('slaveTcpHost').value=cfg.host||'127.0.0.1';q('slaveTcpPort').value=cfg.port??(cfg.type==='tls'?802:502);q('slaveMaxClients').value=cfg.maxClients??32;q('slaveMaxPeers').value=cfg.maxPeers??256;q('slaveIdleTimeout').value=cfg.idleTimeoutMs??0;
+      if(cfg.tls){q('slaveTlsCert').value=cfg.tls.cert||'';q('slaveTlsKey').value=cfg.tls.key||'';q('slaveTlsCa').value=cfg.tls.ca||'';q('slaveTlsRequestCert').checked=Boolean(cfg.tls.requestCert);q('slaveTlsRejectUnauthorized').checked=Boolean(cfg.tls.rejectUnauthorized);q('slaveTlsMinVersion').value=cfg.tls.minVersion||'TLSv1.2';}
+    } else {q('slaveSerialPort').value=cfg.path||'';q('slaveBaud').value=cfg.baudRate||9600;q('slaveParity').value=cfg.parity||'none';q('slaveDataBits').value=cfg.dataBits||8;q('slaveStopBits').value=cfg.stopBits||1;q('slaveEcho').value=String(Boolean(cfg.echoSuppression));q('slaveRtsMode').value=cfg.rtsTxMode||'none';q('slaveRtsSettle').value=cfg.rtsSettleMs||0;}
   }
 
   function syncTypeUi(){
-    q('slaveTcpFields').hidden=state.type!=='tcp';q('slaveSerialFields').hidden=state.type==='tcp';
+    const network=['tcp','tls','udp','rtu-tcp','ascii-tcp','rtu-udp','ascii-udp'].includes(state.type),tls=state.type==='tls',udp=state.type.includes('udp');
+    q('slaveTcpFields').hidden=!network;q('slaveSerialFields').hidden=network;
+    for(const id of ['slaveTlsServernameRow','slaveTlsVerifyRow','slaveTlsRejectRow','slaveTlsCertRow','slaveTlsKeyRow','slaveTlsCaRow'])q(id).hidden=!tls;
+    q('slaveMaxPeersRow').hidden=!udp;
+    if(network&&document.activeElement?.id!=='slaveTcpPort')q('slaveTcpPort').value=state.type==='tls'?802:(q('slaveTcpPort').value||502);
     q('slaveType').querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.slaveType===state.type));
   }
 
