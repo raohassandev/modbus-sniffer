@@ -23,7 +23,7 @@
       html: `<h2>Traffic</h2><p>Traffic is the protocol evidence view. Use it before changing datatype or scaling.</p><ol class="help-steps"><li>Filter by connection, direction, Unit, FC, raw HEX or text.</li><li>Select an event to inspect decoded data, raw bytes and timing.</li><li>Use Errors only to isolate timeouts/exceptions.</li><li>Freeze view while examining a fault; Freeze on error is useful during intermittent problems.</li><li>Bookmark important frames and copy HEX/PDU/JSON for support evidence.</li></ol><p><strong>Expected troubleshooting order:</strong> connection → Tx frame → Rx frame → exception/timeout → timing → register interpretation.</p>`
     },
     {
-      id: 'simulator', title: 'Simulator', group: 'Core workflow', keywords: 'slave simulator server virtual device memory coils holding registers fault lab',
+      id: 'simulator', title: 'Slave / Simulator', group: 'Core workflow', keywords: 'slave simulator server virtual device memory coils holding registers fault lab',
       html: `<h2>Slave / Server Simulator</h2><p>Use Simulator to test a Master, PLC or HMI without risking a production device.</p><ol class="help-steps"><li>Create/save a simulator server and assign a compatible server/virtual connection.</li><li>Add one or more Unit IDs and memory sizes.</li><li>Use Memory Editor to seed coils/registers.</li><li>Add Dynamic Value Generators for counters, sine, random, timestamp or controlled formulas.</li><li>Start the server and connect your external Modbus master.</li><li>Inspect observed writes and clients.</li></ol><h3>LAB faults</h3><p>Fault injection can add delay, jitter, dropped responses, exceptions, duplicates or truncation. It is disabled by default and must stay in controlled LAB use.</p>`
     },
     {
@@ -35,20 +35,16 @@
       html: `<h2>Test Center</h2><p>Use normal validated requests for ordinary testing and raw/custom frames only when you intentionally need protocol-level experiments.</p><ol class="help-steps"><li>Select the intended connection and target.</li><li>Prefer validated Modbus requests first.</li><li>For raw frames, review exact HEX and framing before transmit.</li><li>Use recipes for repeatable reads, guarded writes, delays, assertions and evidence.</li><li>Run recipes against Simulator before live equipment whenever practical.</li></ol><div class="help-warning">Raw transmission can send malformed or vendor-specific bytes. Treat it as an advanced commissioning function.</div>`
     },
     {
-      id: 'charts', title: 'Charts & Logger', group: 'Engineering tools', keywords: 'chart trend logger graph realtime data',
-      html: `<h2>Charts & Logger</h2><p>Use Charts for live engineering visibility after register definitions are correct.</p><ol class="help-steps"><li>Select/bind confirmed register points.</li><li>Choose sample/update interval appropriate to the device and network.</li><li>Keep protocol debugging in Traffic; a chart is not raw communication evidence.</li><li>Use Logger/Historian when data must survive beyond the current live chart window.</li></ol>`
+      id: 'charts', title: 'Live Trend', group: 'Engineering tools', keywords: 'chart trend logger graph realtime data',
+      html: `<h2>Charts & Logger</h2><p>Use Charts for live engineering visibility after register definitions are correct.</p><ol class="help-steps"><li>Select/bind confirmed register points.</li><li>Choose sample/update interval appropriate to the device and network.</li><li>Keep protocol debugging in Traffic; a chart is not raw communication evidence.</li><li>Use Logger/Logger / Trend when data must survive beyond the current live chart window.</li></ol>`
     },
     {
-      id: 'historian', title: 'Historian', group: 'Engineering tools', keywords: 'historian history sqlite logging retention export time range',
-      html: `<h2>Historian</h2><p>Historian stores time-series samples for later review/export.</p><ol class="help-steps"><li>Configure a logger/history profile for confirmed points.</li><li>Choose sampling and retention deliberately; faster sampling increases disk growth.</li><li>Review time ranges and data quality before export.</li><li>For handover, export a bounded range instead of copying a live database while it is being written.</li></ol>`
+      id: 'historian', title: 'Logger / Trend', group: 'Engineering tools', keywords: 'historian history sqlite logging retention export time range',
+      html: `<h2>Logger / Trend</h2><p>Logger / Trend stores time-series samples for later review/export.</p><ol class="help-steps"><li>Configure a logger/history profile for confirmed points.</li><li>Choose sampling and retention deliberately; faster sampling increases disk growth.</li><li>Review time ranges and data quality before export.</li><li>For handover, export a bounded range instead of copying a live database while it is being written.</li></ol>`
     },
     {
-      id: 'automation', title: 'Automation', group: 'Advanced', keywords: 'automation api cli websocket sdk script',
-      html: `<h2>Automation</h2><p>Automation exposes repeatable API/CLI workflows but does not bypass connection ownership or write safety.</p><ol class="help-steps"><li>Prove the equivalent operation manually first.</li><li>Prefer loopback/local API access.</li><li>Use stable connection IDs and explicit Unit/address definitions.</li><li>For writes, preserve the same confirmation/audit expectations as the UI.</li><li>Record errors/timeouts rather than retrying indefinitely.</li></ol>`
-    },
-    {
-      id: 'hmi', title: 'HMI Builder', group: 'Advanced', keywords: 'hmi screen widget tag binding operator write button gauge',
-      html: `<h2>HMI Builder</h2><p>HMI screens sit on top of the same project tags/registers; they are not a separate communication path.</p><ol class="help-steps"><li>Create/edit a screen.</li><li>Bind indicators to confirmed read definitions.</li><li>Verify datatype, byte order, scale and engineering unit.</li><li>For write widgets verify Unit ID/address and central write-lock behavior.</li><li>Save edits before Run mode.</li><li>Test write widgets against Simulator before operator handover.</li></ol>`
+      id: 'automation', title: 'Test Sequences / API', group: 'Advanced', keywords: 'automation api cli websocket sdk script',
+      html: `<h2>Test Sequences / API</h2><p>Test Sequences exposes repeatable API/CLI workflows but does not bypass connection ownership or write safety.</p><ol class="help-steps"><li>Prove the equivalent operation manually first.</li><li>Prefer loopback/local API access.</li><li>Use stable connection IDs and explicit Unit/address definitions.</li><li>For writes, preserve the same confirmation/audit expectations as the UI.</li><li>Record errors/timeouts rather than retrying indefinitely.</li></ol>`
     },
     {
       id: 'settings', title: 'Settings', group: 'System', keywords: 'settings theme density dark light compact',
@@ -64,7 +60,7 @@
     },
     {
       id: 'workflow', title: 'Recommended Workflow', group: 'Reference', keywords: 'workflow troubleshooting order standard modbus poll',
-      html: `<h2>Recommended Standard Workflow</h2><div class="help-flow"><div><strong>1. Connect</strong><span>Create/test/open transport.</span></div><div><strong>2. Monitor</strong><span>Define Unit, FC, address, quantity, rate.</span></div><div><strong>3. Verify Traffic</strong><span>Confirm exact request/response.</span></div><div><strong>4. Interpret</strong><span>Datatype, byte order, scale, unit.</span></div><div><strong>5. Log / Chart</strong><span>Only after the value is proven.</span></div><div><strong>6. Write</strong><span>Guarded confirmation; simulator first.</span></div></div><p>This keeps ordinary Modbus work simple while leaving Simulator, Test Center, Automation and HMI as advanced tools.</p>`
+      html: `<h2>Recommended Standard Workflow</h2><div class="help-flow"><div><strong>1. Connect</strong><span>Create/test/open transport.</span></div><div><strong>2. Monitor</strong><span>Define Unit, FC, address, quantity, rate.</span></div><div><strong>3. Verify Traffic</strong><span>Confirm exact request/response.</span></div><div><strong>4. Interpret</strong><span>Datatype, byte order, scale, unit.</span></div><div><strong>5. Log / Chart</strong><span>Only after the value is proven.</span></div><div><strong>6. Write</strong><span>Guarded confirmation; simulator first.</span></div></div><p>This keeps ordinary Modbus work simple while leaving Slave, Test Center, Device Clone and Test Sequences as advanced Modbus tools.</p>`
     },
   ];
 
@@ -72,7 +68,7 @@
   let activeTopic = 'quickstart';
 
   function workspaceHtml() {
-    return `<section id="workspace-help" class="workspace help-workspace" aria-labelledby="helpTitle"><div class="workspace-header"><div><h1 id="helpTitle">Help & User Guide</h1><p>How to use every Workbench function, with a standard Modbus commissioning workflow.</p></div><div class="toolbar"><span class="status-chip neutral">F1 CONTEXT HELP</span></div></div><div class="help-search-row"><input id="helpSearch" class="text-input" type="search" placeholder="Search help: polling, 40001, float, scan, traffic…" aria-label="Search help"></div><div class="help-layout"><aside class="panel help-nav" id="helpNav"></aside><article class="panel help-content" id="helpContent"></article></div></section>`;
+    return `<section id="workspace-help" class="workspace help-workspace" aria-labelledby="helpTitle"><div class="workspace-header"><div><h1 id="helpTitle">Help & User Guide</h1><p>How to use the Modbus engineering functions for polling, simulation, analysis, discovery and protocol testing.</p></div><div class="toolbar"><span class="status-chip neutral">F1 CONTEXT HELP</span></div></div><div class="help-search-row"><input id="helpSearch" class="text-input" type="search" placeholder="Search help: polling, 40001, float, scan, traffic…" aria-label="Search help"></div><div class="help-layout"><aside class="panel help-nav" id="helpNav"></aside><article class="panel help-content" id="helpContent"></article></div></section>`;
   }
 
   function install() {
