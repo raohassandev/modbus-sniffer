@@ -106,7 +106,7 @@ class EvidenceHub {
 
     if(type==='traffic.tx')direction=role==='slave'?'RSP':'REQ';
     else if(type==='traffic.rx')direction=role==='slave'?'REQ':'RSP';
-    else if(type==='master.timeout')direction='TIMEOUT';
+    else if(type==='master.timeout'||type==='discovery.timeout')direction='TIMEOUT';
     else if(type==='master.receive-error'||type==='slave.malformed'||type==='slave.runtime-error')direction='UNK';
     else return null;
 
