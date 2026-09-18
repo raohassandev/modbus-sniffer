@@ -15,6 +15,9 @@ const { TunnelTcpClientTransport, TunnelTcpServerTransport } = require('./v8/tra
 const { listLocalAddresses, recommendLocalAddress } = require('./v8/transports/networkAddresses');
 const protocol = require('./v8/protocol');
 const { VirtualSlaveServer } = require('./v8/slave/virtualSlaveServer');
+const { LabVirtualSlaveServer } = require('./v8/slave/labVirtualSlaveServer');
+const { DynamicValueEngine } = require('./v8/slave/dynamicValueEngineHardened');
+const { FaultInjectionLab, normalizePolicy: normalizeFaultPolicy } = require('./v8/slave/faultInjectionLab');
 const { VirtualDevice, VirtualDeviceError, MemoryArea, normalizeWritableAreas } = require('./v8/slave/virtualDevice');
 const { WriteAuditTrail, WriteSafetyController, WriteSafetyError, describeWritePdu } = require('./v8/master/writeSafety');
 const registerCodec = require('./register/registerCodec');
@@ -36,6 +39,10 @@ module.exports = Object.freeze({
   recommendLocalAddress,
   protocol,
   VirtualSlaveServer,
+  LabVirtualSlaveServer,
+  DynamicValueEngine,
+  FaultInjectionLab,
+  normalizeFaultPolicy,
   VirtualDevice,
   VirtualDeviceError,
   MemoryArea,
