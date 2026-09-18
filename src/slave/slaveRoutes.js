@@ -125,9 +125,19 @@ function installSlaveRoutes({
   app.post('/api/slave/start', async (req, res) => {
     try {
       const body = req.body || {};
-      const config = normalizeConfig(body.config || body);
-      await ensureSerialOwnership(config, body);
-      const status = await runtime.start(config);
+      let status;
+      if (body.reuseConfigured === true) {
+        const current = runtime.status();
+        if (!current.configured || !current.config) {
+          throw new SlaveRuntimeError('SLAVE_NOT_CONFIGURED', 'Configure the Slave before reusing the existing server connection.');
+        }
+        await ensureSerialOwnership(current.config, body);
+        status = await runtime.start();
+      } else {
+        const config = normalizeConfig(body.config || body);
+        await ensureSerialOwnership(config, body);
+        status = await runtime.start(config);
+      }
       broadcast('slave-status', status);
       res.json(status);
     } catch (error) {
