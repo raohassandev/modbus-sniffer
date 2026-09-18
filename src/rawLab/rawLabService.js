@@ -2,10 +2,12 @@
 
 const fs=require('node:fs');
 const path=require('node:path');
+const crypto=require('node:crypto');
 const {EventEmitter}=require('node:events');
 const {
   ConnectionBroker,SerialTransport,TcpClientTransport,RawFrameStudio
 }=require('../modbusCore');
+const {buildConformanceCases}=require('./conformanceCases');
 
 class RawLabError extends Error{
   constructor(code,message,details={}){super(message);this.name='RawLabError';this.code=code;this.details={...details};}
@@ -38,7 +40,7 @@ function resultView(result){
 class StableRawLabService extends EventEmitter{
   constructor({dataDir=path.join(process.cwd(),'data','raw-lab')}={}){
     super();this.dataDir=path.resolve(dataDir);fs.mkdirSync(this.dataDir,{recursive:true});this.casePath=path.join(this.dataDir,'cases.json');
-    this.broker=null;this.studio=null;this.transport=null;this.connectionId=null;this.config=null;this._relay=null;this.cases=this._loadCases();
+    this.broker=null;this.studio=null;this.transport=null;this.connectionId=null;this.config=null;this._relay=null;this.cases=this._loadCases();this.runs=[];this.maxRuns=50;
   }
   _loadCases(){try{const rows=JSON.parse(fs.readFileSync(this.casePath,'utf8'));return Array.isArray(rows)?rows:[];}catch{return[];}}
   _saveCases(){fs.writeFileSync(this.casePath,JSON.stringify(this.cases,null,2));}
@@ -50,8 +52,51 @@ class StableRawLabService extends EventEmitter{
     const index=this.cases.findIndex(x=>x.id===id);if(index>=0)this.cases[index]=row;else this.cases.push(row);this._saveCases();return Object.freeze({...row});
   }
   removeCase(id){const index=this.cases.findIndex(x=>x.id===String(id));if(index<0)return false;this.cases.splice(index,1);this._saveCases();return true;}
+  exportCases(){
+    return Object.freeze({schemaVersion:1,kind:'modbus-raw-lab-cases',exportedAt:new Date().toISOString(),cases:this.listCases()});
+  }
+  importCases(payload={}, {replace=false}={}){
+    if(!payload||typeof payload!=='object'||Number(payload.schemaVersion)!==1||payload.kind!=='modbus-raw-lab-cases'||!Array.isArray(payload.cases))throw new RawLabError('INVALID_CASE_BUNDLE','Raw Lab case bundle is invalid');
+    if(payload.cases.length>500)throw new RawLabError('CASE_LIMIT','A case bundle may contain at most 500 cases');
+    if(replace)this.cases=[];
+    const imported=[];
+    for(const row of payload.cases)imported.push(this.saveCase(row));
+    return Object.freeze({imported:imported.length,total:this.cases.length,cases:this.listCases()});
+  }
+  presets({unitId=1,timeoutMs=null}={}){
+    if(!this.config)throw new RawLabError('SESSION_NOT_OPEN','Open a Raw Lab connection before generating framing-specific presets');
+    return buildConformanceCases({framing:this.config.type,unitId:integer(unitId,1,{min:1,max:this.config.type==='tcp'?255:247,field:'unitId'}),timeoutMs:integer(timeoutMs,this.config.timeoutMs||1000,{min:50,max:60000,field:'timeoutMs'})});
+  }
+  listRuns(){return Object.freeze(this.runs.map(x=>Object.freeze(JSON.parse(JSON.stringify(x)))).reverse());}
+  getRun(runId){const run=this.runs.find(x=>x.runId===String(runId));if(!run)throw new RawLabError('RUN_NOT_FOUND','Raw Lab conformance run not found',{runId});return Object.freeze(JSON.parse(JSON.stringify(run)));}
+  async runConformanceSuite({presetIds=null,unitId=1,timeoutMs=null,interCaseMs=50,confirmation=null}={}){
+    if(!this.studio||!this.config)throw new RawLabError('SESSION_NOT_OPEN','Open a Raw Lab connection before running conformance presets');
+    const all=this.presets({unitId,timeoutMs}),wanted=Array.isArray(presetIds)&&presetIds.length?new Set(presetIds.map(String)):null;
+    const cases=wanted?all.filter(x=>wanted.has(x.id)):all;
+    if(!cases.length)throw new RawLabError('NO_CASES','No matching conformance presets were selected');
+    const startedAt=Date.now(),results=[];
+    for(let index=0;index<cases.length;index++){
+      const item=cases[index];
+      if(item.labRequired&&(!this.studio.status().labArmed||confirmation?.raw!==true)){
+        results.push({id:item.id,name:item.name,status:'skipped',reason:'LAB arming and raw confirmation required',labRequired:true});
+      }else{
+        const start=Date.now();
+        try{
+          const result=await this.send({hex:item.hex,autoChecksum:false,expectResponse:item.expectResponse,timeoutMs:item.timeoutMs,expectedHex:item.expectedHex,expectedMaskHex:item.expectedMaskHex,confirmation:{raw:confirmation?.raw===true,write:false}});
+          results.push({id:item.id,name:item.name,status:'passed',labRequired:item.labRequired,elapsedMs:Date.now()-start,result});
+        }catch(error){
+          results.push({id:item.id,name:item.name,status:'failed',labRequired:item.labRequired,elapsedMs:Date.now()-start,error:{code:error?.code||null,message:String(error?.message||error),details:error?.details||null}});
+        }
+      }
+      if(index+1<cases.length&&Number(interCaseMs)>0)await new Promise(resolve=>setTimeout(resolve,Math.min(10000,Math.max(0,Number(interCaseMs)||0))));
+    }
+    const run={runId:crypto.randomUUID(),schemaVersion:1,kind:'modbus-conformance-run',startedAt,completedAt:Date.now(),config:{...this.config},unitId:Number(unitId),results,summary:{total:results.length,passed:results.filter(x=>x.status==='passed').length,failed:results.filter(x=>x.status==='failed').length,skipped:results.filter(x=>x.status==='skipped').length},audit:this.audit(5000)};
+    this.runs.push(run);if(this.runs.length>this.maxRuns)this.runs.splice(0,this.runs.length-this.maxRuns);
+    this.emit('suite',Object.freeze(JSON.parse(JSON.stringify(run))));
+    return this.getRun(run.runId);
+  }
   status(){
-    return Object.freeze({configured:Boolean(this.studio),config:this.config?Object.freeze({...this.config}):null,studio:this.studio?.status?.()||null,cases:this.cases.length});
+    return Object.freeze({configured:Boolean(this.studio),config:this.config?Object.freeze({...this.config}):null,studio:this.studio?.status?.()||null,cases:this.cases.length,runs:this.runs.length});
   }
   async open(input={}){
     const config=normalizeConfig(input);await this.close();
