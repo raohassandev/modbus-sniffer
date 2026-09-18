@@ -43,7 +43,7 @@ test('Transport Lab performs MBAP UDP request through existing UDP transport',as
     assert.equal(request.quantity,1);
     const response=protocol.encodeTcpAdu({
       transactionId:adu.transactionId,protocolId:0,unitId:adu.unitId,
-      pdu:protocol.encodeReadRegistersResponse({values:[777]})
+      pdu:protocol.encodeReadRegistersResponse({functionCode:3,values:[777]})
     });
     await server.send(response,{route:item.meta});
   })();
