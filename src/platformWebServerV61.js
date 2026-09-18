@@ -60,8 +60,19 @@ function validateSerialConfig(body) {
 function normalizedHostname(host){
   const raw=String(host||'').trim();
   if(!raw)return '';
+  if(raw.startsWith('[')){
+    const end=raw.indexOf(']');
+    if(end>1){
+      const literal=raw.slice(1,end);
+      if(net.isIP(literal))return literal.toLowerCase();
+    }
+  }
+  if(net.isIP(raw))return raw.toLowerCase();
   try{return new URL(`http://${raw}`).hostname.replace(/^\[|\]$/g,'').toLowerCase();}
-  catch{return raw.replace(/^\[|\]$/g,'').split(':')[0].toLowerCase();}
+  catch{
+    const singlePort=/^([^:]+):\d+$/.exec(raw);
+    return String(singlePort?.[1]||raw).replace(/^\[|\]$/g,'').toLowerCase();
+  }
 }
 
 function isLoopbackHost(host){
