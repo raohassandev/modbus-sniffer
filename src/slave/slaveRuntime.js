@@ -79,6 +79,12 @@ function normalizeDevice(input = {}, framing = 'tcp') {
   const unitId = integer(input.unitId, undefined, { min: 1, max: maxUnit, field: 'unitId' });
   const sizes = {};
   for (const area of AREAS) sizes[area] = integer(input.sizes?.[area], DEFAULT_SIZES[area], { min: 0, max: 65536, field: `sizes.${area}` });
+  const identitySource = input.identity && typeof input.identity === 'object' && !Array.isArray(input.identity) ? input.identity : {};
+  const identityAliases = { '0':'vendorName', '1':'productCode', '2':'revision', '3':'vendorUrl', '4':'productName', '5':'modelName', '6':'userApplicationName' };
+  const identity = { ...identitySource };
+  for (const [numericKey, namedKey] of Object.entries(identityAliases)) {
+    if (identity[namedKey] == null && identity[numericKey] != null) identity[namedKey] = identity[numericKey];
+  }
   return Object.freeze({
     unitId,
     sizes: Object.freeze(sizes),
@@ -88,12 +94,13 @@ function normalizeDevice(input = {}, framing = 'tcp') {
     }),
     exceptionStatus: integer(input.exceptionStatus, 0, { min: 0, max: 0xFF, field: 'exceptionStatus' }),
     identity: Object.freeze({
-      vendorName: String(input.identity?.vendorName || 'Automatrix'),
-      productCode: String(input.identity?.productCode || `Virtual-${unitId}`),
-      revision: String(input.identity?.revision || '1.0'),
-      productName: String(input.identity?.productName || 'Modbus Virtual Device'),
-      modelName: String(input.identity?.modelName || ''),
-      userApplicationName: String(input.identity?.userApplicationName || ''),
+      vendorName: String(identity.vendorName || 'Automatrix'),
+      productCode: String(identity.productCode || `Virtual-${unitId}`),
+      revision: String(identity.revision || '1.0'),
+      vendorUrl: String(identity.vendorUrl || ''),
+      productName: String(identity.productName || 'Modbus Virtual Device'),
+      modelName: String(identity.modelName || ''),
+      userApplicationName: String(identity.userApplicationName || ''),
     }),
     memory: input.memory && typeof input.memory === 'object' ? input.memory : {},
     fileRecords: Array.isArray(input.fileRecords) ? cloneJson(input.fileRecords) : [],
