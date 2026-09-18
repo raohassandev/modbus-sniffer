@@ -140,6 +140,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     publishEvidenceRow(evidence.ingest(event,{sourceType:'Slave'}));
   };
   const onTestSequenceEvent = event => publishEvidenceRow(evidence.ingestAnnotation(event,{sourceType:'Test Sequence',direction:'TEST'}));
+  const onDiscoveryEvidence = event => publishEvidenceRow(evidence.ingest(event,{sourceType:'Discovery'}));
   let lastDiscoveryEvidenceKey='';
   const onDiscoveryStatus = status => {
     const progress=status?.progress||null;
@@ -166,6 +167,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   masterRuntime.on('event',onMasterEvent);
   slaveRuntime.on('event',onSlaveEvent);
   testSequences.on('event',onTestSequenceEvent);
+  activeDiscovery.on('evidence',onDiscoveryEvidence);
   activeDiscovery.on('status',onDiscoveryStatus);
   const unifiedTransactions = (filters={}) => {
     const requestedLimit=Math.max(1,Math.min(20000,Number(filters.limit)||1000));
@@ -321,7 +323,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(options.webPort,options.webHost,resolve); });
   return {
     url:`http://${options.webHost==='0.0.0.0'?'127.0.0.1':options.webHost}:${options.webPort}`,
-    close:async()=>{ testSequences.dispose?.(); masterRuntime.off('event',onMasterEvent); slaveRuntime.off('event',onSlaveEvent); testSequences.off('event',onTestSequenceEvent); activeDiscovery.off('status',onDiscoveryStatus); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
+    close:async()=>{ testSequences.dispose?.(); masterRuntime.off('event',onMasterEvent); slaveRuntime.off('event',onSlaveEvent); testSequences.off('event',onTestSequenceEvent); activeDiscovery.off('evidence',onDiscoveryEvidence); activeDiscovery.off('status',onDiscoveryStatus); await slaveRuntime.shutdown(); await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
   };
 }
 
