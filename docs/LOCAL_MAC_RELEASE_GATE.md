@@ -1,4 +1,4 @@
-# Local Mac Release Gate — Workbench v8
+# Local Mac Release Gate — Modbus Engineering Tool 8.0.0
 
 This repository uses a deterministic **local MacBook release gate** as the primary software-release validation path.
 
