@@ -18,6 +18,10 @@ const master=read('public/master-v7.js');
 const masterWrite=read('public/master-write-v7.js');
 const help=read('public/help-v7.js');
 const releaseNotes=read('docs/RELEASE_NOTES_8.0.0.md');
+const activeTodo=read('docs/ACTIVE_TODO.md');
+const laneRegistry=read('docs/MODBUS_PARALLEL_LANES.md');
+const localGateDoc=read('docs/LOCAL_MAC_RELEASE_GATE.md');
+const unifiedE2e=read('e2e/unified-engineering.spec.js');
 const server=read('src/platformWebServerV61.js');
 const slaveRuntime=read('src/slave/slaveRuntime.js');
 const masterRuntime=read('src/master/masterRuntime.js');
@@ -26,6 +30,8 @@ const navigationSafety=read('desktop/navigationSafety.js');
 
 check(pkg.main==='src/index-v7.js','package main must be the unified runtime');
 for(const name of ['start','sniffer','workbench','v7','v8'])check(pkg.scripts?.[name]==='node src/index-v7.js',`${name} must launch the unified runtime`);
+check(pkg.scripts?.preflight==='node scripts/source-preflight.js','preflight script must exist');
+check(pkg.scripts?.['audit:source']==='node scripts/static-release-audit.js','source audit script must exist');
 check(versionSource.includes(`PRODUCT_VERSION = '${pkg.version}'`),'product version source must match package.json');
 check(versionSource.includes("PRODUCT_NAME = 'Modbus Engineering Tool'"),'product name source must be unified');
 check(desktop.version===pkg.version,'desktop version must match package version');
@@ -61,6 +67,10 @@ check(navigationSafety.includes('parsed.origin === expected.origin'),'desktop na
 
 check(releaseNotes.includes(`Modbus Engineering Tool ${pkg.version}`),'release notes heading must match product/version');
 check(releaseNotes.includes('src/index-v7.js'),'release notes must name the unified runtime');
+check(!activeTodo.includes('\\n- [x]'),'ACTIVE_TODO must not contain escaped checklist line breaks');
+check(!laneRegistry.includes('\\n- [x]'),'lane registry must not contain escaped checklist line breaks');
+check(localGateDoc.startsWith(`# Local Mac Release Gate — Modbus Engineering Tool ${pkg.version}`),'local release gate heading must match product/version');
+for(const marker of ['primary Modbus workspaces','loopback read','unsafe bulk write'])check(unifiedE2e.includes(marker),`unified E2E missing coverage marker: ${marker}`);
 
 const workflowDir=path.join(root,'.github','workflows');
 for(const name of fs.readdirSync(workflowDir).filter(x=>/\.ya?ml$/i.test(x))){
