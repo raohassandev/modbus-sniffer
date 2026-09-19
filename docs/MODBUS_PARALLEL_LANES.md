@@ -130,6 +130,9 @@ Additional closure added after that run:
 - unified stable E2E now covers one-shell workspaces, loopback Slave->Master reads, and no-transmit bulk-write rejection;
 - stable UI/product/desktop/release identity follows the 8.0.0 source of truth;
 - `npm run preflight` provides a fast cross-platform source gate while the full multi-Node Mac release gate remains the final exhaustive local gate;\n- `docs/RELEASE_NOTES_8.0.0.md` defines the v8.0.0 release scope and validation boundary.
+- static source release audit guards identity, workflow triggers, asset wiring, TLS secret redaction, write preflight, web-origin/body limits and desktop navigation safety;
+- stable browser acceptance includes missing-asset, duplicate-ID and overflow guards;
+- Windows packaged smoke verifies critical UI assets in addition to backend health identity.
 
 Still required before a release/merge **acceptance** claim:
 
