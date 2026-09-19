@@ -22,6 +22,8 @@ const activeTodo=read('docs/ACTIVE_TODO.md');
 const laneRegistry=read('docs/MODBUS_PARALLEL_LANES.md');
 const localGateDoc=read('docs/LOCAL_MAC_RELEASE_GATE.md');
 const unifiedE2e=read('e2e/unified-engineering.spec.js');
+const unifiedPlaywright=read('playwright.unified.config.js');
+const releaseGate=read('scripts/release-gate-mac.sh');
 const server=read('src/platformWebServerV61.js');
 const slaveRuntime=read('src/slave/slaveRuntime.js');
 const masterRuntime=read('src/master/masterRuntime.js');
@@ -32,6 +34,8 @@ check(pkg.main==='src/index-v7.js','package main must be the unified runtime');
 for(const name of ['start','sniffer','workbench','v7','v8'])check(pkg.scripts?.[name]==='node src/index-v7.js',`${name} must launch the unified runtime`);
 check(pkg.scripts?.preflight==='node scripts/source-preflight.js','preflight script must exist');
 check(pkg.scripts?.['audit:source']==='node scripts/static-release-audit.js','source audit script must exist');
+check(pkg.scripts?.['e2e:unified']==='playwright test --config=playwright.unified.config.js','unified browser gate script must exist');
+check(pkg.scripts?.['e2e:compat']==='playwright test e2e/v8-*.spec.js','compatibility browser gate script must exist');
 check(versionSource.includes(`PRODUCT_VERSION = '${pkg.version}'`),'product version source must match package.json');
 check(versionSource.includes("PRODUCT_NAME = 'Modbus Engineering Tool'"),'product name source must be unified');
 check(desktop.version===pkg.version,'desktop version must match package version');
@@ -71,6 +75,10 @@ check(!activeTodo.includes('\\n- [x]'),'ACTIVE_TODO must not contain escaped che
 check(!laneRegistry.includes('\\n- [x]'),'lane registry must not contain escaped checklist line breaks');
 check(localGateDoc.startsWith(`# Local Mac Release Gate — Modbus Engineering Tool ${pkg.version}`),'local release gate heading must match product/version');
 for(const marker of ['primary Modbus workspaces','loopback read','unsafe bulk write'])check(unifiedE2e.includes(marker),`unified E2E missing coverage marker: ${marker}`);
+check(unifiedPlaywright.includes('src/index-v7.js'),'unified Playwright gate must launch the unified runtime');
+check(!unifiedPlaywright.includes('src/index-v8.js'),'unified Playwright gate must not launch the compatibility runtime');
+check(releaseGate.indexOf('browser-e2e-unified')>=0,'release gate must run unified browser acceptance');
+check(releaseGate.indexOf('browser-e2e-compatibility')>releaseGate.indexOf('browser-e2e-unified'),'compatibility browser coverage must run after unified acceptance');
 
 const workflowDir=path.join(root,'.github','workflows');
 for(const name of fs.readdirSync(workflowDir).filter(x=>/\.ya?ml$/i.test(x))){
