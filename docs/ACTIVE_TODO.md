@@ -30,7 +30,9 @@ The final source audit also closes these edge cases:
 - [x] packaged Windows smoke verifies health identity plus critical unified UI assets
 - [x] root test discovery is scoped to the Modbus suite and excludes unrelated nested projects/browser assets
 - [x] fast cross-platform `npm run preflight` gate covers version/lint/syntax/runtime-audit/tests/smoke/acceptance
-- [x] unified stable Playwright coverage includes primary workspaces, loopback Slave→Master read and rejected-write no-transmit audit\n- [x] release notes for 8.0.0 are finalized in `docs/RELEASE_NOTES_8.0.0.md`\n- [x] QA/package/security/release source lanes are complete; remaining items are execution/review/field evidence only
+- [x] unified stable Playwright coverage includes primary workspaces, loopback Slave→Master read and rejected-write no-transmit audit
+- [x] release notes for 8.0.0 are finalized in `docs/RELEASE_NOTES_8.0.0.md`
+- [x] QA/package/security/release source lanes are complete; remaining items are execution/review/field evidence only
 
 ## Product model
 
