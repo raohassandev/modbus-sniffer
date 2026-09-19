@@ -18,6 +18,11 @@ const master=read('public/master-v7.js');
 const masterWrite=read('public/master-write-v7.js');
 const help=read('public/help-v7.js');
 const releaseNotes=read('docs/RELEASE_NOTES_8.0.0.md');
+const server=read('src/platformWebServerV61.js');
+const slaveRuntime=read('src/slave/slaveRuntime.js');
+const masterRuntime=read('src/master/masterRuntime.js');
+const desktopMain=read('desktop/main.js');
+const navigationSafety=read('desktop/navigationSafety.js');
 
 check(pkg.main==='src/index-v7.js','package main must be the unified runtime');
 for(const name of ['start','sniffer','workbench','v7','v8'])check(pkg.scripts?.[name]==='node src/index-v7.js',`${name} must launch the unified runtime`);
@@ -43,6 +48,16 @@ check(!master.includes('id="masterResetCounters"'),'base Master must not duplica
 check((masterWrite.match(/id="masterOpenTraffic"/g)||[]).length===1,'Master write extension must own exactly one Traffic button');
 check((masterWrite.match(/id="masterResetCounters"/g)||[]).length===1,'Master write extension must own exactly one counter reset button');
 check(!help.includes('HMI Builder'),'stable Help must not expose generic HMI Builder scope');
+
+check(server.includes('WEB_EXTERNAL_BIND_CONFIRMATION_REQUIRED'),'web server must require explicit external-bind confirmation');
+check(server.includes('CROSS_ORIGIN_MUTATION_BLOCKED'),'web server must block cross-origin mutations');
+check(server.includes('jsonBodyLimitForPath'),'web server must enforce parser-level JSON limits');
+check(server.includes('Content-Security-Policy'),'web server must emit CSP');
+check(slaveRuntime.includes('out.tls.key = null'),'Slave public config must redact TLS private keys');
+check(masterRuntime.includes('this.safety.preflight'),'Master writes must preflight before unlock/transmit');
+check(desktopMain.includes('isAllowedNavigationUrl(url, selectedPort)'),'desktop renderer navigation must be origin-locked');
+check(navigationSafety.includes('parsed.origin === expected.origin'),'desktop navigation must compare exact origins');
+
 
 check(releaseNotes.includes(`Modbus Engineering Tool ${pkg.version}`),'release notes heading must match product/version');
 check(releaseNotes.includes('src/index-v7.js'),'release notes must name the unified runtime');
