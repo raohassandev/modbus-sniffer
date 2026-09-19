@@ -94,9 +94,19 @@ test('unified Playwright acceptance spec parses and covers loopback read plus no
 test('fast source preflight fails closed across quality audit tests smoke and acceptance',()=>{
   const preflight=read('scripts/source-preflight.js');
   new vm.Script(preflight,{filename:'source-preflight.js'});
-  for(const command of ['version:check','lint','check:v8','audit:runtime','test','smoke','acceptance'])assert.match(preflight,new RegExp(command.replace(':','\\:')));
+  for(const command of ['version:check','audit:source','lint','check:v8','audit:runtime','test','smoke','acceptance'])assert.match(preflight,new RegExp(command.replace(':','\\:')));
   assert.match(preflight,/SOURCE PREFLIGHT FAIL/);
   assert.match(preflight,/process\.exit\(result\.status\|\|1\)/);
+});
+
+test('release source audit is fail-closed for identity assets workflow triggers and duplicate Master controls',()=>{
+  const audit=read('scripts/static-release-audit.js');
+  new vm.Script(audit,{filename:'static-release-audit.js'});
+  assert.match(audit,/workflow_dispatch/);
+  assert.match(audit,/must not auto-run on push/);
+  assert.match(audit,/Modbus Engineering Tool/);
+  assert.match(audit,/masterOpenTraffic/);
+  assert.match(audit,/SOURCE RELEASE AUDIT FAIL/);
 });
 
 test('unified CLI requires explicit external web exposure and documents the current entrypoint',()=>{
