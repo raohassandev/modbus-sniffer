@@ -1,6 +1,6 @@
 # Desktop Storage, Upgrade and Diagnostics
 
-This document defines the supported local-data and diagnostic paths for the Modbus Sniffer desktop shell.
+This document defines the supported local-data and diagnostic paths for the Modbus Engineering Tool desktop shell.
 
 ## Product mode
 
