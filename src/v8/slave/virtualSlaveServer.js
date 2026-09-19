@@ -10,6 +10,7 @@ const WRITE_FUNCTIONS = new Set([
   protocol.FC.WRITE_SINGLE_REGISTER,
   protocol.FC.WRITE_MULTIPLE_COILS,
   protocol.FC.WRITE_MULTIPLE_REGISTERS,
+  protocol.FC.WRITE_FILE_RECORD,
   protocol.FC.MASK_WRITE_REGISTER,
   protocol.FC.READ_WRITE_MULTIPLE_REGISTERS,
 ]);
@@ -282,6 +283,66 @@ class VirtualSlaveServer extends EventEmitter {
           const values = device.read('holdingRegisters', request.readAddress, request.readQuantity);
           return protocol.encodeReadRegistersResponse({ functionCode, values });
         }
+        case protocol.FC.READ_EXCEPTION_STATUS: {
+          if (broadcast) return null;
+          protocol.decodeReadExceptionStatusRequest(pdu);
+          return protocol.encodeReadExceptionStatusResponse({ status: device.exceptionStatus });
+        }
+        case protocol.FC.DIAGNOSTICS: {
+          if (broadcast) return null;
+          const request = protocol.decodeDiagnosticsRequest(pdu);
+          const data = this._diagnosticValue(request.subFunction, request.data);
+          if (data == null) return this._exception(functionCode, 1);
+          return protocol.encodeDiagnosticsResponse({ subFunction: request.subFunction, data });
+        }
+        case protocol.FC.GET_COMM_EVENT_COUNTER: {
+          if (broadcast) return null;
+          protocol.decodeCommEventCounterRequest(pdu);
+          return protocol.encodeCommEventCounterResponse({
+            status: 0,
+            eventCount: Math.min(0xFFFF, this.stats.requests),
+          });
+        }
+        case protocol.FC.GET_COMM_EVENT_LOG: {
+          if (broadcast) return null;
+          protocol.decodeCommEventLogRequest(pdu);
+          return protocol.encodeCommEventLogResponse({
+            status: 0,
+            eventCount: Math.min(0xFFFF, this.stats.requests),
+            messageCount: Math.min(0xFFFF, this.stats.responses),
+            events: [],
+          });
+        }
+        case protocol.FC.REPORT_SERVER_ID: {
+          if (broadcast) return null;
+          protocol.decodeReportServerIdRequest(pdu);
+          const productCode = device.identity.get(1) || Buffer.from(`Virtual-${device.unitId}`);
+          return protocol.encodeReportServerIdResponse({
+            serverId: device.unitId & 0xFF,
+            runIndicatorStatus: 0xFF,
+            additionalData: productCode.subarray(0, 249),
+          });
+        }
+        case protocol.FC.READ_FILE_RECORD: {
+          if (broadcast) return null;
+          const request = protocol.decodeReadFileRecordRequest(pdu);
+          const records = request.records.map((record) => ({
+            referenceType: record.referenceType,
+            values: device.readFileRecord(record.fileNumber, record.recordNumber, record.recordLength),
+          }));
+          return protocol.encodeReadFileRecordResponse({ records });
+        }
+        case protocol.FC.WRITE_FILE_RECORD: {
+          if (broadcast) return null;
+          const request = protocol.decodeWriteFileRecordRequest(pdu);
+          for (const record of request.records) device.writeFileRecord(record.fileNumber, record.recordNumber, record.values);
+          return protocol.encodeWriteFileRecordResponse({ records: request.records });
+        }
+        case protocol.FC.READ_FIFO_QUEUE: {
+          if (broadcast) return null;
+          const request = protocol.decodeReadFifoQueueRequest(pdu);
+          return protocol.encodeReadFifoQueueResponse({ values: device.readFifo(request.address) });
+        }
         case protocol.FC.ENCAPSULATED_INTERFACE:
           if (broadcast) return null;
           return this._deviceIdentification(device, pdu);
@@ -294,6 +355,31 @@ class VirtualSlaveServer extends EventEmitter {
       if (error instanceof protocol.ProtocolValidationError) return this._exception(functionCode, 3);
       this._emitRuntimeError(error, 'process-pdu');
       return this._exception(functionCode, 4);
+    }
+  }
+
+  _diagnosticValue(subFunction, requestData) {
+    switch (subFunction) {
+      case 0x0000: return requestData; // Return Query Data
+      case 0x000A: { // Clear counters and diagnostic register
+        this.stats.requests = 0;
+        this.stats.responses = 0;
+        this.stats.broadcasts = 0;
+        this.stats.silentUnknownUnits = 0;
+        this.stats.exceptions = 0;
+        this.stats.malformed = 0;
+        this.stats.runtimeErrors = 0;
+        return 0;
+      }
+      case 0x000B: return Math.min(0xFFFF, this.stats.requests);
+      case 0x000C: return Math.min(0xFFFF, this.stats.malformed);
+      case 0x000D: return Math.min(0xFFFF, this.stats.exceptions);
+      case 0x000E: return Math.min(0xFFFF, this.stats.requests);
+      case 0x000F: return Math.min(0xFFFF, this.stats.silentUnknownUnits);
+      case 0x0010: return 0;
+      case 0x0011: return 0;
+      case 0x0012: return 0;
+      default: return null;
     }
   }
 

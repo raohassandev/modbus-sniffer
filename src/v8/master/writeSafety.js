@@ -69,6 +69,24 @@ function describeWritePdu(pdu) {
       const decoded = protocol.decodeWriteMultipleRequest(raw);
       return { functionCode: raw[0], area: 'holdingRegisters', address: decoded.address, quantity: decoded.quantity, values: [...decoded.values], bulk: true };
     }
+    case protocol.FC.WRITE_FILE_RECORD: {
+      const decoded = protocol.decodeWriteFileRecordRequest(raw);
+      const records = decoded.records.map((record) => ({
+        referenceType: record.referenceType,
+        fileNumber: record.fileNumber,
+        recordNumber: record.recordNumber,
+        values: [...record.values],
+      }));
+      return {
+        functionCode: raw[0],
+        area: 'fileRecords',
+        address: null,
+        quantity: records.reduce((sum, record) => sum + record.values.length, 0),
+        values: records.flatMap((record) => record.values),
+        bulk: true,
+        fileRecords: records,
+      };
+    }
     case protocol.FC.MASK_WRITE_REGISTER: {
       const decoded = protocol.decodeMaskWriteRegisterRequest(raw);
       return {
@@ -102,6 +120,16 @@ function describeWritePdu(pdu) {
 }
 
 function readPduForDescriptor(descriptor) {
+  if (descriptor.area === 'fileRecords') {
+    return protocol.encodeReadFileRecordRequest({
+      records: descriptor.fileRecords.map((record) => ({
+        referenceType: record.referenceType,
+        fileNumber: record.fileNumber,
+        recordNumber: record.recordNumber,
+        recordLength: record.values.length,
+      })),
+    });
+  }
   return protocol.encodeReadRequest({
     functionCode: descriptor.area === 'coils' ? protocol.FC.READ_COILS : protocol.FC.READ_HOLDING_REGISTERS,
     address: descriptor.address,
@@ -117,6 +145,13 @@ function expectedWriteValues(descriptor, oldValues) {
   if (!descriptor.maskWrite) return [...descriptor.values];
   if (!Array.isArray(oldValues) || oldValues.length !== 1) return null;
   return [maskWriteResult(Number(oldValues[0]), descriptor.andMask, descriptor.orMask)];
+}
+
+function decodedValues(descriptor, decoded) {
+  if (descriptor.area === 'fileRecords') {
+    return Array.isArray(decoded?.records) ? decoded.records.flatMap((record) => Array.isArray(record.values) ? record.values : []) : [];
+  }
+  return [...(decoded?.values || [])];
 }
 
 function valuesEqual(expected, actual) {
@@ -173,6 +208,44 @@ class WriteSafetyController extends EventEmitter {
     });
   }
 
+  preflight({ unitId, pdu, confirmation = null } = {}) {
+    const descriptor = describeWritePdu(pdu);
+    this._validateConfirmation({ unitId, descriptor, confirmation });
+    return descriptor;
+  }
+
+  auditRejected({ unitId, pdu, error, context = {} } = {}) {
+    let descriptor = null;
+    try { descriptor = describeWritePdu(pdu); } catch { /* keep rejection evidence best-effort */ }
+    const record = this.auditTrail.append({
+      userId: this.userId,
+      sessionId: this.sessionId,
+      connectionId: this.master.connectionId || null,
+      unitId,
+      broadcast: unitId === 0,
+      functionCode: descriptor?.functionCode ?? Buffer.from(pdu || [])[0] ?? null,
+      area: descriptor?.area || null,
+      address: descriptor?.address ?? null,
+      quantity: descriptor?.quantity ?? null,
+      requestedValues: descriptor?.values ? [...descriptor.values] : null,
+      maskWrite: descriptor?.maskWrite ? { andMask: descriptor.andMask, orMask: descriptor.orMask } : null,
+      oldValues: null,
+      pduHex: Buffer.from(pdu || []).toString('hex').toUpperCase(),
+      requestRawHex: null,
+      responseRawHex: null,
+      verification: null,
+      result: 'failed',
+      transmitted: false,
+      preflightRejected: true,
+      error: { code: error?.code || null, message: String(error?.message || error) },
+      elapsedMs: 0,
+      context: context && typeof context === 'object' && !Array.isArray(context) ? { ...context } : {},
+    });
+    this.emit('audit', record);
+    this._emit('write.audit', { auditId: record.auditId, result: record.result, unitId, functionCode: record.functionCode });
+    return record;
+  }
+
   async execute({ unitId, pdu, confirmation = null, captureOldValue = true, readBack = false, context = {} } = {}) {
     const descriptor = describeWritePdu(pdu);
     this._validateConfirmation({ unitId, descriptor, confirmation });
@@ -187,7 +260,7 @@ class WriteSafetyController extends EventEmitter {
       const needsOldValue = unitId !== 0 && (captureOldValue || (descriptor.maskWrite && readBack));
       if (needsOldValue) {
         const oldResult = await this.master.request({ unitId, pdu: readPduForDescriptor(descriptor) });
-        oldValues = [...(oldResult.decoded?.values || [])];
+        oldValues = decodedValues(descriptor, oldResult.decoded);
         expectedValues = expectedWriteValues(descriptor, oldValues);
       }
 
@@ -198,7 +271,7 @@ class WriteSafetyController extends EventEmitter {
           throw new WriteSafetyError('READBACK_EXPECTATION_UNAVAILABLE', 'Read-back verification requires the pre-write value for this write operation');
         }
         const verifyResult = await this.master.request({ unitId, pdu: readPduForDescriptor(descriptor) });
-        const actualValues = [...(verifyResult.decoded?.values || [])];
+        const actualValues = decodedValues(descriptor, verifyResult.decoded);
         verification = {
           requested: true,
           matched: valuesEqual(expectedValues, actualValues),
@@ -253,7 +326,7 @@ class WriteSafetyController extends EventEmitter {
   _validateConfirmation({ unitId, descriptor, confirmation }) {
     if (!confirmation?.confirmed) throw new WriteSafetyError('CONFIRMATION_REQUIRED', 'Explicit write confirmation is required');
     if (descriptor.bulk && confirmation.bulk !== true) {
-      throw new WriteSafetyError('BULK_CONFIRMATION_REQUIRED', 'FC15/FC16/FC23 require explicit bulk-write confirmation', { functionCode: descriptor.functionCode });
+      throw new WriteSafetyError('BULK_CONFIRMATION_REQUIRED', 'Bulk Modbus writes require explicit bulk-write confirmation', { functionCode: descriptor.functionCode });
     }
     if (unitId === 0 && confirmation.broadcast !== true) {
       throw new WriteSafetyError('BROADCAST_CONFIRMATION_REQUIRED', 'Broadcast writes require explicit broadcast confirmation');
@@ -284,4 +357,5 @@ module.exports = {
   readPduForDescriptor,
   maskWriteResult,
   expectedWriteValues,
+  decodedValues,
 };

@@ -1,0 +1,220 @@
+version: 1
+project_or_milestone: Modbus Master Professional Monitor Workspace
+source_of_truth: docs/MODBUS_MASTER_TODO.md
+critical_path:
+  task_id: M2-professional-monitor
+  reason: The Master read foundation is authored; the next product bottleneck is reusable monitor sessions and familiar datatype interpretation without regressing the stable Sniffer.
+
+capacity:
+  planned_coder_slots: 5
+  planned_qa_slots: 2
+  planned_review_slots: 2
+  active_coder_slots: 2
+  active_qa_slots: 1
+  active_review_slots: 0
+  integration_owner: lane-m0-integration
+
+resources:
+  - id: stable-v7-active-route-installer
+    mode: shared
+    capacity: one integration owner for shared route/shell files
+  - id: browser-local-session-storage
+    mode: shared
+    capacity: saved Monitor Sessions are workstation-local and versioned
+  - id: physical-serial-port
+    mode: exclusive
+    capacity: one owner at a time; passive Analyzer and active Master must not silently share the same COM port
+  - id: windows-test-machine
+    mode: owner_gated
+    capacity: manual local verification
+  - id: representative-modbus-hardware
+    mode: external_gated
+    capacity: required for final RTU/TCP field acceptance
+
+lanes:
+  - worker_id: lane-m0-integration
+    role: coder
+    classification: CRITICAL_PATH
+    state: executing
+    responsibility: stable-shell/route integration and shared-file ownership
+    current_task: M2-load-monitor-session-assets
+    issue: null
+    branch_or_pr: v8-release-completion / PR-31
+    dependencies: []
+    write_scope:
+      - src/activeDiscoveryRoutes.js
+      - public/platform-v6.js
+      - docs/MODBUS_MASTER_*.md
+      - docs/MODBUS_MASTER_*.yaml
+    forbidden_scope:
+      - src/master/**
+      - public/master-v7.js
+      - public/master-v7.css
+      - public/master-sessions-v7.js
+      - public/master-sessions-v7.css
+      - test/master-*.test.js
+    shared_files:
+      - src/activeDiscoveryRoutes.js
+      - public/platform-v6.js
+    blocker: exact-head local test and rendered-browser verification pending
+
+  - worker_id: lane-m1-runtime
+    role: coder
+    classification: REVIEW_READY
+    state: implemented
+    responsibility: RTU/ASCII/TCP Master connection and FC01-04 read runtime
+    current_task: M1-master-runtime
+    issue: null
+    branch_or_pr: v8-release-completion / PR-31
+    dependencies:
+      - existing v8 ConnectionBroker/MasterEngine/transports contract
+    write_scope:
+      - src/master/**
+    forbidden_scope:
+      - src/activeDiscoveryRoutes.js
+      - public/**
+      - test/**
+    shared_files: []
+    blocker: exact-head local test run pending
+
+  - worker_id: lane-m2-ui
+    role: coder
+    classification: REVIEW_READY
+    state: implemented
+    responsibility: approved Modbus Master main UI and polling workflow
+    current_task: M1-master-ui
+    issue: null
+    branch_or_pr: v8-release-completion / PR-31
+    dependencies:
+      - API contract defined by lane-m1-runtime
+    write_scope:
+      - public/master-v7.js
+      - public/master-v7.css
+    forbidden_scope:
+      - src/**
+      - test/**
+      - public/platform-v6.js
+    shared_files: []
+    blocker: browser visual verification pending
+
+  - worker_id: lane-m3-format-sessions
+    role: coder
+    classification: CRITICAL_PATH
+    state: executing
+    responsibility: monitor sessions, datatype formatting, aliases, templates and quick start
+    current_task: M2-monitor-sessions
+    issue: null
+    branch_or_pr: v8-release-completion / PR-31
+    dependencies:
+      - M1 read definition DOM/API contract authored
+    write_scope:
+      - src/master/format/**
+      - src/master/session/**
+      - public/master-format-v7.js
+      - public/master-sessions-v7.js
+      - public/master-sessions-v7.css
+    forbidden_scope:
+      - src/activeDiscoveryRoutes.js
+      - public/platform-v6.js
+      - public/master-v7.js
+      - public/master-v7.css
+      - test/**
+    shared_files: []
+    blocker: null
+
+  - worker_id: lane-m4-writes
+    role: coder
+    classification: WAITING_DEPENDENCY
+    state: planned
+    responsibility: guarded FC05/06/15/16/22/23 writes, verification and audit
+    current_task: M3-guarded-writes
+    issue: null
+    branch_or_pr: null
+    dependencies:
+      - M1 connection lifecycle verified
+      - M2 row/value model stabilized and accepted
+    write_scope:
+      - src/master/write/**
+      - public/master-write-v7.js
+    forbidden_scope:
+      - stable Sniffer capture implementation
+    shared_files: []
+    blocker: monitor value/selection model is still evolving
+
+  - worker_id: lane-q1-functional-qa
+    role: qa
+    classification: PARALLEL_READY
+    state: executing
+    responsibility: independent Master runtime/UI/session contract regression tests
+    current_task: M2-master-session-tests
+    dependencies:
+      - authored M1 runtime/UI contract
+      - authored Monitor Sessions contract
+    write_scope:
+      - test/master-*.test.js
+      - e2e/master-*.spec.js
+    forbidden_scope:
+      - src/**
+      - public/**
+    blocker: exact-head test execution is pending on the local checkout
+
+  - worker_id: lane-q2-ui-qa
+    role: qa
+    classification: ENVIRONMENT_WAIT
+    state: blocked
+    responsibility: visual/workflow verification against approved mockups
+    current_task: M2-master-monitor-visual-qa
+    dependencies:
+      - integrated Master + Monitor Sessions rendered on local browser
+    write_scope:
+      - test-results/master-ui/**
+    forbidden_scope:
+      - production implementation files
+    blocker: local browser render/screenshots not yet captured
+
+  - worker_id: lane-r1-review
+    role: reviewer
+    classification: WAITING_DEPENDENCY
+    state: planned
+    responsibility: architecture/safety/reliability review
+    current_task: M2-master-review
+    dependencies:
+      - exact-head automated test and browser evidence
+    write_scope: []
+    forbidden_scope:
+      - implementation files
+    blocker: implementation is authored but not yet test/visual-review ready
+
+shared_file_policy:
+  integration_owner: lane-m0-integration
+  rules:
+    - feature lanes do not edit src/activeDiscoveryRoutes.js or public/platform-v6.js
+    - QA does not silently repair implementation under test
+    - stable Sniffer passive capture code is not modified unless a verified integration defect requires it
+    - Monitor Sessions switching must stop polling before applying another definition
+    - a different saved connection profile must not silently reuse the active Master transport
+
+scaling_policy:
+  scale_up_when:
+    - Monitor Sessions contract passes exact-head tests and full datatype formatting becomes independent
+    - write workflow can proceed without changing core connection ownership
+    - QA has independent ready browser scenarios
+  scale_down_when:
+    - shared shell integration becomes the bottleneck
+    - API/DOM contract churn causes rework
+    - hardware or Windows acceptance becomes the exclusive bottleneck
+
+reporting:
+  recurring_cadence: owner_requested_control_cycle
+  per_worker_required: true
+  no_progress_flag_required: true
+  lifecycle_state_authoritative: true
+  headline_template: "Master M2 <state> | Stable Sniffer <state> | QA <state> | Hardware acceptance <state>"
+
+gates:
+  exact_head_ci: true
+  no_force_push: true
+  no_self_approval_as_only_review: true
+  no_fake_autonomy: true
+  no_fake_elapsed_evidence: true
+  safety_or_owner_gates_never_weakened_for_speed: true

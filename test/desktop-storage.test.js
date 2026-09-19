@@ -6,6 +6,7 @@ const fs=require('fs');
 const os=require('os');
 const path=require('path');
 const {prepareDesktopDataDir}=require('../desktop/storage');
+const {isAllowedNavigationUrl}=require('../desktop/navigationSafety');
 
 function temp(prefix){return fs.mkdtempSync(path.join(os.tmpdir(),prefix));}
 
@@ -42,12 +43,28 @@ test('desktop storage never merges legacy data into an existing user workspace',
   assert.equal(fs.readFileSync(path.join(dest,'workspaces.json'),'utf8'),'current');
 });
 
-test('desktop launcher starts the v7 backend and keeps loopback dynamic port safety',()=>{
+test('desktop renderer navigation requires the exact loopback origin',()=>{
+  assert.equal(isAllowedNavigationUrl('http://127.0.0.1:1234/',1234),true);
+  assert.equal(isAllowedNavigationUrl('http://127.0.0.1:1234/help',1234),true);
+  assert.equal(isAllowedNavigationUrl('http://127.0.0.1:12345/',1234),false);
+  assert.equal(isAllowedNavigationUrl('http://localhost:1234/',1234),false);
+  assert.equal(isAllowedNavigationUrl('https://127.0.0.1:1234/',1234),false);
+  assert.equal(isAllowedNavigationUrl('not-a-url',1234),false);
+});
+
+test('desktop launcher starts the unified backend and keeps loopback dynamic port safety',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','desktop','main.js'),'utf8');
+  const navigationSafety=fs.readFileSync(path.join(__dirname,'..','desktop','navigationSafety.js'),'utf8');
   assert.match(source,/src['"],\s*['"]index-v7\.js/);
-  assert.doesNotMatch(source,/src['"],\s*['"]index-v6\.js/);
+  assert.doesNotMatch(source,/src['"],\s*['"]index-v8\.js/);
   assert.match(source,/--data-dir/);
+  assert.match(source,/--web-host/);
+  assert.match(source,/--web-port/);
+  assert.match(source,/function healthPath\(\) \{ return '\/api\/status'; \}/);
   assert.match(source,/requestSingleInstanceLock/);
+  assert.match(source,/isAllowedNavigationUrl\(url, selectedPort\)/);
+  assert.match(navigationSafety,/parsed\.origin === expected\.origin/);
+  assert.doesNotMatch(source,/url\.startsWith\(allowed\)/);
   assert.match(source,/server\.listen\(requested,\s*['"]127\.0\.0\.1['"]/);
   assert.match(source,/MODBUS_DESKTOP_PORT/);
   assert.match(source,/return probePort\(0\)/);

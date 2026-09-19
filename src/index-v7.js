@@ -20,6 +20,7 @@ const { WorkspaceStore } = require('./workspaceStore');
 const { HistoryStore, HistoryRecorder } = require('./historyStore');
 const { ModbusTcpProxy } = require('./modbusTcpProxy');
 const { buildRtuChannel } = require('./transportIdentity');
+const { PRODUCT_VERSION } = require('./v8/version');
 
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 
@@ -36,7 +37,7 @@ function publicConfig(o,adapterIdentity=null,rtuChannel=null){
   return {
     port:o.port,baudRate:o.baudRate,parity:o.parity,dataBits:o.dataBits,stopBits:o.stopBits,reconnectMs:o.reconnectMs,
     requestTimeoutMs:o.requestTimeoutMs,autoRebind:o.autoRebind,mapFile:o.mapFile,csvFile:o.csvFile,historyLimit:o.historyLimit,
-    webHost:o.webHost,webPort:o.webPort,dataDir:o.dataDir,
+    webHost:o.webHost,webPort:o.webPort,confirmWebExternalBind:Boolean(o.confirmWebExternalBind),dataDir:o.dataDir,
     adapterIdentity:adapterIdentity||null,rtuChannelId:rtuChannel?.channelId||null
   };
 }
@@ -49,7 +50,7 @@ async function main(){
   if(options.listPorts){renderPorts(ports);return;}
   if(!options.demo&&!options.port&&!options.tcpProxy){if(!options.webEnabled)options.port=await choosePort(ports);else if(ports.length===1)options.port=ports[0].path;}
 
-  console.log('\n=== Modbus Engineering Analyzer v7.0 ===');
+  console.log(`\n=== Modbus Engineering Tool v${PRODUCT_VERSION} ===`);
   console.log(`RTU       : ${options.demo?'DEMO':options.port||'not connected'}`);
   console.log(`Web       : ${options.webEnabled?`${options.webHost}:${options.webPort}`:'disabled'}`);
   console.log(`Projects  : ${path.resolve(options.dataDir)}`);

@@ -1,21 +1,23 @@
-name: Node tests
+name: Optional self-hosted Mac validation
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 concurrency:
-  group: node-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: modbus-v8-manual-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  CI: 'true'
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64, automatrix-ci, automatrix-mac]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: true
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -24,81 +26,55 @@ jobs:
       - run: npm run version:check
       - run: npm run lint
       - run: npm run check:v8
+      - run: npm run benchmark:v8
       - run: node scripts/benchmark-v7.js --cycles 25000 --min-fps 500 --max-heap-mb 384
-      - name: Runtime dependency audit
-        run: npm audit --omit=dev --audit-level=high
+      - run: npm run audit:runtime
 
   test:
-    timeout-minutes: 35
+    runs-on: [self-hosted, macOS, ARM64, automatrix-ci, automatrix-mac]
+    timeout-minutes: 40
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
-        os: [ubuntu-latest, windows-latest]
         node: [20, 22, 24]
-    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: true
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - run: node --check src/index-v7.js
-      - run: node --check src/intelligenceV7.js
-      - run: node --check src/platformRuntimeStateV7.js
-      - run: node --check src/index-v6.js
-      - run: node --check src/platformWebServerV61.js
-      - run: node --check src/platformRuntimeState.js
-      - run: node --check src/platformRuntimeStateV62.js
-      - run: node --check src/transportIdentity.js
-      - run: node --check src/replayController.js
-      - run: node --check src/exportBundle.js
-      - run: node --check src/discoveryService.js
-      - run: node --check src/activeDiscovery.js
-      - run: node --check src/activeDiscoveryManager.js
-      - run: node --check src/activeDiscoveryRoutes.js
-      - run: node --check src/discoveryAdoption.js
-      - run: node --check src/platformWebServer.js
-      - run: node --check src/workspaceStore.js
-      - run: node --check src/historyStore.js
-      - run: node --check src/engineering.js
-      - run: node --check src/modbusTcpProxy.js
-      - run: node --check src/modbus/tcpParser.js
-      - run: node --check src/modbus/tcpTransactionTracker.js
-      - run: node --check src/deepDiagnostics.js
-      - run: node --check src/reportGenerator.js
+      - run: npm run version:check
       - run: npm run check:v8
-      - run: node --check public/app-v4.js
-      - run: node --check public/platform-v6.js
-      - run: node --check public/platform-v6-main.js
-      - run: node --check public/platform-v62-main.js
-      - run: node --check public/platform-v62-ui.js
-      - run: node --check public/tcp-interface-v62.js
-      - run: node --check public/discovery-v63.js
-      - run: node --check public/active-discovery-v7.js
-      - run: node --check public/intelligence-v7.js
-      - run: node --check public/export-v6.js
+      - run: node --check src/index-v8.js
+      - run: node --check src/index-v7.js
       - run: node --check desktop/main.js
       - run: node --check desktop/storage.js
       - run: node --check scripts/smoke.js
-      - run: node --check scripts/discover.js
+      - run: node --check scripts/acceptance.js
       - run: node --check scripts/version-sync.js
       - run: node --check scripts/check-v8-syntax.js
-      - run: node --check scripts/benchmark-v7.js
+      - run: node --check scripts/benchmark-v8.js
+      - run: node --check scripts/soak-v8.js
       - run: node --check playwright.config.js
       - run: npm test
       - run: npm run smoke
       - run: npm run acceptance
 
   browser-e2e:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64, automatrix-ci, automatrix-mac]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: true
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install chromium
       - run: npm run e2e

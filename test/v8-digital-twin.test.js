@@ -101,8 +101,12 @@ test('v8 Digital Twin apply is review-gated and explicit approval updates simula
   const simulator = {
     saveServer(input) { server = clone(input); calls.servers.push(clone(input)); return clone(input); },
     saveDevice(input) { calls.devices.push(clone(input)); return clone(input); },
-    getServer() { return clone(server); },
-    removeServer() { return true; },
+    getServer() {
+      if (!server) throw Object.assign(new Error('missing'), { code: 'SERVER_NOT_FOUND' });
+      return clone(server);
+    },
+    listDevices() { return clone(calls.devices); },
+    removeServer() { server = null; calls.devices.length = 0; return true; },
   };
   const service = new v8.DigitalTwinService({ store, registerLab, simulator });
   const draft = service.saveDraft({ sourceConnectionId: 'source', targetConnectionId: 'target', serverId: 'generated-1' });
@@ -114,6 +118,77 @@ test('v8 Digital Twin apply is review-gated and explicit approval updates simula
   const approved = service.approve(draft.twinId, { confirmed: true });
   assert.equal(approved.status, 'approved');
   assert.equal(calls.servers.at(-1).metadata.digitalTwin.approved, true);
+});
+
+test('v8 Digital Twin apply refuses to overwrite an unrelated Simulator server', () => {
+  const store = createStore();
+  const registerLab = { maxPoints: 100000, list: () => sourcePoints() };
+  let saveCalls = 0;
+  const simulator = {
+    getServer: () => ({ serverId: 'generated-conflict', metadata: { purpose: 'operator-configured' } }),
+    saveServer() { saveCalls += 1; },
+    saveDevice() { saveCalls += 1; },
+  };
+  const service = new v8.DigitalTwinService({ store, registerLab, simulator });
+  const draft = service.saveDraft({ sourceConnectionId: 'source', targetConnectionId: 'target', serverId: 'generated-conflict' });
+  assert.throws(
+    () => service.apply(draft.twinId),
+    (error) => error.code === 'TWIN_TARGET_CONFLICT' && error.details?.serverId === 'generated-conflict',
+  );
+  assert.equal(saveCalls, 0);
+  assert.equal(service.get(draft.twinId).status, 'draft');
+});
+
+test('v8 Digital Twin reapply restores the previous same-twin topology after a partial failure', () => {
+  const store = createStore();
+  const registerLab = { maxPoints: 100000, list: () => sourcePoints() };
+  let server = null;
+  let devices = [];
+  let failNextDevice = false;
+  const simulator = {
+    getServer() {
+      if (!server) throw Object.assign(new Error('missing'), { code: 'SERVER_NOT_FOUND' });
+      return clone(server);
+    },
+    listDevices() { return clone(devices); },
+    saveServer(input) { server = clone(input); return clone(server); },
+    saveDevice(input) {
+      if (failNextDevice) {
+        failNextDevice = false;
+        throw Object.assign(new Error('device apply failed'), { code: 'DEVICE_APPLY_FAILED' });
+      }
+      devices.push(clone(input));
+      return clone(input);
+    },
+    removeServer() {
+      if (!server) throw Object.assign(new Error('missing'), { code: 'SERVER_NOT_FOUND' });
+      server = null;
+      devices = [];
+      return true;
+    },
+  };
+  const service = new v8.DigitalTwinService({ store, registerLab, simulator });
+  const draft = service.saveDraft({ sourceConnectionId: 'source', targetConnectionId: 'target', serverId: 'generated-rollback' });
+
+  const previousServer = {
+    serverId: 'generated-rollback',
+    name: 'Previous generated topology',
+    connectionId: 'target', framing: 'tcp', receivePollMs: 25,
+    metadata: { digitalTwin: { twinId: draft.twinId, requiresApproval: true, approved: false } },
+  };
+  const previousDevice = {
+    deviceId: 'generated-rollback:unit:9', serverId: 'generated-rollback', unitId: 9,
+    name: 'Previous Unit 9', sizes: { coils: 0, discreteInputs: 0, holdingRegisters: 1, inputRegisters: 0 },
+    identity: {}, memory: { holdingRegisters: [{ address: 0, values: [999] }] }, generators: [], metadata: {},
+  };
+  server = clone(previousServer);
+  devices = [clone(previousDevice)];
+  failNextDevice = true;
+
+  assert.throws(() => service.apply(draft.twinId), (error) => error.code === 'DEVICE_APPLY_FAILED');
+  assert.equal(server.name, previousServer.name);
+  assert.deepEqual(devices, [previousDevice]);
+  assert.equal(service.get(draft.twinId).status, 'draft');
 });
 
 test('v8 Simulator refuses to start an unapproved generated digital twin', async (t) => {

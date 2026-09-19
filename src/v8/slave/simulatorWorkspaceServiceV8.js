@@ -8,6 +8,7 @@ const {
 } = require('./simulatorWorkspaceService');
 const { LabVirtualSlaveServer } = require('./labVirtualSlaveServer');
 const { VirtualDevice, normalizeWritableAreas } = require('./virtualDevice');
+const { DynamicValueEngine } = require('./dynamicValueEngineHardened');
 
 const SERVER_KINDS = Object.freeze({
   tcp: new Set(['tcp-server', 'udp-server', 'tls-server']),
@@ -16,6 +17,14 @@ const SERVER_KINDS = Object.freeze({
 });
 
 class SimulatorWorkspaceService extends BaseSimulatorWorkspaceService {
+  constructor(options = {}) {
+    super(options);
+    this.generators.stop();
+    this.generators = new DynamicValueEngine({ resolveDevice: (serverId, unitId) => this.runtimes.get(serverId)?.server.getDevice(unitId) || null });
+    this.generators.on('event', (event) => this.emit('event', event));
+    this.generators.start();
+  }
+
   saveDevice(input) {
     if (!input?.writableAreas) return super.saveDevice(input);
     let existingMetadata = {};

@@ -1,7 +1,7 @@
 {
   "name": "modbus-engineering-analyzer-desktop",
-  "version": "7.0.0",
-  "description": "Windows desktop shell for the Modbus Engineering Analyzer v7.",
+  "version": "8.0.0",
+  "description": "Windows desktop shell for the unified Modbus Engineering Tool.",
   "author": "Automatrix Engineering",
   "license": "MIT",
   "private": true,
@@ -16,19 +16,36 @@
   },
   "build": {
     "appId": "pk.automatrix.modbus-analyzer",
-    "productName": "Modbus Engineering Analyzer",
-    "artifactName": "Modbus-Engineering-Analyzer-Setup-${version}.${ext}",
+    "productName": "Modbus Engineering Tool",
+    "artifactName": "Modbus-Engineering-Tool-Setup-${version}.${ext}",
     "asar": true,
     "files": [
       "main.js",
-      "storage.js"
+      "storage.js",
+      "logSafety.js",
+      "navigationSafety.js"
     ],
     "extraResources": [
-      { "from": "../src", "to": "backend/src" },
-      { "from": "../public", "to": "backend/public" },
-      { "from": "../config", "to": "backend/config" },
-      { "from": "../node_modules", "to": "backend/node_modules" },
-      { "from": "../package.json", "to": "backend/package.json" }
+      {
+        "from": "../src",
+        "to": "backend/src"
+      },
+      {
+        "from": "../public",
+        "to": "backend/public"
+      },
+      {
+        "from": "../config",
+        "to": "backend/config"
+      },
+      {
+        "from": "../node_modules",
+        "to": "backend/node_modules"
+      },
+      {
+        "from": "../package.json",
+        "to": "backend/package.json"
+      }
     ],
     "win": {
       "target": "nsis"

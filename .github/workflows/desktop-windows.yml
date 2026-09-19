@@ -2,38 +2,30 @@ name: Build Windows desktop installer
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'desktop/**'
-      - 'src/**'
-      - 'public/**'
-      - 'config/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'scripts/version-sync.js'
-      - '.github/workflows/desktop-windows.yml'
 
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - name: Verify release versions
-        run: node scripts/version-sync.js
-      - name: Install backend runtime dependencies only
-        run: npm ci --omit=dev
-      - name: Audit backend runtime dependencies
+      - name: Install backend dependencies for source preflight
+        run: npm ci
+      - name: Run unified source preflight
+        run: npm run preflight
+      - name: Prune backend to runtime dependencies for packaging
+        run: npm prune --omit=dev
+      - name: Re-audit packaged backend runtime dependencies
         run: npm audit --omit=dev --audit-level=high
       - name: Install desktop build dependencies
         run: npm --prefix desktop ci
       - name: Build NSIS installer
         run: npm --prefix desktop run dist:win
-      - name: Smoke launch packaged application and v7 backend
+      - name: Smoke launch packaged Modbus Engineering Tool
         shell: pwsh
         run: |
           $exe = Get-ChildItem "desktop/dist/win-unpacked" -Filter "*.exe" -File |
@@ -41,6 +33,7 @@ jobs:
             Select-Object -First 1
           if (-not $exe) { throw "Packaged application executable was not found." }
 
+          $expectedVersion = node -p "require('./package.json').version"
           $env:MODBUS_DESKTOP_PORT = "18787"
           $env:ELECTRON_DISABLE_SECURITY_WARNINGS = "true"
           $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--disable-gpu" -PassThru
@@ -50,10 +43,28 @@ jobs:
               Start-Sleep -Milliseconds 500
               try {
                 $response = Invoke-WebRequest -Uri "http://127.0.0.1:18787/api/status" -UseBasicParsing -TimeoutSec 2
-                if ($response.StatusCode -eq 200) { $ready = $true; break }
-              } catch {}
+                if ($response.StatusCode -eq 200) {
+                  $status = $response.Content | ConvertFrom-Json
+                  if ($status.productName -ne "Modbus Engineering Tool") { throw "Unexpected packaged product name: $($status.productName)" }
+                  if ($status.productVersion -ne $expectedVersion) { throw "Unexpected packaged product version: $($status.productVersion), expected $expectedVersion" }
+                  $root = Invoke-WebRequest -Uri "http://127.0.0.1:18787/" -UseBasicParsing -TimeoutSec 2
+                  if ($root.StatusCode -ne 200 -or $root.Content -notmatch "Modbus Engineering Tool" -or $root.Content -notmatch "platform-v6.js") {
+                    throw "Packaged unified UI root is missing expected product/assets."
+                  }
+                  foreach ($asset in @("platform-v6.js","master-v7.js","slave-v7.js","help-v7.js")) {
+                    $assetResponse = Invoke-WebRequest -Uri "http://127.0.0.1:18787/$asset" -UseBasicParsing -TimeoutSec 2
+                    if ($assetResponse.StatusCode -ne 200 -or [string]::IsNullOrWhiteSpace($assetResponse.Content)) {
+                      throw "Packaged UI asset failed smoke check: $asset"
+                    }
+                  }
+                  $ready = $true
+                  break
+                }
+              } catch {
+                if ($_.Exception.Message -like "Unexpected packaged product*") { throw }
+              }
             }
-            if (-not $ready) { throw "Packaged desktop app did not expose the v7 backend health endpoint." }
+            if (-not $ready) { throw "Packaged desktop app did not expose the unified Modbus Engineering Tool health endpoint." }
           } finally {
             if ($proc -and -not $proc.HasExited) {
               & taskkill /PID $proc.Id /T /F | Out-Null
@@ -65,7 +76,8 @@ jobs:
           $rootVersion = node -p "require('./package.json').version"
           $desktopVersion = node -p "require('./desktop/package.json').version"
           @(
-            "product=Modbus Engineering Analyzer",
+            "product=Modbus Engineering Tool",
+            "runtime=unified-modbus-engineering-tool",
             "root_version=$rootVersion",
             "desktop_version=$desktopVersion",
             "commit=$env:GITHUB_SHA",
@@ -88,6 +100,6 @@ jobs:
           $lines | Set-Content "desktop/dist/SHA256SUMS.txt" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
-          name: modbus-engineering-analyzer-windows
+          name: modbus-engineering-tool-windows
           path: desktop/dist/*
           if-no-files-found: error

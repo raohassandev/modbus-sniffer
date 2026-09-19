@@ -19,6 +19,7 @@ const COLLECTION_LIMITS = Object.freeze({
   digitalTwins: 1000,
   automation: 10000,
   hmiScreens: 10000,
+  hmiTemplates: 10000,
   discoveryRuns: 100,
 });
 
@@ -33,7 +34,14 @@ const V8_ARRAY_FIELDS = Object.freeze([
   'digitalTwins',
   'automation',
   'hmiScreens',
+  'hmiTemplates',
 ]);
+
+const SENSITIVE_METADATA_FIELDS = Object.freeze(new Set([
+  'password', 'passphrase', 'secret', 'clientsecret', 'apikey', 'token', 'accesstoken', 'refreshtoken',
+  'authorization', 'cookie', 'setcookie', 'privatekey', 'privatekeypem', 'keypem', 'clientkey', 'serverkey',
+  'pfx', 'pkcs12', 'credential', 'credentials',
+]));
 
 class V8ProjectSchemaError extends Error {
   constructor(code, message, details = {}) {
@@ -67,6 +75,22 @@ function safeText(value, fallback = '') {
   return String(value);
 }
 
+function normalizedFieldName(value) {
+  return String(value || '').replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+}
+
+function sanitizePersistedMetadata(value, depth = 0) {
+  if (depth > 32) throw new V8ProjectSchemaError('METADATA_DEPTH_LIMIT', 'Connection metadata exceeds maximum nesting depth', { maxDepth: 32 });
+  if (Array.isArray(value)) return value.map((item) => sanitizePersistedMetadata(item, depth + 1));
+  if (value == null || typeof value !== 'object') return value;
+  const output = {};
+  for (const [key, current] of Object.entries(value)) {
+    if (SENSITIVE_METADATA_FIELDS.has(normalizedFieldName(key))) continue;
+    output[key] = sanitizePersistedMetadata(current, depth + 1);
+  }
+  return output;
+}
+
 function sanitizeConnectionProfile(input = {}, { index = 0 } = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new V8ProjectSchemaError('INVALID_CONNECTION_PROFILE', 'Connection profile must be an object', { index });
@@ -78,11 +102,13 @@ function sanitizeConnectionProfile(input = {}, { index = 0 } = {}) {
   }
 
   const transport = String(input.transport || input.transportKind || '').toUpperCase();
-  const serial = input.serial && typeof input.serial === 'object' && !Array.isArray(input.serial) ? clone(input.serial) : null;
-  const tcp = input.tcp && typeof input.tcp === 'object' && !Array.isArray(input.tcp) ? clone(input.tcp) : null;
-  const metadata = objectOr(input.metadata, {});
+  const serial = input.serial && typeof input.serial === 'object' && !Array.isArray(input.serial) ? sanitizePersistedMetadata(input.serial) : null;
+  const tcp = input.tcp && typeof input.tcp === 'object' && !Array.isArray(input.tcp) ? sanitizePersistedMetadata(input.tcp) : null;
+  const metadata = input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
+    ? sanitizePersistedMetadata(input.metadata)
+    : {};
 
-  // Persist configuration, never live capability/ownership/armed state.
+  // Persist configuration, never live capability/ownership/armed state or credential material.
   return {
     connectionId: connectionId.trim(),
     sourceChannelId,
@@ -146,7 +172,6 @@ function normalizeV8Project(project = {}, { index = 0 } = {}) {
   for (const field of V8_ARRAY_FIELDS) normalized[field] = arrayOr(project[field]);
   normalized.connections = normalized.connections.map((connection, connectionIndex) => sanitizeConnectionProfile(connection, { index: connectionIndex }));
 
-  // Old or imported runtime state must never become an armed persisted state.
   delete normalized.writeLock;
   delete normalized.writesEnabled;
   delete normalized.writeEnabled;
@@ -313,11 +338,13 @@ module.exports = {
   SAFE_WRITE_STATE,
   COLLECTION_LIMITS,
   V8_ARRAY_FIELDS,
+  SENSITIVE_METADATA_FIELDS,
   V8ProjectSchemaError,
   clone,
   createEmptyV8Database,
   normalizeV8Database,
   normalizeV8Project,
+  sanitizePersistedMetadata,
   sanitizeConnectionProfile,
   validateV8Database,
 };

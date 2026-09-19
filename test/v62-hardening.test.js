@@ -10,7 +10,7 @@ const {TcpTransactionTracker}=require('../src/modbus/tcpTransactionTracker');
 const {PlatformRuntimeStateV62}=require('../src/platformRuntimeStateV62');
 const {buildRtuChannel,buildTcpChannel}=require('../src/transportIdentity');
 const {HistoryStore}=require('../src/historyStore');
-const {validateTcp,isLoopbackHost}=require('../src/platformWebServerV61');
+const {validateTcp,isLoopbackHost,webHostAllowed,mutationBodyLimit,jsonBodyLimitForPath}=require('../src/platformWebServerV61');
 const {ModbusTcpProxy,listLocalIpv4Interfaces,recommendedListenHost,isLocalListenHost}=require('../src/modbusTcpProxy');
 
 function rspTx(channel,unitId,value,address=100){return{direction:'RSP',transport:channel.transport,channel,decoded:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',registers:[{address,value}]},request:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',startAddress:address,quantity:1,timestamp:1000},rttMs:20};}
@@ -53,6 +53,32 @@ test('TCP tracker drains pending requests with explicit connection outcome',()=>
   const outcomes=[];const t=new TcpTransactionTracker({onTimeout:r=>outcomes.push(r.outcome)});const f=decodeTcpAdu(reqRaw);
   t.request(f,1000);t.request({...f,transactionId:2},1010);const drained=t.drain('target-reset',1100);
   assert.equal(drained.length,2);assert.equal(t.pendingCount(),0);assert.deepEqual(outcomes,['target-reset','target-reset']);assert.ok(drained.every(x=>x.connectionClosed));
+});
+
+test('HTTP JSON body limits are enforced consistently at parser and policy layers',()=>{
+  assert.equal(mutationBodyLimit({path:'/api/master/read'}),2*1024*1024);
+  assert.equal(jsonBodyLimitForPath('/api/master/read'),'2mb');
+  assert.equal(mutationBodyLimit({path:'/api/capture/import'}),25*1024*1024);
+  assert.equal(jsonBodyLimitForPath('/api/capture/import'),'25mb');
+  assert.equal(mutationBodyLimit({path:'/api/workspace/import'}),25*1024*1024);
+  assert.equal(jsonBodyLimitForPath('/api/workspace/import'),'25mb');
+});
+
+test('stable web Host boundary rejects DNS rebinding and keeps wildcard binds IP-only',()=>{
+  assert.equal(isLoopbackHost('127.0.0.1'),true);
+  assert.equal(isLoopbackHost('127.25.1.9:8080'),true);
+  assert.equal(isLoopbackHost('localhost:8080'),true);
+  assert.equal(isLoopbackHost('::1'),true);
+  assert.equal(isLoopbackHost('[::1]:8080'),true);
+  assert.equal(webHostAllowed('[2001:db8::20]:8080','::'),true);
+  assert.equal(webHostAllowed('evil.example:8080','::'),false);
+  assert.equal(webHostAllowed('127.0.0.1:8080','127.0.0.1'),true);
+  assert.equal(webHostAllowed('localhost:8080','127.0.0.1'),true);
+  assert.equal(webHostAllowed('evil.example:8080','127.0.0.1'),false);
+  assert.equal(webHostAllowed('192.168.1.20:8080','0.0.0.0'),true);
+  assert.equal(webHostAllowed('evil.example:8080','0.0.0.0'),false);
+  assert.equal(webHostAllowed('192.168.1.20:8080','192.168.1.20'),true);
+  assert.equal(webHostAllowed('192.168.1.21:8080','192.168.1.20'),false);
 });
 
 test('TCP proxy configuration is loopback-safe by default and external bind requires explicit confirmation',()=>{
