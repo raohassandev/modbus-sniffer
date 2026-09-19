@@ -43,7 +43,10 @@ test('desktop data migration preserves an existing destination and reports migra
   assert.match(storage, /COPYFILE_EXCL/);
 });
 
-test('Windows packaging workflow smoke-tests stable Sniffer and emits provenance/checksums', () => {
+test('Windows packaging workflow is manual-only, smoke-tests the unified product and emits provenance/checksums', () => {
+  assert.match(workflow, /workflow_dispatch/);
+  assert.doesNotMatch(workflow, /pull_request:/);
+  assert.doesNotMatch(workflow, /push:/);
   assert.match(workflow, /npm run preflight/);
   assert.match(workflow, /npm prune --omit=dev/);
   assert.match(workflow, /npm audit --omit=dev --audit-level=high/);
