@@ -31,7 +31,9 @@
     "desktop": "npm --prefix desktop start",
     "desktop:win": "npm --prefix desktop run dist:win",
     "preflight": "node scripts/source-preflight.js",
-    "audit:source": "node scripts/static-release-audit.js"
+    "audit:source": "node scripts/static-release-audit.js",
+    "e2e:unified": "playwright test --config=playwright.unified.config.js",
+    "e2e:compat": "playwright test e2e/v8-*.spec.js"
   },
   "engines": {
     "node": ">=20"
