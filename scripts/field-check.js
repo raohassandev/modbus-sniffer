@@ -40,7 +40,7 @@ async function main() {
   const onlineDevices = devices.filter(d => d.status === 'online').length;
   const offlineDevices = devices.filter(d => d.status === 'offline').length;
 
-  console.log('\n=== Modbus Sniffer v4 Field Acceptance Check ===');
+  console.log('\n=== Modbus Engineering Tool Field Acceptance Check ===');
   console.log(`Source: ${base}\n`);
 
   const critical = [];
