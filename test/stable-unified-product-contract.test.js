@@ -105,7 +105,8 @@ test('unified CLI requires explicit external web exposure and documents the curr
   assert.match(cli,/confirmWebExternalBind:false/);
   assert.match(cli,/--confirm-web-external-bind/);
   assert.match(cli,/node src\/index-v7\.js/);
-  assert.match(cli,/Modbus Engineering Tool 8\.0\.0/);
+  assert.match(cli,/PRODUCT_VERSION/);
+  assert.match(cli,/Modbus Engineering Tool \$\{PRODUCT_VERSION\}/);
   assert.doesNotMatch(cli,/index-v6\.js/);
   assert.match(server,/WEB_EXTERNAL_BIND_CONFIRMATION_REQUIRED/);
   assert.match(server,/INVALID_WEB_HOST/);
