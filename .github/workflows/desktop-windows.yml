@@ -47,6 +47,16 @@ jobs:
                   $status = $response.Content | ConvertFrom-Json
                   if ($status.productName -ne "Modbus Engineering Tool") { throw "Unexpected packaged product name: $($status.productName)" }
                   if ($status.productVersion -ne $expectedVersion) { throw "Unexpected packaged product version: $($status.productVersion), expected $expectedVersion" }
+                  $root = Invoke-WebRequest -Uri "http://127.0.0.1:18787/" -UseBasicParsing -TimeoutSec 2
+                  if ($root.StatusCode -ne 200 -or $root.Content -notmatch "Modbus Engineering Tool" -or $root.Content -notmatch "platform-v6.js") {
+                    throw "Packaged unified UI root is missing expected product/assets."
+                  }
+                  foreach ($asset in @("platform-v6.js","master-v7.js","slave-v7.js","help-v7.js")) {
+                    $assetResponse = Invoke-WebRequest -Uri "http://127.0.0.1:18787/$asset" -UseBasicParsing -TimeoutSec 2
+                    if ($assetResponse.StatusCode -ne 200 -or [string]::IsNullOrWhiteSpace($assetResponse.Content)) {
+                      throw "Packaged UI asset failed smoke check: $asset"
+                    }
+                  }
                   $ready = $true
                   break
                 }
