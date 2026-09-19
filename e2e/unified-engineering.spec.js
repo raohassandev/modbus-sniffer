@@ -1,6 +1,7 @@
 'use strict';
 
 const { test, expect } = require('@playwright/test');
+const { version: PRODUCT_VERSION } = require('../package.json');
 
 async function safePost(request,url,data={}){
   const response=await request.post(url,{data});
@@ -16,6 +17,17 @@ test.describe('unified Modbus engineering product',()=>{
   test.afterEach(async({request})=>{
     await safePost(request,'/api/master/disconnect').catch(()=>undefined);
     await safePost(request,'/api/slave/stop').catch(()=>undefined);
+  });
+
+  test('unified health/UI identity matches the release product',async({page,request})=>{
+    const statusResponse=await request.get('/api/status');
+    expect(statusResponse.ok()).toBeTruthy();
+    const status=await statusResponse.json();
+    expect(status.productName).toBe('Modbus Engineering Tool');
+    expect(status.productVersion).toBe(PRODUCT_VERSION);
+    await page.goto('/');
+    await expect(page.locator('body')).toContainText('Modbus Engineering Tool');
+    await expect(page.locator('.version-badge')).toContainText(`UI v${PRODUCT_VERSION}`);
   });
 
   test('primary Modbus workspaces are available from one stable shell',async({page})=>{
