@@ -176,11 +176,20 @@ function terminateBackend() {
 
 function backgroundColor() { return nativeTheme.shouldUseDarkColors ? '#0b1017' : '#f4f7fb'; }
 
+function isAllowedNavigationUrl(target, selectedPort) {
+  try {
+    const expected = new URL(`http://127.0.0.1:${selectedPort}`);
+    const parsed = new URL(String(target || ''));
+    return parsed.origin === expected.origin;
+  } catch {
+    return false;
+  }
+}
+
 function lockNavigation(window, selectedPort) {
-  const allowed = `http://127.0.0.1:${selectedPort}`;
   window.webContents.setWindowOpenHandler(() => ({ action:'deny' }));
   window.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(allowed)) event.preventDefault();
+    if (!isAllowedNavigationUrl(url, selectedPort)) event.preventDefault();
   });
 }
 
@@ -258,4 +267,4 @@ app.on('before-quit', event => {
   });
 });
 
-module.exports = { backendEntry, backendArgs, desktopMode, healthPath, uiPath };
+module.exports = { backendEntry, backendArgs, desktopMode, healthPath, uiPath, isAllowedNavigationUrl };
