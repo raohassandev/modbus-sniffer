@@ -38,7 +38,7 @@ async function main() {
   const timeline = new v8.TrafficTimelineService({ maxEvents: 50000, maxBookmarks: 1000 });
   const lab = new v8.RegisterLabService({ broker, maxPoints: devices * 16 + 100 });
   const charts = new ChartService({ maxDocuments: 2, defaultMaxPoints: 20000 });
-  charts.createDocument({ documentId: 'soak-live', title: 'v8 concurrent soak', maxPoints: 20000 });
+  charts.createDocument({ documentId: 'soak-live', title: 'compatibility concurrent soak', maxPoints: 20000 });
   for (let unitId = 1; unitId <= devices; unitId += 1) charts.addSeries('soak-live', { seriesId: `unit-${unitId}`, label: `Unit ${unitId}`, unit: 'raw' });
 
   master.on('event', (event) => {
@@ -82,9 +82,9 @@ async function main() {
     }
 
     const heapMb = process.memoryUsage().heapUsed / 1024 / 1024;
-    assert(heapMb <= maxHeapMb, `v8 soak exceeded ${maxHeapMb} MB heap: ${heapMb.toFixed(1)} MB`);
+    assert(heapMb <= maxHeapMb, `compatibility soak exceeded ${maxHeapMb} MB heap: ${heapMb.toFixed(1)} MB`);
 
-    console.log('\n=== Modbus Engineering Workbench v8 Concurrent Soak ===');
+    console.log('\n=== Modbus Engineering Tool Compatibility Concurrent Soak ===');
     console.log(`PASS  duration               : ${((Date.now() - startedAt) / 1000).toFixed(1)} s`);
     console.log(`PASS  Master poll jobs       : ${jobs.length}`);
     console.log(`PASS  Virtual Slave devices  : ${devices}`);
@@ -92,7 +92,7 @@ async function main() {
     console.log(`PASS  Register Lab devices   : ${new Set(points.map((point) => point.unitId)).size}`);
     console.log(`PASS  Chart series           : ${devices}`);
     console.log(`INFO  heap used              : ${heapMb.toFixed(1)} MB / ${maxHeapMb} MB`);
-    console.log('\nV8 CONCURRENT SOAK: PASS\n');
+    console.log('\nCOMPATIBILITY CONCURRENT SOAK: PASS\n');
   } finally {
     scheduler.stop();
     await master.close().catch(() => undefined);
