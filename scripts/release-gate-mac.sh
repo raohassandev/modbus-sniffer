@@ -190,7 +190,8 @@ run_step "quality-v7-compat-benchmark" node scripts/benchmark-v7.js --cycles 250
 run_step "quality-runtime-audit" npm run audit:runtime
 run_step "quality-v8-soak" npm run soak:v8 -- --seconds "$SOAK_SECONDS"
 run_step "browser-install-chromium" npx playwright install chromium
-run_step "browser-e2e" npm run e2e
+run_step "browser-e2e-unified" npm run e2e:unified
+run_step "browser-e2e-compatibility" npm run e2e:compat
 
 CURRENT_STEP="final-integrity"
 if [ "$(git rev-parse HEAD)" != "$START_HEAD" ]; then
