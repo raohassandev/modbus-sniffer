@@ -30,7 +30,8 @@
     "desktop:install": "npm --prefix desktop install",
     "desktop": "npm --prefix desktop start",
     "desktop:win": "npm --prefix desktop run dist:win",
-    "preflight": "node scripts/source-preflight.js"
+    "preflight": "node scripts/source-preflight.js",
+    "audit:source": "node scripts/static-release-audit.js"
   },
   "engines": {
     "node": ">=20"
