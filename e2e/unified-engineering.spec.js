@@ -54,6 +54,29 @@ test.describe('unified Modbus engineering product',()=>{
     await expect(page.locator('#page-help')).toContainText('WRITES LOCKED BY DEFAULT');
   });
 
+  test('stable shell has no missing assets, duplicate DOM ids or document-level horizontal overflow',async({page})=>{
+    const pageErrors=[];
+    page.on('pageerror',error=>pageErrors.push(String(error?.message||error)));
+    for(const viewport of [{width:1280,height:720},{width:1920,height:1080}]){
+      await page.setViewportSize(viewport);
+      await page.goto('/');
+      await expect(page.locator('[data-page="help"]')).toBeVisible();
+      await expect(page.locator('#platformAssetFailure')).toHaveCount(0);
+      const integrity=await page.evaluate(()=>{
+        const counts=new Map();
+        for(const node of document.querySelectorAll('[id]'))counts.set(node.id,(counts.get(node.id)||0)+1);
+        return{
+          duplicateIds:[...counts.entries()].filter(([,count])=>count>1),
+          scrollWidth:document.documentElement.scrollWidth,
+          clientWidth:document.documentElement.clientWidth,
+        };
+      });
+      expect(integrity.duplicateIds).toEqual([]);
+      expect(integrity.scrollWidth).toBeLessThanOrEqual(integrity.clientWidth);
+    }
+    expect(pageErrors).toEqual([]);
+  });
+
   test('built-in TCP Slave and stable Master complete a loopback read with writes still locked',async({request})=>{
     const started=await safePost(request,'/api/slave/start',{
       type:'tcp',host:'127.0.0.1',port:0,maxClients:4
