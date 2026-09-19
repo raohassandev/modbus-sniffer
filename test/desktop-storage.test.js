@@ -6,7 +6,7 @@ const fs=require('fs');
 const os=require('os');
 const path=require('path');
 const {prepareDesktopDataDir}=require('../desktop/storage');
-const {isAllowedNavigationUrl}=require('../desktop/main');
+const {isAllowedNavigationUrl}=require('../desktop/navigationSafety');
 
 function temp(prefix){return fs.mkdtempSync(path.join(os.tmpdir(),prefix));}
 
