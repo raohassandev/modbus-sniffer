@@ -92,6 +92,21 @@ test('unified Playwright acceptance spec parses and covers loopback read plus no
   assert.match(e2e,/preflightRejected===true&&row\.transmitted===false/);
 });
 
+test('browser validation separates fast unified runtime acceptance from compatibility coverage',()=>{
+  const pkg=JSON.parse(read('package.json'));
+  const unified=read('playwright.unified.config.js');
+  const gate=read('scripts/release-gate-mac.sh');
+  new vm.Script(unified,{filename:'playwright.unified.config.js'});
+  assert.equal(pkg.scripts['e2e:unified'],'playwright test --config=playwright.unified.config.js');
+  assert.equal(pkg.scripts['e2e:compat'],'playwright test e2e/v8-*.spec.js');
+  assert.match(unified,/src\/index-v7\.js/);
+  assert.doesNotMatch(unified,/src\/index-v8\.js/);
+  assert.match(unified,/unified-engineering\.spec\.js/);
+  assert.match(gate,/browser-e2e-unified/);
+  assert.match(gate,/browser-e2e-compatibility/);
+  assert.ok(gate.indexOf('browser-e2e-unified')<gate.indexOf('browser-e2e-compatibility'));
+});
+
 test('fast source preflight fails closed across quality audit tests smoke and acceptance',()=>{
   const preflight=read('scripts/source-preflight.js');
   new vm.Script(preflight,{filename:'source-preflight.js'});
