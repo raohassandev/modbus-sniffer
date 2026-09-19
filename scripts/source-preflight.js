@@ -4,6 +4,7 @@ const { spawnSync } = require('node:child_process');
 
 const steps = [
   ['version:check', ['run','version:check']],
+  ['source-audit', ['run','audit:source']],
   ['lint', ['run','lint']],
   ['syntax', ['run','check:v8']],
   ['runtime-audit', ['run','audit:runtime']],
