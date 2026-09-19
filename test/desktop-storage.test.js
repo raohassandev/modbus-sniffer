@@ -54,6 +54,7 @@ test('desktop renderer navigation requires the exact loopback origin',()=>{
 
 test('desktop launcher starts the unified backend and keeps loopback dynamic port safety',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','desktop','main.js'),'utf8');
+  const navigationSafety=fs.readFileSync(path.join(__dirname,'..','desktop','navigationSafety.js'),'utf8');
   assert.match(source,/src['"],\s*['"]index-v7\.js/);
   assert.doesNotMatch(source,/src['"],\s*['"]index-v8\.js/);
   assert.match(source,/--data-dir/);
@@ -61,7 +62,8 @@ test('desktop launcher starts the unified backend and keeps loopback dynamic por
   assert.match(source,/--web-port/);
   assert.match(source,/function healthPath\(\) \{ return '\/api\/status'; \}/);
   assert.match(source,/requestSingleInstanceLock/);
-  assert.match(source,/parsed\.origin === expected\.origin/);
+  assert.match(source,/isAllowedNavigationUrl\(url, selectedPort\)/);
+  assert.match(navigationSafety,/parsed\.origin === expected\.origin/);
   assert.doesNotMatch(source,/url\.startsWith\(allowed\)/);
   assert.match(source,/server\.listen\(requested,\s*['"]127\.0\.0\.1['"]/);
   assert.match(source,/MODBUS_DESKTOP_PORT/);
