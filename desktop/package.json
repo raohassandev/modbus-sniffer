@@ -22,7 +22,8 @@
     "files": [
       "main.js",
       "storage.js",
-      "logSafety.js"
+      "logSafety.js",
+      "navigationSafety.js"
     ],
     "extraResources": [
       {
