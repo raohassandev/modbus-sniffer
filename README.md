@@ -91,7 +91,7 @@ See:
 
 - `docs/MODBUS_FUNCTION_MATRIX.md`
 - `docs/ACTIVE_TODO.md`
-- `docs/PCAP_FEASIBILITY.md`
+- `docs/PCAP_FEASIBILITY.md`\n- `docs/RELEASE_NOTES_8.0.0.md`
 
 Implemented product paths cover FC01–08, FC11/12, FC15–17, FC20–24 and FC43/14 where applicable to Master, Slave, Discovery, Transport Lab and conformance workflows.
 
