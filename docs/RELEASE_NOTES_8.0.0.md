@@ -33,6 +33,9 @@ Supporting engineering workspaces include Traffic and Protocol Diagnostics, Regi
 - Capture, CSV/JSON/XLSX/PDF/ZIP evidence workflows.
 - Deterministic source preflight and Mac release gate.
 - Manual-only Windows NSIS packaging workflow with packaged-app identity smoke, provenance and SHA-256 checksums.
+- Packaged Windows smoke also verifies the stable UI root and critical Master/Slave/Help assets.
+- Fail-closed source audit protects product identity, manual-only workflows and core security invariants.
+- Stable Playwright coverage checks asset loading, duplicate DOM IDs and document-level overflow.
 
 ## Runtime and packaging
 
