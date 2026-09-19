@@ -8,6 +8,7 @@ const http = require('http');
 const net = require('net');
 const { prepareDesktopDataDir } = require('./storage');
 const { redactLogSecrets } = require('./logSafety');
+const { isAllowedNavigationUrl } = require('./navigationSafety');
 
 let backend = null;
 let win = null;
@@ -176,16 +177,6 @@ function terminateBackend() {
 
 function backgroundColor() { return nativeTheme.shouldUseDarkColors ? '#0b1017' : '#f4f7fb'; }
 
-function isAllowedNavigationUrl(target, selectedPort) {
-  try {
-    const expected = new URL(`http://127.0.0.1:${selectedPort}`);
-    const parsed = new URL(String(target || ''));
-    return parsed.origin === expected.origin;
-  } catch {
-    return false;
-  }
-}
-
 function lockNavigation(window, selectedPort) {
   window.webContents.setWindowOpenHandler(() => ({ action:'deny' }));
   window.webContents.on('will-navigate', (event, url) => {
@@ -267,4 +258,4 @@ app.on('before-quit', event => {
   });
 });
 
-module.exports = { backendEntry, backendArgs, desktopMode, healthPath, uiPath, isAllowedNavigationUrl };
+module.exports = { backendEntry, backendArgs, desktopMode, healthPath, uiPath };
