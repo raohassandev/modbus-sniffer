@@ -18,7 +18,7 @@ function trafficEvent({ connectionId, unitId, direction, raw, timestamp }) {
   return v8.createWorkbenchEvent({
     timestamp,
     type: direction === 'tx' ? 'traffic.tx' : 'traffic.rx',
-    source: 'v8-scale-benchmark',
+    source: 'compatibility-scale-benchmark',
     connectionId,
     ownerMode: 'master',
     direction,
@@ -121,10 +121,10 @@ async function main() {
 
   const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
   const heapMb = process.memoryUsage().heapUsed / 1024 / 1024;
-  assert(elapsedMs <= maxElapsedMs, `v8 scale benchmark exceeded ${maxElapsedMs} ms: ${elapsedMs.toFixed(1)} ms`);
+  assert(elapsedMs <= maxElapsedMs, `compatibility scale benchmark exceeded ${maxElapsedMs} ms: ${elapsedMs.toFixed(1)} ms`);
   assert(heapMb <= maxHeapMb, `v8 scale benchmark exceeded ${maxHeapMb} MB heap: ${heapMb.toFixed(1)} MB`);
 
-  console.log('\n=== Modbus Engineering Workbench v8 Scale Benchmark ===');
+  console.log('\n=== Modbus Engineering Tool Compatibility Scale Benchmark ===');
   console.log(`PASS  poll jobs              : ${pollJobs}`);
   console.log(`PASS  simulated Unit IDs     : ${devices}`);
   console.log(`PASS  isolated devices       : ${devices}`);
@@ -133,7 +133,7 @@ async function main() {
   console.log('PASS  bounded Traffic query  : 5,000 rows');
   console.log(`INFO  elapsed                : ${elapsedMs.toFixed(1)} ms / ${maxElapsedMs} ms`);
   console.log(`INFO  heap used              : ${heapMb.toFixed(1)} MB / ${maxHeapMb} MB`);
-  console.log('\nV8 SCALE BENCHMARK: PASS\n');
+  console.log('\nCOMPATIBILITY SCALE BENCHMARK: PASS\n');
 }
 
 main().catch((error) => {
