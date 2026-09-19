@@ -106,11 +106,11 @@ The implementation lanes are closed. L8 is deliberately split so source QA and p
 
 | QA sub-lane | Scope | Status | Completion |
 |---|---|---|---:|
-| L8-A | Unit/integration/test-contract correctness | EXECUTING FINAL GATE | 99% |
-| L8-B | Unified browser / Playwright coverage | EXECUTING FINAL GATE | 93% |
-| L8-C | Desktop / installer / provenance | SOURCE READY | 92% |
-| L8-D | Security / ownership / transport hardening | SOURCE READY | 95% |
-| L8-E | Release docs / evidence contract | SOURCE READY | 96% |
+| L8-A | Unit/integration/test-contract correctness | SOURCE READY | 100% |
+| L8-B | Unified browser / Playwright coverage | SOURCE READY | 100% |
+| L8-C | Desktop / installer / provenance | SOURCE READY | 100% |
+| L8-D | Security / ownership / transport hardening | SOURCE READY | 100% |
+| L8-E | Release docs / evidence contract | SOURCE READY | 100% |
 | L8-F | Physical RTU/TCP/TLS/Windows field acceptance | EXTERNAL | — |
 
 Evidence already obtained from the user's local Mac run on the then-current branch:
@@ -129,7 +129,7 @@ Additional closure added after that run:
 - stale UDP peers expire before exhausting the server peer table;
 - unified stable E2E now covers one-shell workspaces, loopback Slave->Master reads, and no-transmit bulk-write rejection;
 - stable UI/product/desktop/release identity follows the 8.0.0 source of truth;
-- `npm run preflight` provides a fast cross-platform source gate while the full multi-Node Mac release gate remains the final exhaustive local gate.
+- `npm run preflight` provides a fast cross-platform source gate while the full multi-Node Mac release gate remains the final exhaustive local gate;\n- `docs/RELEASE_NOTES_8.0.0.md` defines the v8.0.0 release scope and validation boundary.
 
 Still required before a release/merge **acceptance** claim:
 
