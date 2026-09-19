@@ -49,7 +49,8 @@ The gate records the starting Git SHA and then validates:
    - runtime dependency audit
    - concurrent v8 virtual soak
    - Playwright Chromium installation
-   - browser E2E
+   - unified-runtime browser E2E
+   - compatibility-shell browser regression E2E
 5. Final integrity
    - repository HEAD must still equal the starting SHA
    - tracked and untracked source/worktree state must remain clean for a release-eligible run
