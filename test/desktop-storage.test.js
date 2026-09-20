@@ -33,6 +33,30 @@ test('desktop storage migrates legacy workspace and history once without deletin
   assert.equal(second.migrated,false);
 });
 
+test('desktop storage migrates Logger/Trend evidence with the rest of legacy user data',()=>{
+  const root=temp('mbdesk-logger-'),legacy=path.join(root,'legacy'),user=path.join(root,'user');
+  fs.mkdirSync(path.join(legacy,'logger-trend','samples'),{recursive:true});
+  fs.writeFileSync(path.join(legacy,'logger-trend','profiles.json'),'{"profiles":[]}');
+  fs.writeFileSync(path.join(legacy,'logger-trend','samples','modbus-1.jsonl'),'{"streamId":"s1","value":1}\n');
+  const out=prepareDesktopDataDir({userDataRoot:user,legacyCandidates:[legacy]});
+  assert.equal(out.migrated,true);
+  assert.equal(fs.readFileSync(path.join(user,'data','logger-trend','profiles.json'),'utf8'),'{"profiles":[]}');
+  assert.equal(fs.readFileSync(path.join(user,'data','logger-trend','samples','modbus-1.jsonl'),'utf8'),'{"streamId":"s1","value":1}\n');
+  assert.ok(fs.existsSync(path.join(legacy,'logger-trend','profiles.json')));
+});
+
+test('desktop storage treats existing Logger/Trend data as populated and never merges a legacy workspace into it',()=>{
+  const root=temp('mbdesk-logger-safe-'),legacy=path.join(root,'legacy'),user=path.join(root,'user'),dest=path.join(user,'data');
+  fs.mkdirSync(legacy,{recursive:true});
+  fs.mkdirSync(path.join(dest,'logger-trend'),{recursive:true});
+  fs.writeFileSync(path.join(legacy,'workspaces.json'),'legacy');
+  fs.writeFileSync(path.join(dest,'logger-trend','profiles.json'),'current-logger-data');
+  const out=prepareDesktopDataDir({userDataRoot:user,legacyCandidates:[legacy]});
+  assert.equal(out.migrated,false);
+  assert.equal(fs.existsSync(path.join(dest,'workspaces.json')),false);
+  assert.equal(fs.readFileSync(path.join(dest,'logger-trend','profiles.json'),'utf8'),'current-logger-data');
+});
+
 test('desktop storage rolls back a partial failed migration so the next launch can retry cleanly',()=>{
   const root=temp('mbdesk-rollback-'),legacy=path.join(root,'legacy'),user=path.join(root,'user'),dest=path.join(user,'data');
   fs.mkdirSync(path.join(legacy,'history'),{recursive:true});
