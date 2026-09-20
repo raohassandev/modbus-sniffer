@@ -40,11 +40,14 @@ const l8fRuntime=read('scripts/l8f-runtime-acceptance.js');
 const windowsWorkflow=read('.github/workflows/desktop-windows.yml');
 const windowsPackageAcceptance=read('scripts/windows-package-acceptance.ps1');
 const siteAcceptance=read('docs/SITE_ACCEPTANCE.md');
+const l8fFinalize=read('scripts/l8f-finalize.js');
+const l8fPhysicalTemplate=read('docs/L8F_PHYSICAL_ACCEPTANCE.template.json');
 
 check(pkg.main==='src/index-v7.js','package main must be the unified runtime');
 for(const name of ['start','sniffer','workbench','v7','v8'])check(pkg.scripts?.[name]==='node src/index-v7.js',`${name} must launch the unified runtime`);
 check(pkg.scripts?.preflight==='node scripts/source-preflight.js','preflight script must exist');
 check(pkg.scripts?.['acceptance:l8f']==='node scripts/l8f-runtime-acceptance.js','L8-F runtime acceptance command must exist');
+check(pkg.scripts?.['acceptance:l8f:final']==='node scripts/l8f-finalize.js','L8-F final evidence convergence command must exist');
 check(pkg.scripts?.['audit:source']==='node scripts/static-release-audit.js','source audit script must exist');
 check(pkg.scripts?.['e2e:unified']==='playwright test --config=playwright.unified.config.js','unified browser gate script must exist');
 check(pkg.scripts?.['check:syntax']==='node scripts/check-js-syntax.js','project-wide syntax gate must exist');
@@ -101,6 +104,12 @@ check(siteAcceptance.includes('http://127.0.0.1:8080/'),'site acceptance must us
 check(siteAcceptance.includes('npm run acceptance:l8f'),'site acceptance must document L8-F runtime gate');
 check(!siteAcceptance.includes('http://127.0.0.1:8088/v8/'),'site acceptance must not point to legacy v8 shell');
 check(!siteAcceptance.includes('/api/v8/status'),'site acceptance must not require legacy v8 health endpoint');
+check(siteAcceptance.includes('npm run acceptance:l8f:final'),'site acceptance must document the final L8-F evidence convergence gate');
+for(const marker of ['runtime','windows','field','physical'])check(l8fFinalize.includes("arg('--"+marker+"')"),`L8-F finalizer missing evidence input: ${marker}`);
+for(const marker of ['passive-rtu','master-rtu','master-tcp','external-master-slave','tls-mtls','windows-production']){
+  check(l8fFinalize.includes("'"+marker+"'"),`L8-F finalizer missing physical gate: ${marker}`);
+  check(l8fPhysicalTemplate.includes('"name": "'+marker+'"'),`L8-F physical template missing: ${marker}`);
+}
 
 
 check(releaseNotes.includes(`Modbus Engineering Tool ${pkg.version}`),'release notes heading must match product/version');
