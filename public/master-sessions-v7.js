@@ -50,6 +50,10 @@
     return {version:1,activeId:null,sessions:[]};
   }
 
+  function storeFreshness(value){
+    return Math.max(0,...(value?.sessions||[]).map(session=>Number(session?.updatedAt||0)).filter(Number.isFinite));
+  }
+
   function loadStore(){
     try{return normalizeLoadedStore(JSON.parse(localStorage.getItem(STORAGE_KEY)||'null'));}
     catch{/* invalid local state is ignored */}
@@ -257,11 +261,13 @@
 
   async function ensureInitial(){
     try{
+      const local=store;
       const remote=await loadRemoteStore();
-      if(remote.sessions.length){
+      if(remote.sessions.length&&(!local.sessions.length||storeFreshness(remote)>=storeFreshness(local))){
         store=remote;
         localStorage.setItem(STORAGE_KEY,JSON.stringify(store));
-      }else if(store.sessions.length){
+      }else if(local.sessions.length){
+        store=local;
         queueRemotePersist();
       }
     }catch{
@@ -315,13 +321,7 @@
   window.addEventListener('beforeunload',()=>{
     const a=active();if(!a)return;
     captureInto(a);
-    const payload=JSON.stringify(store);
-    localStorage.setItem(STORAGE_KEY,payload);
-    try{
-      if(navigator.sendBeacon){
-        navigator.sendBeacon('/api/master/monitor-sessions',new Blob([payload],{type:'application/json'}));
-      }
-    }catch{/* browser fallback is already saved */}
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(store));
   });
   ensureInitial();
 })();
