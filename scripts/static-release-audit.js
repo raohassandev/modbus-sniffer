@@ -99,6 +99,7 @@ check(masterRuntime.includes('this.safety.preflight'),'Master writes must prefli
 check(masterRoutes.includes("/api/master/monitor-sessions"),'Master routes must expose durable Monitor Session persistence');
 check(server.includes('dataDir:options.dataDir'),'unified server must bind Master Monitor Sessions to the configured runtime data root');
 check(masterMonitorStore.includes("master-monitor-sessions.json")&&masterMonitorStore.includes('fs.renameSync'),'Master Monitor Session store must use durable atomic file persistence');
+check(masterMonitorStore.includes('this.backupFile')&&masterMonitorStore.includes('fs.fsyncSync'),'Master Monitor Session store must retain a recoverable backup and flush temporary writes before replace');
 check(masterMonitorStore.includes("rowsHtml:''"),'Master Monitor Session persistence must not retain rendered field-derived HTML');
 check(masterSessionsUi.includes("/api/master/monitor-sessions")&&masterSessionsUi.includes('loadRemoteStore'),'Master Monitor Session UI must load durable workstation state');
 check(masterSessionsUi.includes('function mergeStores')&&masterSessionsUi.includes('store=mergeStores(local,remote)'),'Master Monitor Session UI must union local and durable state while preferring newer session revisions');
@@ -115,6 +116,7 @@ check(loggerTrendRoutes.includes("dataDir=null")&&loggerTrendRoutes.includes("St
 check(server.includes("dataDir:path.join(options.dataDir,'logger-trend')"),'unified server must keep Logger/Trend persistence under the configured runtime data root');
 check(desktopStorage.includes("'logger-trend'")&&desktopStorage.includes('MIGRATABLE_DATA'),'desktop migration must preserve Logger/Trend evidence');
 check(desktopStorage.includes("'master-monitor-sessions.json'"),'desktop migration must preserve durable Master Monitor Sessions');
+check(desktopStorage.includes("'master-monitor-sessions.json.bak'"),'desktop migration must preserve Monitor Session recovery backups');
 check(desktopStorage.includes('hasPersistedData'),'desktop migration must refuse to mix legacy data into any populated user-data store');
 check(loggerTrend.includes('eventsLoaded'),'Logger/Trend must hydrate protocol-event evidence');
 check(discoveryEngineering.includes("framing==='tcp'?255:247"),'Discovery Unit-ID limits must be framing-aware');
