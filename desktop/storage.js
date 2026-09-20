@@ -28,7 +28,7 @@ function findLegacyDataDir(candidates=[]){
   for(const candidate of candidates){
     if(!candidate)continue;
     const resolved=path.resolve(candidate);
-    if(exists(path.join(resolved,'workspaces.json'))||isNonEmptyDir(path.join(resolved,'history'))||isNonEmptyDir(path.join(resolved,'logger-trend')))return resolved;
+    if(exists(path.join(resolved,'workspaces.json'))||exists(path.join(resolved,'workspaces.json.bak'))||isNonEmptyDir(path.join(resolved,'history'))||isNonEmptyDir(path.join(resolved,'logger-trend')))return resolved;
   }
   return null;
 }
