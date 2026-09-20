@@ -57,6 +57,12 @@ jobs:
                       throw "Packaged UI asset failed smoke check: $asset"
                     }
                   }
+                  try {
+                    $legacy = Invoke-WebRequest -Uri "http://127.0.0.1:18787/v8/" -UseBasicParsing -TimeoutSec 2
+                    if ($legacy.StatusCode -eq 200) { throw "Packaged desktop unexpectedly exposes the compatibility v8 web shell." }
+                  } catch {
+                    if ($_.Exception.Message -like "Packaged desktop unexpectedly exposes*") { throw }
+                  }
                   $ready = $true
                   break
                 }
