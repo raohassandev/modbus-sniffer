@@ -55,6 +55,15 @@ test('Monitor Session store refuses duplicate ids and excessive session counts',
   assert.throws(()=>normalizeMonitorStore(excessive),error=>error.code==='SESSION_LIMIT');
 });
 
+test('Monitor Session store rejects oversized durable files before parsing',()=>{
+  const dir=temp();
+  const file=path.join(dir,'master-monitor-sessions.json');
+  fs.writeFileSync(file,'x'.repeat(2*1024*1024+1));
+  const store=new MasterMonitorSessionStore({dataDir:dir});
+  assert.throws(()=>store.load(),error=>error.code==='STORE_READ_FAILED'&&/2 MB safety limit/.test(error.details?.cause||''));
+  fs.rmSync(dir,{recursive:true,force:true});
+});
+
 test('Monitor Session store refuses to overwrite a corrupt durable file',()=>{
   const dir=temp();
   const file=path.join(dir,'master-monitor-sessions.json');
