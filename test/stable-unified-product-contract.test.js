@@ -95,13 +95,18 @@ test('unified Playwright acceptance spec parses and covers loopback read plus no
 test('browser validation separates fast unified runtime acceptance from compatibility coverage',()=>{
   const pkg=JSON.parse(read('package.json'));
   const unified=read('playwright.unified.config.js');
+  const compat=read('playwright.compat.config.js');
   const gate=read('scripts/release-gate-mac.sh');
   new vm.Script(unified,{filename:'playwright.unified.config.js'});
   assert.equal(pkg.scripts['e2e:unified'],'playwright test --config=playwright.unified.config.js');
-  assert.equal(pkg.scripts['e2e:compat'],'playwright test e2e/v8-*.spec.js');
+  assert.equal(pkg.scripts.e2e,'npm run e2e:unified && npm run e2e:compat');
+  assert.equal(pkg.scripts['e2e:compat'],'playwright test --config=playwright.compat.config.js');
   assert.match(unified,/src\/index-v7\.js/);
   assert.doesNotMatch(unified,/src\/index-v8\.js/);
   assert.match(unified,/unified-engineering\.spec\.js/);
+  new vm.Script(compat,{filename:'playwright.compat.config.js'});
+  assert.match(compat,/src\/index-v8\.js/);
+  assert.doesNotMatch(compat,/src\/index-v7\.js/);
   assert.match(gate,/browser-e2e-unified/);
   assert.match(gate,/browser-e2e-compatibility/);
   assert.ok(gate.indexOf('browser-e2e-unified')<gate.indexOf('browser-e2e-compatibility'));
@@ -110,7 +115,7 @@ test('browser validation separates fast unified runtime acceptance from compatib
 test('fast source preflight fails closed across quality audit tests smoke and acceptance',()=>{
   const preflight=read('scripts/source-preflight.js');
   new vm.Script(preflight,{filename:'source-preflight.js'});
-  for(const command of ['version:check','audit:source','lint','check:v8','audit:runtime','test','smoke','acceptance'])assert.match(preflight,new RegExp(command.replace(':','\\:')));
+  for(const command of ['version:check','audit:source','lint','check:syntax','check:v8','audit:runtime','test','smoke','acceptance'])assert.match(preflight,new RegExp(command.replace(':','\\:')));
   assert.match(preflight,/SOURCE PREFLIGHT FAIL/);
   assert.match(preflight,/process\.exit\(result\.status\|\|1\)/);
 });
