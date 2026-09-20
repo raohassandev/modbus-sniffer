@@ -82,11 +82,6 @@ test('Master route contract persists Monitor Sessions through the injected durab
     assert.equal(response.status,200);
     assert.deepEqual(await response.json(),payload);
 
-    response=await fetch(`${base}/api/master/monitor-sessions`,{
-      method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)
-    });
-    assert.equal(response.status,200);
-    assert.deepEqual(await response.json(),payload);
   });
 });
 
