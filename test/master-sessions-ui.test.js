@@ -23,13 +23,18 @@ test('monitor sessions load only after the Master workspace exists',()=>{
   assert.ok(masterIndex>=0&&onloadIndex>masterIndex&&sessionsIndex>onloadIndex,'session UI must load after Master');
 });
 
-test('saved monitors persist a versioned definition and connection profile locally',()=>{
+test('saved monitors persist a versioned definition and connection profile across desktop port changes',()=>{
   assert.match(sessions,/modbus\.master\.monitor-sessions\.v1/);
   assert.match(sessions,/version:1/);
   for(const token of ['unitId','functionCode','address','addressMode','quantity','pollIntervalMs','timeoutMs','baudRate','parity','dataBits','stopBits','host','port','type','scale','offset']){
     assert.ok(sessions.includes(token),`saved monitor must include ${token}`);
   }
   assert.match(sessions,/localStorage\.setItem\(STORAGE_KEY/);
+  assert.match(sessions,/\/api\/master\/monitor-sessions/);
+  assert.match(sessions,/method:'PUT'/);
+  assert.match(sessions,/loadRemoteStore/);
+  assert.match(sessions,/navigator\.sendBeacon/);
+  assert.match(sessions,/browser fallback/);
   assert.match(sessions,/beforeunload/);
 });
 
@@ -48,6 +53,14 @@ test('delete safely disconnects before applying a different saved connection pro
   assert.match(block,/stopPollingIfNeeded/);
   assert.match(block,/disconnectIfConnectionChanges\(next\)/);
   assert.ok(block.indexOf('disconnectIfConnectionChanges(next)')<block.indexOf('store.sessions.splice'),'disconnect must happen before deleting/applying the next session');
+});
+
+test('remote Monitor Session state is loaded before the initial monitor is applied',()=>{
+  const block=sessions.slice(sessions.indexOf('async function ensureInitial'),sessions.indexOf("els.tabs.addEventListener"));
+  assert.match(block,/await loadRemoteStore\(\)/);
+  assert.match(block,/store=remote/);
+  assert.match(block,/localStorage\.setItem\(STORAGE_KEY/);
+  assert.ok(block.indexOf('await loadRemoteStore()')<block.indexOf('applyDefinition(active())'));
 });
 
 test('reload does not silently overwrite a different already-live Master connection profile',()=>{
