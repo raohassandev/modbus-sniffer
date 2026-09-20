@@ -130,6 +130,24 @@ async function main(){
     assert.equal(masterStatus.body.writeState,'LOCKED');
     record('unsafe bulk write rejected before transmit');
 
+    const monitorSessionPayload={
+      version:1,
+      activeId:'acceptance-monitor',
+      sessions:[{
+        id:'acceptance-monitor',
+        name:'Acceptance Monitor',
+        connection:{type:'tcp',host:'127.0.0.1',port:slavePort,timeoutMs:1000},
+        definition:{unitId:1,functionCode:3,address:10,quantity:2,pollIntervalMs:1000,timeoutMs:1000},
+        format:{type:'uint16',scale:1,offset:0,precision:0,byteOrder:'ABCD'},
+        snapshot:{rowsHtml:'<b>must-not-persist</b>',gridSummary:'acceptance'}
+      }]
+    };
+    const savedMonitors=await api(first.base,'/api/master/monitor-sessions',{method:'PUT',body:monitorSessionPayload});
+    assert.equal(savedMonitors.status,200);
+    assert.equal(savedMonitors.body.activeId,'acceptance-monitor');
+    assert.equal(savedMonitors.body.sessions[0].snapshot.rowsHtml,'');
+    record('Monitor Session durable save sanitizes rendered HTML');
+
     const rawLab=await api(first.base,'/api/raw-lab/status');
     const slaveLab=await api(first.base,'/api/slave/lab/status');
     assert.equal(rawLab.status,200);
@@ -142,6 +160,13 @@ async function main(){
     first=null;
 
     second=await launch(root,dataDir,await freePort());
+    const restartedMonitors=await api(second.base,'/api/master/monitor-sessions');
+    assert.equal(restartedMonitors.status,200);
+    assert.equal(restartedMonitors.body.activeId,'acceptance-monitor');
+    assert.equal(restartedMonitors.body.sessions[0].definition.address,10);
+    assert.equal(restartedMonitors.body.sessions[0].snapshot.rowsHtml,'');
+    record('Monitor Sessions persist across runtime restart');
+
     const restartedMaster=await api(second.base,'/api/master/status');
     const restartedSlave=await api(second.base,'/api/slave/status');
     const restartedRaw=await api(second.base,'/api/raw-lab/status');
