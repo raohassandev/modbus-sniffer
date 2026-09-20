@@ -33,7 +33,6 @@ test('saved monitors persist a versioned definition and connection profile acros
   assert.match(sessions,/\/api\/master\/monitor-sessions/);
   assert.match(sessions,/method:'PUT'/);
   assert.match(sessions,/loadRemoteStore/);
-  assert.match(sessions,/navigator\.sendBeacon/);
   assert.match(sessions,/browser fallback/);
   assert.match(sessions,/beforeunload/);
 });
@@ -62,6 +61,14 @@ test('delete safely disconnects before applying a different saved connection pro
   assert.match(block,/stopPollingIfNeeded/);
   assert.match(block,/disconnectIfConnectionChanges\(next\)/);
   assert.ok(block.indexOf('disconnectIfConnectionChanges(next)')<block.indexOf('store.sessions.splice'),'disconnect must happen before deleting/applying the next session');
+});
+
+test('Monitor Session startup reconciles the freshest local and durable workstation state',()=>{
+  const block=sessions.slice(sessions.indexOf('async function ensureInitial'),sessions.indexOf("els.tabs.addEventListener"));
+  assert.match(sessions,/function storeFreshness/);
+  assert.match(block,/storeFreshness\(remote\)>=storeFreshness\(local\)/);
+  assert.match(block,/queueRemotePersist\(\)/);
+  assert.doesNotMatch(sessions,/navigator\.sendBeacon/);
 });
 
 test('remote Monitor Session state is loaded before the initial monitor is applied',()=>{
