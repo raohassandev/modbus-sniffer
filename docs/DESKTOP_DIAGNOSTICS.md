@@ -78,3 +78,8 @@ Automated source-level tests can verify the storage/migration and diagnostic cod
 - driver/runtime compatibility
 - final clean-machine packaged-app smoke
 - production code signing when a real certificate/private key is supplied
+## Local renderer port
+
+The desktop shell prefers loopback port `18787` so browser-backed preferences, register mapping metadata and traffic bookmarks keep the same origin across normal launches. If that port is already occupied, the desktop app safely falls back to an ephemeral loopback port for that launch. `MODBUS_DESKTOP_PORT` can explicitly select another port from 1024–65535.
+
+Durable Master Monitor Sessions do not depend on browser origin; they are stored under `<userData>/data/master-monitor-sessions.json` and are migrated with the rest of the desktop data store.
