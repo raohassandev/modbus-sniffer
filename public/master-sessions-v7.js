@@ -123,7 +123,9 @@
   }
   function snapshotFromDom(){
     return {
-      rowsHtml:q('masterDataBody')?.innerHTML||'',gridSummary:q('masterGridSummary')?.textContent||'No data',
+      // Persist definitions/counters only. Never store rendered live-table HTML
+      // from field-derived values in browser or workstation state.
+      rowsHtml:'',gridSummary:q('masterGridSummary')?.textContent||'No data',
       counters:{tx:q('masterTx')?.textContent||'0',rx:q('masterRx')?.textContent||'0',errors:q('masterErrors')?.textContent||'0',timeouts:q('masterTimeouts')?.textContent||'0',avgRtt:q('masterAvgRtt')?.textContent||'—'},
       capturedAt:Date.now()
     };
@@ -171,8 +173,8 @@
 
   function restoreSnapshot(session){
     const snap=session.snapshot||{};
-    if(q('masterDataBody'))q('masterDataBody').innerHTML=snap.rowsHtml||'<tr><td colspan="8"><div class="master-empty-snapshot">Saved monitor loaded. Press Read Once or Start Polling to refresh live values.</div></td></tr>';
-    if(q('masterGridSummary'))q('masterGridSummary').textContent=snap.rowsHtml?`${snap.gridSummary||'Saved data'} · saved snapshot`:'No live data';
+    if(q('masterDataBody'))q('masterDataBody').innerHTML='<tr><td colspan="8"><div class="master-empty-snapshot">Saved monitor loaded. Press Read Once or Start Polling to refresh live values.</div></td></tr>';
+    if(q('masterGridSummary'))q('masterGridSummary').textContent='No live data';
     const c=snap.counters||{};
     if(q('masterTx'))q('masterTx').textContent=c.tx||'0';if(q('masterRx'))q('masterRx').textContent=c.rx||'0';
     if(q('masterErrors'))q('masterErrors').textContent=c.errors||'0';if(q('masterTimeouts'))q('masterTimeouts').textContent=c.timeouts||'0';if(q('masterAvgRtt'))q('masterAvgRtt').textContent=c.avgRtt||'—';
