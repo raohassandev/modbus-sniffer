@@ -174,6 +174,7 @@ for NODE_MAJOR in 20 22 24; do
   use_node "$NODE_MAJOR"
   run_step "node-${NODE_MAJOR}-npm-ci" npm ci
   run_step "node-${NODE_MAJOR}-version-check" npm run version:check
+  run_step "node-${NODE_MAJOR}-project-syntax" npm run check:syntax
   run_step "node-${NODE_MAJOR}-v8-syntax" npm run check:v8
   run_step "node-${NODE_MAJOR}-tests" npm test
   run_step "node-${NODE_MAJOR}-smoke" npm run smoke
@@ -184,6 +185,7 @@ use_node 22
 run_step "quality-npm-ci" npm ci
 run_step "quality-version-check" npm run version:check
 run_step "quality-lint" npm run lint
+run_step "quality-project-syntax" npm run check:syntax
 run_step "quality-v8-syntax" npm run check:v8
 run_step "quality-v8-benchmark" npm run benchmark:v8
 run_step "quality-v7-compat-benchmark" node scripts/benchmark-v7.js --cycles 25000 --min-fps 500 --max-heap-mb 384
