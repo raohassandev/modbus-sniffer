@@ -55,13 +55,15 @@ function installMasterRoutes({
       }
     });
 
-    app.put('/api/master/monitor-sessions', (req, res) => {
+    const saveMonitorSessions = (req, res) => {
       try {
         res.json(savedMonitors.save(req.body || {}));
       } catch (error) {
         sendError(res, error);
       }
-    });
+    };
+    app.put('/api/master/monitor-sessions', saveMonitorSessions);
+    app.post('/api/master/monitor-sessions', saveMonitorSessions);
   }
 
   app.post('/api/master/connect', async (req, res) => {
