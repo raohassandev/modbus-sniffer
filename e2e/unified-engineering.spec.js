@@ -84,6 +84,7 @@ test.describe('unified Modbus engineering product',()=>{
     await page.reload();
     await expect(page.locator('#masterSessionActiveName')).toHaveText('E2E Durable Monitor');
 
+    await page.close({runBeforeUnload:false});
     const cleared=await request.put('/api/master/monitor-sessions',{data:{version:1,activeId:null,sessions:[]}});
     expect(cleared.ok()).toBeTruthy();
   });
