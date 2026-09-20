@@ -101,7 +101,7 @@ function validateTcp(body) {
   if (!cfg.listenHost) throw new Error('TCP listen host is required.');
   if (!cfg.targetHost) throw new Error('TCP target host is required.');
   for (const k of ['listenPort','targetPort']) if (!Number.isInteger(cfg[k]) || cfg[k] < 1 || cfg[k] > 65535) throw new Error(`${k} must be 1..65535.`);
-  if (cfg.requestTimeoutMs < 50 || cfg.requestTimeoutMs > 60000) throw new Error('TCP request timeout must be 50..60000 ms.');
+  if (!Number.isFinite(cfg.requestTimeoutMs) || cfg.requestTimeoutMs < 50 || cfg.requestTimeoutMs > 60000) throw new Error('TCP request timeout must be 50..60000 ms.');
   if (!Number.isInteger(cfg.maxClientSessions) || cfg.maxClientSessions < 1 || cfg.maxClientSessions > 128) throw new Error('TCP maximum client sessions must be 1..128.');
   if(!isLoopbackHost(cfg.listenHost)&&body.confirmExternalBind!==true){
     const e=new Error(`Binding the Modbus TCP proxy to ${cfg.listenHost} exposes it beyond this computer. Confirm the external bind explicitly before starting.`);
