@@ -321,9 +321,10 @@ npm run acceptance:l8f:final -- \
   --windows ./WINDOWS-ACCEPTANCE.json \
   --field ./field-acceptance.json \
   --physical ./L8F_PHYSICAL_ACCEPTANCE.json \
+  --expect-head <COMMIT_SHA> \
   --json-out ./L8F-FINAL-ACCEPTANCE.json
 ```
 
-The finalizer fails closed if any evidence is missing, not PASS, belongs to another commit/version, or omits any required physical category.
+The finalizer fails closed if any evidence is missing, not PASS, has the wrong evidence kind, belongs to another commit/version, does not match the current checkout, omits required automated checks, or marks a required physical category PASS without an evidence reference.
 
 A major application revision, wiring change, adapter/gateway replacement, device firmware change, master-program change or network-topology change requires focused re-validation.
