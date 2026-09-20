@@ -30,6 +30,10 @@ const slaveRuntime=read('src/slave/slaveRuntime.js');
 const masterRuntime=read('src/master/masterRuntime.js');
 const desktopMain=read('desktop/main.js');
 const navigationSafety=read('desktop/navigationSafety.js');
+const rawFrameStudio=read('src/v8/testCenter/rawFrameStudio.js');
+const loggerTrend=read('src/loggerTrend/loggerTrendService.js');
+const discoveryEngineering=read('src/discoveryEngineering.js');
+const udpTransport=read('src/v8/transports/udpTransport.js');
 
 check(pkg.main==='src/index-v7.js','package main must be the unified runtime');
 for(const name of ['start','sniffer','workbench','v7','v8'])check(pkg.scripts?.[name]==='node src/index-v7.js',`${name} must launch the unified runtime`);
@@ -70,6 +74,13 @@ check(slaveRuntime.includes('out.tls.key = null'),'Slave public config must reda
 check(masterRuntime.includes('this.safety.preflight'),'Master writes must preflight before unlock/transmit');
 check(desktopMain.includes('isAllowedNavigationUrl(url, selectedPort)'),'desktop renderer navigation must be origin-locked');
 check(navigationSafety.includes('parsed.origin === expected.origin'),'desktop navigation must compare exact origins');
+check(rawFrameStudio.includes('validateResponseSemantics'),'Raw Lab must perform semantic Modbus response validation');
+check(rawFrameStudio.includes('validateSuccessfulResponsePdu'),'Raw Lab must validate successful response structure/quantity');
+check(loggerTrend.includes('_hydrateHistory'),'Logger/Trend must hydrate persisted history on restart');
+check(loggerTrend.includes('eventsLoaded'),'Logger/Trend must hydrate protocol-event evidence');
+check(discoveryEngineering.includes("framing==='tcp'?255:247"),'Discovery Unit-ID limits must be framing-aware');
+check(udpTransport.includes('_prunePeers'),'UDP server must expire stale peer identities');
+check(udpTransport.includes('expiredPeers'),'UDP peer expiry must be observable in transport stats');
 
 
 check(releaseNotes.includes(`Modbus Engineering Tool ${pkg.version}`),'release notes heading must match product/version');
@@ -82,6 +93,7 @@ check(unifiedPlaywright.includes('src/index-v7.js'),'unified Playwright gate mus
 check(!unifiedPlaywright.includes('src/index-v8.js'),'unified Playwright gate must not launch the compatibility runtime');
 check(compatPlaywright.includes('src/index-v8.js'),'compatibility Playwright gate must launch only the internal compatibility runtime');
 check(!compatPlaywright.includes('src/index-v7.js'),'compatibility Playwright gate must not boot the unified runtime');
+check(releaseGate.includes('npm run check:syntax'),'release gate must run project-wide syntax validation');
 check(releaseGate.indexOf('browser-e2e-unified')>=0,'release gate must run unified browser acceptance');
 check(releaseGate.indexOf('browser-e2e-compatibility')>releaseGate.indexOf('browser-e2e-unified'),'compatibility browser coverage must run after unified acceptance');
 
