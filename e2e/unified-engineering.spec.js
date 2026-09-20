@@ -99,6 +99,11 @@ test.describe('unified Modbus engineering product',()=>{
     await expect(page.locator('#masterSessionTabs')).toContainText('Remote Durable Monitor');
     await expect(page.locator('#masterSessionTabs')).toContainText('Local Fallback Monitor');
     expect(await page.locator('#masterDataBody img, #masterDataBody script').count()).toBe(0);
+    await expect.poll(async()=>{
+      const response=await request.get('/api/master/monitor-sessions');
+      const body=await response.json();
+      return body.sessions?.length||0;
+    }).toBe(2);
 
     await page.reload();
     await expect(page.locator('#masterSessionTabs')).toContainText('Remote Durable Monitor');
