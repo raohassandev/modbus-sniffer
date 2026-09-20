@@ -41,6 +41,7 @@ Supporting engineering workspaces include Traffic and Protocol Diagnostics, Regi
 - Fail-closed source audit protects product identity, manual-only workflows and core security invariants.
 - Stable Playwright coverage checks asset loading, duplicate DOM IDs and document-level overflow.
 - Unified browser acceptance runs before compatibility-shell browser coverage so product regressions fail fast.
+- Legacy v8 planning/status documents are retained only as historical records and are explicitly marked superseded by the unified product documentation.
 
 ## Runtime and packaging
 
