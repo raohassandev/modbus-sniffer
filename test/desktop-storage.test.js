@@ -44,6 +44,20 @@ test('desktop storage can recover a legacy workspace backup even when the primar
   assert.ok(fs.existsSync(path.join(legacy,'workspaces.json.bak')));
 });
 
+test('desktop storage migrates durable Master Monitor Sessions and can discover a monitor-only legacy store',()=>{
+  const root=temp('mbdesk-monitor-only-'),legacy=path.join(root,'legacy'),user=path.join(root,'user');
+  fs.mkdirSync(legacy,{recursive:true});
+  fs.writeFileSync(path.join(legacy,'master-monitor-sessions.json'),'{"version":1,"activeId":null,"sessions":[]}');
+  const out=prepareDesktopDataDir({userDataRoot:user,legacyCandidates:[legacy]});
+  assert.equal(out.migrated,true);
+  assert.equal(out.source,path.resolve(legacy));
+  assert.equal(
+    fs.readFileSync(path.join(user,'data','master-monitor-sessions.json'),'utf8'),
+    '{"version":1,"activeId":null,"sessions":[]}'
+  );
+  assert.ok(fs.existsSync(path.join(legacy,'master-monitor-sessions.json')));
+});
+
 test('desktop storage migrates Logger/Trend evidence with the rest of legacy user data',()=>{
   const root=temp('mbdesk-logger-'),legacy=path.join(root,'legacy'),user=path.join(root,'user');
   fs.mkdirSync(path.join(legacy,'logger-trend','samples'),{recursive:true});
