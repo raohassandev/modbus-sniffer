@@ -54,6 +54,25 @@
     return Math.max(0,...(value?.sessions||[]).map(session=>Number(session?.updatedAt||0)).filter(Number.isFinite));
   }
 
+  function mergeStores(local,remote){
+    const order=[];
+    for(const session of [...(remote?.sessions||[]),...(local?.sessions||[])]){
+      if(session?.id&&!order.includes(session.id))order.push(session.id);
+    }
+    const remoteById=new Map((remote?.sessions||[]).map(session=>[session.id,session]));
+    const localById=new Map((local?.sessions||[]).map(session=>[session.id,session]));
+    const sessions=order.map(id=>{
+      const r=remoteById.get(id),l=localById.get(id);
+      if(!r)return l;
+      if(!l)return r;
+      return Number(l.updatedAt||0)>Number(r.updatedAt||0)?l:r;
+    }).filter(Boolean);
+    const preferLocal=storeFreshness(local)>storeFreshness(remote);
+    const requested=preferLocal?local?.activeId:remote?.activeId;
+    const ids=new Set(sessions.map(session=>session.id));
+    return {version:1,activeId:ids.has(requested)?requested:(sessions[0]?.id||null),sessions};
+  }
+
   function loadStore(){
     try{return normalizeLoadedStore(JSON.parse(localStorage.getItem(STORAGE_KEY)||'null'));}
     catch{/* invalid local state is ignored */}
@@ -263,7 +282,11 @@
     try{
       const local=store;
       const remote=await loadRemoteStore();
-      if(remote.sessions.length&&(!local.sessions.length||storeFreshness(remote)>=storeFreshness(local))){
+      if(remote.sessions.length&&local.sessions.length){
+        store=mergeStores(local,remote);
+        localStorage.setItem(STORAGE_KEY,JSON.stringify(store));
+        queueRemotePersist();
+      }else if(remote.sessions.length){
         store=remote;
         localStorage.setItem(STORAGE_KEY,JSON.stringify(store));
       }else if(local.sessions.length){
