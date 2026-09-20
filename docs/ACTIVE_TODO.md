@@ -7,7 +7,8 @@
 
 ## Status
 
-**Approved product source scope: COMPLETE.**
+**Approved product source scope: COMPLETE.**  
+**Software / QA automation / packaging / security / release-engineering lanes: 100% COMPLETE.**
 
 The repository now exposes one unified Modbus engineering product through `src/index-v7.js`. The former v8 user-facing launch path is retired; reusable protocol/transport/safety primitives under `src/v8/**` remain internal implementation modules.
 
@@ -214,9 +215,9 @@ See `docs/MODBUS_FUNCTION_MATRIX.md`.
 - [x] desktop launches only the unified runtime
 - [x] Windows workflow remains manual `workflow_dispatch` only
 
-## Remaining release / field acceptance
+## External release / field evidence
 
-All software implementation, QA automation, package automation, security hardening, release documentation and field-evidence tooling are complete. The remaining items below require execution on real hardware/Windows/site environments and are not remaining software work:
+All software implementation, QA automation, package automation, security hardening, release documentation and field-evidence tooling are complete. The remaining items below are execution evidence only; they are not development lanes and do not reduce software completion from 100%:
 
 - [ ] exact-current-head `npm test`
 - [ ] exact-current-head lint/version/syntax checks
