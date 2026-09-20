@@ -59,25 +59,38 @@ test.describe('unified Modbus engineering product',()=>{
     await expect(page.locator('#page-help')).toContainText('WRITES LOCKED BY DEFAULT');
   });
 
-  test('stable shell has no missing assets, duplicate DOM ids or document-level horizontal overflow',async({page})=>{
+  test('all navigation workspaces stay usable without shell overflow at supported desktop viewports',async({page})=>{
     const pageErrors=[];
     page.on('pageerror',error=>pageErrors.push(String(error?.message||error)));
-    for(const viewport of [{width:1280,height:720},{width:1920,height:1080}]){
+    for(const viewport of [{width:1100,height:700},{width:1280,height:720},{width:1920,height:1080}]){
       await page.setViewportSize(viewport);
       await page.goto('/');
       await expect(page.locator('[data-page="help"]')).toBeVisible();
       await expect(page.locator('#platformAssetFailure')).toHaveCount(0);
-      const integrity=await page.evaluate(()=>{
-        const counts=new Map();
-        for(const node of document.querySelectorAll('[id]'))counts.set(node.id,(counts.get(node.id)||0)+1);
-        return{
-          duplicateIds:[...counts.entries()].filter(([,count])=>count>1),
-          scrollWidth:document.documentElement.scrollWidth,
-          clientWidth:document.documentElement.clientWidth,
-        };
-      });
-      expect(integrity.duplicateIds).toEqual([]);
-      expect(integrity.scrollWidth).toBeLessThanOrEqual(integrity.clientWidth);
+
+      const pageNames=await page.locator('.nav-item[data-page]').evaluateAll(nodes=>[
+        ...new Set(nodes.map(node=>node.dataset.page).filter(Boolean))
+      ]);
+      for(const required of ['dashboard','master','slave','traffic','discovery','rawLab','testSequences','loggerTrend','compare','transportLab','settings','help']){
+        expect(pageNames).toContain(required);
+      }
+
+      for(const pageName of pageNames){
+        const button=page.locator(`.nav-item[data-page="${pageName}"]`).first();
+        await button.click();
+        await expect(page.locator(`#page-${pageName}`)).toBeVisible();
+        const integrity=await page.evaluate(()=>{
+          const counts=new Map();
+          for(const node of document.querySelectorAll('[id]'))counts.set(node.id,(counts.get(node.id)||0)+1);
+          return{
+            duplicateIds:[...counts.entries()].filter(([,count])=>count>1),
+            scrollWidth:document.documentElement.scrollWidth,
+            clientWidth:document.documentElement.clientWidth,
+          };
+        });
+        expect(integrity.duplicateIds).toEqual([]);
+        expect(integrity.scrollWidth).toBeLessThanOrEqual(integrity.clientWidth);
+      }
     }
     expect(pageErrors).toEqual([]);
   });
