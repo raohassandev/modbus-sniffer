@@ -9,7 +9,8 @@ $dist = (Resolve-Path (Join-Path $root $DistDir)).Path
 $expectedVersion = (node -p "require('./package.json').version").Trim()
 $head = (git rev-parse HEAD).Trim()
 $started = [DateTime]::UtcNow
-$installDir = Join-Path $env:RUNNER_TEMP "ModbusEngineeringToolAcceptance"
+$tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } elseif ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
+$installDir = Join-Path $tempRoot "ModbusEngineeringToolAcceptance"
 $acceptancePath = Join-Path $dist "WINDOWS-ACCEPTANCE.json"
 $environmentPath = Join-Path $dist "WINDOWS-ENVIRONMENT.txt"
 $checks = New-Object System.Collections.Generic.List[object]
@@ -57,10 +58,13 @@ Write-Host "Installing $($installer.Name) to $installDir"
 $install = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installDir") -Wait -PassThru
 if ($install.ExitCode -ne 0) { throw "NSIS silent install failed with exit code $($install.ExitCode)." }
 
-$app = Get-ChildItem $installDir -Filter "*.exe" -File -Recurse |
-  Where-Object { $_.Name -notmatch '^Uninstall' } |
-  Sort-Object FullName |
-  Select-Object -First 1
+$app = Get-ChildItem $installDir -Filter "Modbus Engineering Tool.exe" -File -Recurse | Select-Object -First 1
+if (-not $app) {
+  $app = Get-ChildItem $installDir -Filter "*.exe" -File -Recurse |
+    Where-Object { $_.Name -notmatch '^Uninstall' } |
+    Sort-Object FullName |
+    Select-Object -First 1
+}
 if (-not $app) { throw "Installed application executable was not found." }
 Add-Check "NSIS clean install" @{ installer = $installer.Name; installDir = $installDir; executable = $app.Name }
 
