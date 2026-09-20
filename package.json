@@ -35,7 +35,8 @@
     "e2e:unified": "playwright test --config=playwright.unified.config.js",
     "e2e:compat": "playwright test --config=playwright.compat.config.js",
     "check:syntax": "node scripts/check-js-syntax.js",
-    "acceptance:l8f": "node scripts/l8f-runtime-acceptance.js"
+    "acceptance:l8f": "node scripts/l8f-runtime-acceptance.js",
+    "acceptance:l8f:final": "node scripts/l8f-finalize.js"
   },
   "engines": {
     "node": ">=20"
