@@ -21,6 +21,11 @@ The final source audit also closes these edge cases:
 - [x] TLS Slave private keys are redacted from status/events/export and retained only server-side for safe restart
 - [x] Raw Lab conformance requires semantically matching Modbus responses; unexpected exceptions cannot falsely pass success cases
 - [x] Logger/Trend reloads bounded persisted samples and protocol-event history after restart
+- [x] Logger/Trend persistence is rooted under the configured runtime data directory, including packaged desktop `userData`
+- [x] Master Monitor Sessions persist in a bounded atomic workstation store and survive dynamic/fallback renderer ports
+- [x] Monitor Session state never persists or restores rendered field-derived HTML
+- [x] desktop legacy-data migration rolls back partial failures, preserves Logger/Trend + Monitor Session evidence, and never merges into populated user data
+- [x] desktop prefers a stable loopback renderer origin with an ephemeral fallback so browser-backed mappings/bookmarks/preferences remain available across normal launches
 - [x] JSON mutation limits are enforced by the parser even without a trusted Content-Length header
 - [x] Discovery Unit-ID limits follow serial vs TCP framing
 - [x] UDP Slave peers expire after bounded idle retention instead of exhausting the peer table indefinitely
@@ -31,7 +36,7 @@ The final source audit also closes these edge cases:
 - [x] packaged Windows smoke verifies health identity plus critical unified UI assets
 - [x] root test discovery is scoped to the Modbus suite and excludes unrelated nested projects/browser assets
 - [x] fast cross-platform `npm run preflight` gate covers version/lint/syntax/runtime-audit/tests/smoke/acceptance
-- [x] unified stable Playwright coverage includes primary workspaces, loopback Slave→Master read and rejected-write no-transmit audit
+- [x] unified stable Playwright coverage includes primary workspaces, durable Monitor Session reload, loopback Slave→Master read and rejected-write no-transmit audit
 - [x] release notes for 8.0.0 are finalized in `docs/RELEASE_NOTES_8.0.0.md`
 - [x] QA/package/security/release source lanes are complete; remaining items are execution/review/field evidence only
 
