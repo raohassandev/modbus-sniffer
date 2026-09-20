@@ -59,6 +59,35 @@ test.describe('unified Modbus engineering product',()=>{
     await expect(page.locator('#page-help')).toContainText('WRITES LOCKED BY DEFAULT');
   });
 
+  test('Master Monitor Sessions load from durable workstation storage across browser reloads',async({page,request})=>{
+    const payload={
+      version:1,
+      activeId:'e2e-monitor',
+      sessions:[{
+        id:'e2e-monitor',
+        name:'E2E Durable Monitor',
+        connection:{type:'tcp',host:'127.0.0.1',port:502,timeoutMs:1000},
+        definition:{unitId:1,functionCode:3,address:42,quantity:2,pollIntervalMs:1000,timeoutMs:1000},
+        format:{type:'uint16',scale:1,offset:0,precision:0,byteOrder:'ABCD'},
+        snapshot:{rowsHtml:'<img src=x onerror=alert(1)>'}
+      }]
+    };
+    const saved=await request.put('/api/master/monitor-sessions',{data:payload});
+    expect(saved.ok()).toBeTruthy();
+    const savedBody=await saved.json();
+    expect(savedBody.sessions[0].snapshot.rowsHtml).toBe('');
+
+    await page.goto('/');
+    await expect(page.locator('#masterSessionActiveName')).toHaveText('E2E Durable Monitor');
+    expect(await page.locator('#masterDataBody img').count()).toBe(0);
+
+    await page.reload();
+    await expect(page.locator('#masterSessionActiveName')).toHaveText('E2E Durable Monitor');
+
+    const cleared=await request.put('/api/master/monitor-sessions',{data:{version:1,activeId:null,sessions:[]}});
+    expect(cleared.ok()).toBeTruthy();
+  });
+
   test('all navigation workspaces stay usable without shell overflow at supported desktop viewports',async({page})=>{
     const pageErrors=[];
     page.on('pageerror',error=>pageErrors.push(String(error?.message||error)));
