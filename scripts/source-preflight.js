@@ -12,6 +12,7 @@ const steps = [
   ['tests', ['test']],
   ['smoke', ['run','smoke']],
   ['acceptance', ['run','acceptance']],
+  ['l8f-runtime', ['run','acceptance:l8f']],
 ];
 
 for (const [name,args] of steps) {
