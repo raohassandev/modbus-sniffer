@@ -148,7 +148,7 @@ for(const lane of ['L8-A','L8-B','L8-C','L8-D','L8-E','L8-F']){
   check(new RegExp('\\| '+lane.replace('-','\\-')+' \\|[^\\n]*\\| 100% \\|').test(laneRegistry),lane+' must be source-complete at 100%');
 }
 check(localGateDoc.startsWith(`# Local Mac Release Gate — Modbus Engineering Tool ${pkg.version}`),'local release gate heading must match product/version');
-for(const marker of ['primary Modbus workspaces','Master Monitor Sessions load from durable workstation storage','loopback read','unsafe bulk write'])check(unifiedE2e.includes(marker),`unified E2E missing coverage marker: ${marker}`);
+for(const marker of ['primary Modbus workspaces','Master Monitor Sessions merge local fallback and durable workstation state','loopback read','unsafe bulk write'])check(unifiedE2e.includes(marker),`unified E2E missing coverage marker: ${marker}`);
 check(defaultPlaywright.includes("require('./playwright.unified.config')"),'default Playwright gate must target the shipped unified product');
 check(!defaultPlaywright.includes('src/index-v8.js'),'default Playwright gate must not launch the internal compatibility runtime');
 check(unifiedPlaywright.includes('src/index-v7.js'),'unified Playwright gate must launch the unified runtime');
