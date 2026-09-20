@@ -8,6 +8,7 @@ function errorStatus(error) {
   if (['PASSIVE_CAPTURE_ACTIVE', 'SLAVE_ACTIVE', 'RAW_LAB_ACTIVE'].includes(error?.code)) return 409;
   if (['TIMEOUT'].includes(error?.code)) return 504;
   if (['MODBUS_EXCEPTION'].includes(error?.code)) return 502;
+  if (['STORE_READ_FAILED','STORE_WRITE_FAILED','STORE_INVALID'].includes(error?.code)) return 500;
   if (String(error?.code || '').startsWith('INVALID_')) return 400;
   return 400;
 }
