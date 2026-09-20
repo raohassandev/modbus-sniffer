@@ -148,6 +148,11 @@ test('desktop launcher starts the unified backend and keeps loopback dynamic por
   assert.match(source,/return probePort\(0\)/);
   assert.match(source,/MODBUS_DESKTOP_PORT must be an integer from 1024 to 65535/);
   assert.match(source,/preferences\/bookmarks remain available/);
+  assert.match(source,/const child = spawn\(process\.execPath/);
+  assert.match(source,/return child/);
+  assert.match(source,/waitReady\(selectedPort, child/);
+  assert.match(source,/Backend process exited before readiness was confirmed/);
+  assert.match(source,/await waitReady\(port, startedBackend\)/);
   assert.match(source,/contextIsolation:true/);
   assert.match(source,/sandbox:true/);
 });
