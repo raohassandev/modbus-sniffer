@@ -216,7 +216,7 @@ See `docs/MODBUS_FUNCTION_MATRIX.md`.
 
 ## Remaining release / field acceptance
 
-All software implementation/QA/package/security/release-document lanes are source-complete. These remaining items are execution or physical-field evidence gates, not source feature gaps:
+All software implementation, QA automation, package automation, security hardening, release documentation and field-evidence tooling are complete. The remaining items below require execution on real hardware/Windows/site environments and are not remaining software work:
 
 - [ ] exact-current-head `npm test`
 - [ ] exact-current-head lint/version/syntax checks
