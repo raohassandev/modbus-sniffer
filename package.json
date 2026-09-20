@@ -34,7 +34,8 @@
     "audit:source": "node scripts/static-release-audit.js",
     "e2e:unified": "playwright test --config=playwright.unified.config.js",
     "e2e:compat": "playwright test --config=playwright.compat.config.js",
-    "check:syntax": "node scripts/check-js-syntax.js"
+    "check:syntax": "node scripts/check-js-syntax.js",
+    "acceptance:l8f": "node scripts/l8f-runtime-acceptance.js"
   },
   "engines": {
     "node": ">=20"
