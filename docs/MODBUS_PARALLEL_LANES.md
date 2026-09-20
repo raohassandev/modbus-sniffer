@@ -30,11 +30,15 @@ This registry tracks **software/release-engineering completion**. Physical hardw
 - unified source preflight covers version, source audit, lint, syntax, runtime dependency audit, unit/integration tests, smoke, acceptance and L8-F runtime acceptance;
 - unified Playwright runs against the shipped `src/index-v7.js` runtime;
 - internal compatibility-shell Playwright is isolated behind its own config and is not a shipped launch path;
-- stable browser coverage checks product identity, primary workspaces, missing assets, duplicate DOM IDs, overflow, built-in Slave→Master loopback reads and no-transmit unsafe-write rejection;
+- stable browser coverage checks product identity, primary workspaces, durable Monitor Session reload, missing assets, duplicate DOM IDs, overflow, built-in Slave→Master loopback reads and no-transmit unsafe-write rejection;
 - guarded writes validate confirmation before unlock and preserve failed/non-transmitted audit evidence;
 - Raw Lab validates Modbus framing, semantics and successful response payload structure;
 - TLS Slave private keys are redacted from public state/export and preserved server-side only;
 - Logger/Trend hydrates bounded persisted register and protocol-event history after restart;
+- Logger/Trend persists under the configured runtime data root rather than a process working directory;
+- Master Monitor Sessions use atomic bounded workstation persistence, are browser-reload/restart tested, and reject rendered HTML persistence;
+- desktop migration preserves Monitor Session/Logger evidence, rolls back partial failures and refuses mixed legacy/current data;
+- desktop uses a stable preferred loopback renderer origin with safe ephemeral fallback for browser-backed preferences;
 - Discovery Unit-ID limits are framing-aware;
 - stale UDP peers expire before exhausting the simulator peer table;
 - Test Sequence Compare preserves repeated step occurrences;
