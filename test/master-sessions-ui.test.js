@@ -66,7 +66,8 @@ test('delete safely disconnects before applying a different saved connection pro
 test('Monitor Session startup reconciles the freshest local and durable workstation state',()=>{
   const block=sessions.slice(sessions.indexOf('async function ensureInitial'),sessions.indexOf("els.tabs.addEventListener"));
   assert.match(sessions,/function storeFreshness/);
-  assert.match(block,/storeFreshness\(remote\)>=storeFreshness\(local\)/);
+  assert.match(sessions,/function mergeStores/);
+  assert.match(block,/store=mergeStores\(local,remote\)/);
   assert.match(block,/queueRemotePersist\(\)/);
   assert.doesNotMatch(sessions,/navigator\.sendBeacon/);
 });
