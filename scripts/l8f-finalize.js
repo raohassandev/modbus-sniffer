@@ -61,6 +61,8 @@ function main(){
     'unified health identity',
     'Master to Slave TCP loopback read',
     'unsafe bulk write rejected before transmit',
+    'Monitor Session durable save sanitizes rendered HTML',
+    'Monitor Sessions persist across runtime restart',
     'restart does not restore live write or LAB state'
   ]);
   requireChecks('windows',windows.value,[
