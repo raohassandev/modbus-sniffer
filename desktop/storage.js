@@ -29,7 +29,7 @@ function findLegacyDataDir(candidates=[]){
   return null;
 }
 
-function prepareDesktopDataDir({userDataRoot,legacyCandidates=[]}={}){
+function prepareDesktopDataDir({userDataRoot,legacyCandidates=[],copyTreeImpl=copyTree}={}){
   if(!userDataRoot)throw new Error('Electron user-data directory is required.');
   const dataDir=path.join(path.resolve(userDataRoot),'data');
   mkdir(dataDir);
@@ -43,13 +43,26 @@ function prepareDesktopDataDir({userDataRoot,legacyCandidates=[]}={}){
   if(!existingWorkspace&&!existingHistory){
     source=findLegacyDataDir(legacyCandidates.filter(x=>x&&path.resolve(x)!==path.resolve(dataDir)));
     if(source){
+      const migrationTargets=[];
       try{
         for(const name of ['workspaces.json','workspaces.json.bak','history']){
           const from=path.join(source,name),to=path.join(dataDir,name);
-          if(exists(from)&&!exists(to))copiedFiles+=copyTree(from,to);
+          if(exists(from)&&!exists(to)){
+            migrationTargets.push(to);
+            copiedFiles+=copyTreeImpl(from,to);
+          }
         }
         migrated=copiedFiles>0;
-      }catch(e){error=e.message;}
+      }catch(e){
+        // A failed recursive copy may already have created part of a top-level
+        // workspace/history target. Roll back only targets this migration began,
+        // so the next launch can retry without mixing partial legacy state.
+        for(const target of migrationTargets.reverse()){
+          try{fs.rmSync(target,{recursive:true,force:true});}catch{}
+        }
+        copiedFiles=0;
+        error=e.message;
+      }
     }
   }
 
