@@ -304,7 +304,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     });
   };
 
-  app.get('/api/status', (_q,r) => r.json({ ...state.getStatus(), productName:PRODUCT_NAME, productVersion:PRODUCT_VERSION }));
+  app.get('/api/status', (_q,r) => r.json({ ...state.getStatus(), productName:PRODUCT_NAME, productVersion:PRODUCT_VERSION, desktopInstanceToken:process.env.MODBUS_DESKTOP_INSTANCE_TOKEN||null }));
   app.get('/api/analysis', (_q,r) => r.json(state.getAnalysis()));
   app.get('/api/channels', (_q,r) => { syncRuntimeChannels(); r.json(state.getChannels?.()||[]); });
   app.get('/api/transactions', (q,r) => { try{r.json(unifiedTransactions(q.query));}catch(e){apiError(r,e);} });
