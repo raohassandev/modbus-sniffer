@@ -38,6 +38,7 @@ The final source audit also closes these edge cases:
 - [x] fast cross-platform `npm run preflight` gate covers version/lint/syntax/runtime-audit/tests/smoke/acceptance
 - [x] unified stable Playwright coverage includes primary workspaces, durable Monitor Session reload, loopback Slave→Master read and rejected-write no-transmit audit
 - [x] release notes for 8.0.0 are finalized in `docs/RELEASE_NOTES_8.0.0.md`
+- [x] legacy v8 planning/status documents are explicitly marked historical/superseded and point to the unified runtime/canonical status
 - [x] QA/package/security/release source lanes are complete; remaining items are execution/review/field evidence only
 
 ## Product model
