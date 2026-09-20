@@ -48,6 +48,9 @@ const windowsPackageAcceptance=read('scripts/windows-package-acceptance.ps1');
 const siteAcceptance=read('docs/SITE_ACCEPTANCE.md');
 const l8fFinalize=read('scripts/l8f-finalize.js');
 const l8fPhysicalTemplate=read('docs/L8F_PHYSICAL_ACCEPTANCE.template.json');
+const legacyReleaseClosure=read('docs/V8_RELEASE_CLOSURE.md');
+const legacyImplementationStatus=read('docs/V8_IMPLEMENTATION_STATUS.md');
+const legacyMasterTodo=read('docs/V8_MASTER_TODO.md');
 
 check(pkg.main==='src/index-v7.js','package main must be the unified runtime');
 for(const name of ['start','sniffer','workbench','v7','v8'])check(pkg.scripts?.[name]==='node src/index-v7.js',`${name} must launch the unified runtime`);
@@ -138,6 +141,10 @@ for(const marker of ['passive-rtu','master-rtu','master-tcp','external-master-sl
 }
 
 
+for(const [label,source] of [['V8_RELEASE_CLOSURE',legacyReleaseClosure],['V8_IMPLEMENTATION_STATUS',legacyImplementationStatus],['V8_MASTER_TODO',legacyMasterTodo]]){
+  check(source.includes('HISTORICAL / SUPERSEDED'),label+' must be explicitly marked superseded');
+  check(source.includes('src/index-v7.js'),label+' supersession notice must point to the unified runtime');
+}
 check(releaseNotes.includes(`Modbus Engineering Tool ${pkg.version}`),'release notes heading must match product/version');
 check(releaseNotes.includes('src/index-v7.js'),'release notes must name the unified runtime');
 check(!activeTodo.includes('\\n- [x]'),'ACTIVE_TODO must not contain escaped checklist line breaks');
