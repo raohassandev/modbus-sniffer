@@ -106,6 +106,8 @@ check(masterSessionsUi.includes("rowsHtml:''")&&!masterSessionsUi.includes('snap
 check(desktopMain.includes('isAllowedNavigationUrl(url, selectedPort)'),'desktop renderer navigation must be origin-locked');
 check(navigationSafety.includes('parsed.origin === expected.origin'),'desktop navigation must compare exact origins');
 check(desktopMain.includes('probePort(18787)')&&desktopMain.includes('return probePort(0)'),'desktop must prefer a stable loopback origin and safely fall back when occupied');
+check(desktopMain.includes('MODBUS_DESKTOP_INSTANCE_TOKEN')&&desktopMain.includes('desktopInstanceToken !== child.modbusInstanceToken'),'desktop health readiness must be bound to the spawned backend process');
+check(server.includes('desktopInstanceToken:process.env.MODBUS_DESKTOP_INSTANCE_TOKEN||null'),'unified status must expose the desktop readiness token only from the current process environment');
 check(rawFrameStudio.includes('validateResponseSemantics'),'Raw Lab must perform semantic Modbus response validation');
 check(rawFrameStudio.includes('validateSuccessfulResponsePdu'),'Raw Lab must validate successful response structure/quantity');
 check(loggerTrend.includes('_hydrateHistory'),'Logger/Trend must hydrate persisted history on restart');
