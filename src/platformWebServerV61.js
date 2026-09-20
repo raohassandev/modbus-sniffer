@@ -391,6 +391,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   ]));
 
   app.get('/', (_q,r) => r.type('html').send(workbench));
+  app.use('/v8', (_req,res)=>res.status(404).type('text/plain').send('Not Found'));
   app.use(express.static(publicDir));
   app.use((q,r,n) => { if(q.method==='GET' && !q.path.startsWith('/api/')) return r.type('html').send(workbench); n(); });
 
