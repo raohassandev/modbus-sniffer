@@ -152,6 +152,8 @@ test('desktop launcher starts the unified backend and keeps loopback dynamic por
   assert.match(source,/return child/);
   assert.match(source,/waitReady\(selectedPort, child/);
   assert.match(source,/Backend process exited before readiness was confirmed/);
+  assert.match(source,/MODBUS_DESKTOP_INSTANCE_TOKEN/);
+  assert.match(source,/desktopInstanceToken !== child\.modbusInstanceToken/);
   assert.match(source,/await waitReady\(port, startedBackend\)/);
   assert.match(source,/contextIsolation:true/);
   assert.match(source,/sandbox:true/);
