@@ -30,6 +30,11 @@ test.describe('unified Modbus engineering product',()=>{
     await expect(page.locator('.version-badge')).toContainText(`UI v${PRODUCT_VERSION}`);
   });
 
+  test('unified server does not expose the internal compatibility shell',async({request})=>{
+    const response=await request.get('/v8/');
+    expect(response.status()).toBe(404);
+  });
+
   test('primary Modbus workspaces are available from one stable shell',async({page})=>{
     await page.goto('/');
     await expect(page.locator('[data-page="master"]')).toBeVisible();
