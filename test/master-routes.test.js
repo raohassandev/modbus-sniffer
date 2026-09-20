@@ -6,10 +6,10 @@ const http = require('node:http');
 const express = require('express');
 const { installMasterRoutes } = require('../src/master/masterRoutes');
 
-async function withServer({ state, runtime }, fn) {
+async function withServer({ state, runtime, monitorStore = null }, fn) {
   const app = express();
   app.use(express.json());
-  installMasterRoutes({ app, state, runtime });
+  installMasterRoutes({ app, state, runtime, monitorStore });
   const server = http.createServer(app);
   await new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -59,6 +59,34 @@ test('Master route contract exposes status, connect, read and disconnect', async
     response = await fetch(`${base}/api/master/disconnect`, { method:'POST' });
     assert.equal(response.status, 200);
     assert.deepEqual(runtime.calls.map(call => call[0]), ['connect', 'read', 'disconnect']);
+  });
+});
+
+test('Master route contract persists Monitor Sessions through the injected durable store', async () => {
+  const runtime = fakeRuntime();
+  const state = { getStatus: () => ({ connection:{ status:'idle' }, config:{} }) };
+  let saved={version:1,activeId:null,sessions:[]};
+  const monitorStore={
+    load:()=>saved,
+    save:value=>{saved=value;return saved;}
+  };
+  await withServer({ state, runtime, monitorStore }, async base => {
+    let response=await fetch(`${base}/api/master/monitor-sessions`);
+    assert.equal(response.status,200);
+    assert.deepEqual(await response.json(),saved);
+
+    const payload={version:1,activeId:'m1',sessions:[{id:'m1',name:'Meter'}]};
+    response=await fetch(`${base}/api/master/monitor-sessions`,{
+      method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(payload)
+    });
+    assert.equal(response.status,200);
+    assert.deepEqual(await response.json(),payload);
+
+    response=await fetch(`${base}/api/master/monitor-sessions`,{
+      method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)
+    });
+    assert.equal(response.status,200);
+    assert.deepEqual(await response.json(),payload);
   });
 });
 
