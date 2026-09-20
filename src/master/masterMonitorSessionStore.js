@@ -141,7 +141,11 @@ class MasterMonitorSessionStore{
   load(){
     if(!fs.existsSync(this.file))return normalizeMonitorStore();
     let parsed;
-    try{parsed=JSON.parse(fs.readFileSync(this.file,'utf8'));}
+    try{
+      const stat=fs.statSync(this.file);
+      if(stat.size>2*1024*1024)throw new Error('file exceeds 2 MB safety limit');
+      parsed=JSON.parse(fs.readFileSync(this.file,'utf8'));
+    }
     catch(error){
       throw new MasterMonitorSessionStoreError('STORE_READ_FAILED','Saved Monitor Sessions could not be read safely',{file:this.file,cause:error.message});
     }
