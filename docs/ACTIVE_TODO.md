@@ -1,6 +1,6 @@
 # Modbus Engineering Tool — Active TODO
 
-**Status date:** 2026-09-18  
+**Status date:** 2026-09-20  
 **Branch:** `v8-release-completion`  
 **PR:** #31  
 **Canonical scope:** `docs/MODBUS_ONLY_PRODUCT_AUDIT.md`
@@ -216,7 +216,7 @@ See `docs/MODBUS_FUNCTION_MATRIX.md`.
 
 ## Remaining release / field acceptance
 
-These are evidence gates, not source feature gaps:
+All software implementation/QA/package/security/release-document lanes are source-complete. These remaining items are execution or physical-field evidence gates, not source feature gaps:
 
 - [ ] exact-current-head `npm test`
 - [ ] exact-current-head lint/version/syntax checks
