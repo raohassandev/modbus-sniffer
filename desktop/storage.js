@@ -6,7 +6,7 @@ const path = require('path');
 function exists(p){try{return fs.existsSync(p);}catch{return false;}}
 function mkdir(p){fs.mkdirSync(p,{recursive:true});return p;}
 function isNonEmptyDir(p){try{return fs.statSync(p).isDirectory()&&fs.readdirSync(p).length>0;}catch{return false;}}
-const MIGRATABLE_DATA=Object.freeze(['workspaces.json','workspaces.json.bak','master-monitor-sessions.json','history','logger-trend']);
+const MIGRATABLE_DATA=Object.freeze(['workspaces.json','workspaces.json.bak','master-monitor-sessions.json','master-monitor-sessions.json.bak','history','logger-trend']);
 function hasPersistedData(p){
   try{return fs.statSync(p).isDirectory()&&fs.readdirSync(p).some(name=>name!=='.desktop-storage-v2.json');}catch{return false;}
 }
@@ -28,7 +28,7 @@ function findLegacyDataDir(candidates=[]){
   for(const candidate of candidates){
     if(!candidate)continue;
     const resolved=path.resolve(candidate);
-    if(exists(path.join(resolved,'workspaces.json'))||exists(path.join(resolved,'workspaces.json.bak'))||exists(path.join(resolved,'master-monitor-sessions.json'))||isNonEmptyDir(path.join(resolved,'history'))||isNonEmptyDir(path.join(resolved,'logger-trend')))return resolved;
+    if(exists(path.join(resolved,'workspaces.json'))||exists(path.join(resolved,'workspaces.json.bak'))||exists(path.join(resolved,'master-monitor-sessions.json'))||exists(path.join(resolved,'master-monitor-sessions.json.bak'))||isNonEmptyDir(path.join(resolved,'history'))||isNonEmptyDir(path.join(resolved,'logger-trend')))return resolved;
   }
   return null;
 }
