@@ -35,10 +35,16 @@ const rawFrameStudio=read('src/v8/testCenter/rawFrameStudio.js');
 const loggerTrend=read('src/loggerTrend/loggerTrendService.js');
 const discoveryEngineering=read('src/discoveryEngineering.js');
 const udpTransport=read('src/v8/transports/udpTransport.js');
+const preflight=read('scripts/source-preflight.js');
+const l8fRuntime=read('scripts/l8f-runtime-acceptance.js');
+const windowsWorkflow=read('.github/workflows/desktop-windows.yml');
+const windowsPackageAcceptance=read('scripts/windows-package-acceptance.ps1');
+const siteAcceptance=read('docs/SITE_ACCEPTANCE.md');
 
 check(pkg.main==='src/index-v7.js','package main must be the unified runtime');
 for(const name of ['start','sniffer','workbench','v7','v8'])check(pkg.scripts?.[name]==='node src/index-v7.js',`${name} must launch the unified runtime`);
 check(pkg.scripts?.preflight==='node scripts/source-preflight.js','preflight script must exist');
+check(pkg.scripts?.['acceptance:l8f']==='node scripts/l8f-runtime-acceptance.js','L8-F runtime acceptance command must exist');
 check(pkg.scripts?.['audit:source']==='node scripts/static-release-audit.js','source audit script must exist');
 check(pkg.scripts?.['e2e:unified']==='playwright test --config=playwright.unified.config.js','unified browser gate script must exist');
 check(pkg.scripts?.['check:syntax']==='node scripts/check-js-syntax.js','project-wide syntax gate must exist');
@@ -87,6 +93,14 @@ check(loggerTrend.includes('eventsLoaded'),'Logger/Trend must hydrate protocol-e
 check(discoveryEngineering.includes("framing==='tcp'?255:247"),'Discovery Unit-ID limits must be framing-aware');
 check(udpTransport.includes('_prunePeers'),'UDP server must expire stale peer identities');
 check(udpTransport.includes('expiredPeers'),'UDP peer expiry must be observable in transport stats');
+check(preflight.includes("['l8f-runtime', ['run','acceptance:l8f']]"),'source preflight must execute L8-F runtime acceptance');
+for(const marker of ['Master to Slave TCP loopback read','unsafe bulk write rejected before transmit','restart does not restore live write or LAB state'])check(l8fRuntime.includes(marker),`L8-F runtime harness missing: ${marker}`);
+for(const marker of ['test-windows-sqlite.js','npm run soak -- --cycles 50000','npm run e2e:unified','windows-package-acceptance.ps1'])check(windowsWorkflow.includes(marker),`Windows workflow missing L8-F gate: ${marker}`);
+for(const marker of ['NSIS clean install','Installed health identity','Installed serial enumerator','NSIS clean uninstall','WINDOWS-ACCEPTANCE.json','WINDOWS-ENVIRONMENT.txt'])check(windowsPackageAcceptance.includes(marker),`Windows package acceptance missing: ${marker}`);
+check(siteAcceptance.includes('http://127.0.0.1:8080/'),'site acceptance must use unified browser URL');
+check(siteAcceptance.includes('npm run acceptance:l8f'),'site acceptance must document L8-F runtime gate');
+check(!siteAcceptance.includes('http://127.0.0.1:8088/v8/'),'site acceptance must not point to legacy v8 shell');
+check(!siteAcceptance.includes('/api/v8/status'),'site acceptance must not require legacy v8 health endpoint');
 
 
 check(releaseNotes.includes(`Modbus Engineering Tool ${pkg.version}`),'release notes heading must match product/version');
@@ -102,6 +116,7 @@ check(!unifiedPlaywright.includes('src/index-v8.js'),'unified Playwright gate mu
 check(compatPlaywright.includes('src/index-v8.js'),'compatibility Playwright gate must launch only the internal compatibility runtime');
 check(!compatPlaywright.includes('src/index-v7.js'),'compatibility Playwright gate must not boot the unified runtime');
 check(releaseGate.includes('npm run check:syntax'),'release gate must run project-wide syntax validation');
+check(releaseGate.includes('npm run acceptance:l8f'),'release gate must capture L8-F runtime acceptance');
 check(releaseGate.indexOf('browser-e2e-unified')>=0,'release gate must run unified browser acceptance');
 check(releaseGate.indexOf('browser-e2e-compatibility')>releaseGate.indexOf('browser-e2e-unified'),'compatibility browser coverage must run after unified acceptance');
 
