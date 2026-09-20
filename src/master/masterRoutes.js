@@ -63,7 +63,6 @@ function installMasterRoutes({
       }
     };
     app.put('/api/master/monitor-sessions', saveMonitorSessions);
-    app.post('/api/master/monitor-sessions', saveMonitorSessions);
   }
 
   app.post('/api/master/connect', async (req, res) => {
