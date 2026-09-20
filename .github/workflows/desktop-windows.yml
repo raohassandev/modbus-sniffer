@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,6 +17,14 @@ jobs:
         run: npm ci
       - name: Run unified source preflight
         run: npm run preflight
+      - name: Run Windows SQLite handle isolation gate
+        run: node scripts/test-windows-sqlite.js
+      - name: Run bounded Windows synthetic soak
+        run: npm run soak -- --cycles 50000
+      - name: Install Chromium for unified browser acceptance
+        run: npx playwright install chromium
+      - name: Run unified browser acceptance on Windows
+        run: npm run e2e:unified
       - name: Prune backend to runtime dependencies for packaging
         run: npm prune --omit=dev
       - name: Re-audit packaged backend runtime dependencies
@@ -76,6 +84,9 @@ jobs:
               & taskkill /PID $proc.Id /T /F | Out-Null
             }
           }
+      - name: Install, launch, inspect and uninstall the NSIS package
+        shell: pwsh
+        run: ./scripts/windows-package-acceptance.ps1
       - name: Write release provenance and SHA-256 checksums
         shell: pwsh
         run: |
