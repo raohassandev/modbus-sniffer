@@ -197,7 +197,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   });
   const deviceClone=installDeviceCloneRoutes({app,state,slaveRuntime,broadcast});
   const testSequences=installTestSequenceRoutes({app,masterRuntime,broadcast});
-  const loggerTrend=installLoggerTrendRoutes({app,state,masterRuntime,broadcast});
+  const loggerTrend=installLoggerTrendRoutes({app,state,masterRuntime,broadcast,dataDir:path.join(options.dataDir,'logger-trend')});
   installCompareRoutes({app});
   installTransportLabRoutes({app});
   rawLab=installRawLabRoutes({app,state,demo,disconnectSerial,masterRuntime,slaveRuntime,activeDiscovery,broadcast});
