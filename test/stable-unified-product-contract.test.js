@@ -94,9 +94,13 @@ test('unified Playwright acceptance spec parses and covers loopback read plus no
 
 test('browser validation separates fast unified runtime acceptance from compatibility coverage',()=>{
   const pkg=JSON.parse(read('package.json'));
+  const defaultConfig=read('playwright.config.js');
   const unified=read('playwright.unified.config.js');
   const compat=read('playwright.compat.config.js');
   const gate=read('scripts/release-gate-mac.sh');
+  new vm.Script(defaultConfig,{filename:'playwright.config.js'});
+  assert.match(defaultConfig,/playwright\.unified\.config/);
+  assert.doesNotMatch(defaultConfig,/src\/index-v8\.js/);
   new vm.Script(unified,{filename:'playwright.unified.config.js'});
   assert.equal(pkg.scripts['e2e:unified'],'playwright test --config=playwright.unified.config.js');
   assert.equal(pkg.scripts.e2e,'npm run e2e:unified && npm run e2e:compat');
