@@ -64,6 +64,22 @@ test('Monitor Session store rejects oversized durable files before parsing',()=>
   fs.rmSync(dir,{recursive:true,force:true});
 });
 
+test('Monitor Session store keeps a recoverable backup and loads it when the primary file is missing',()=>{
+  const dir=temp();
+  const store=new MasterMonitorSessionStore({dataDir:dir});
+  const first=store.save(sampleStore());
+  const secondInput=sampleStore();
+  secondInput.sessions[0].name='Updated Meter';
+  store.save(secondInput);
+  const backup=path.join(dir,'master-monitor-sessions.json.bak');
+  assert.equal(fs.existsSync(backup),true);
+  assert.equal(JSON.parse(fs.readFileSync(backup,'utf8')).sessions[0].name,first.sessions[0].name);
+  fs.unlinkSync(path.join(dir,'master-monitor-sessions.json'));
+  const recovered=store.load();
+  assert.equal(recovered.sessions[0].name,first.sessions[0].name);
+  fs.rmSync(dir,{recursive:true,force:true});
+});
+
 test('Monitor Session store refuses to overwrite a corrupt durable file',()=>{
   const dir=temp();
   const file=path.join(dir,'master-monitor-sessions.json');
