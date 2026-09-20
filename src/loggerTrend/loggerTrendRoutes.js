@@ -7,8 +7,9 @@ function sendError(res,error){
   res.status(status).json({error:String(error?.message||error),code:error?.code||'LOGGER_TREND_ERROR',details:error?.details||undefined});
 }
 
-function installLoggerTrendRoutes({app,state,masterRuntime,broadcast=()=>{},service=new StableLoggerTrendService({state,masterRuntime})}={}){
+function installLoggerTrendRoutes({app,state,masterRuntime,broadcast=()=>{},dataDir=null,service=null}={}){
   if(!app)throw new TypeError('app is required');
+  service=service||new StableLoggerTrendService({state,masterRuntime,...(dataDir?{dataDir}:{})});
 
   const onSample=sample=>broadcast('logger-sample',sample);
   service.on('sample',onSample);
