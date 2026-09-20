@@ -22,6 +22,7 @@ const activeTodo=read('docs/ACTIVE_TODO.md');
 const laneRegistry=read('docs/MODBUS_PARALLEL_LANES.md');
 const localGateDoc=read('docs/LOCAL_MAC_RELEASE_GATE.md');
 const unifiedE2e=read('e2e/unified-engineering.spec.js');
+const defaultPlaywright=read('playwright.config.js');
 const unifiedPlaywright=read('playwright.unified.config.js');
 const compatPlaywright=read('playwright.compat.config.js');
 const releaseGate=read('scripts/release-gate-mac.sh');
@@ -89,6 +90,8 @@ check(!activeTodo.includes('\\n- [x]'),'ACTIVE_TODO must not contain escaped che
 check(!laneRegistry.includes('\\n- [x]'),'lane registry must not contain escaped checklist line breaks');
 check(localGateDoc.startsWith(`# Local Mac Release Gate — Modbus Engineering Tool ${pkg.version}`),'local release gate heading must match product/version');
 for(const marker of ['primary Modbus workspaces','loopback read','unsafe bulk write'])check(unifiedE2e.includes(marker),`unified E2E missing coverage marker: ${marker}`);
+check(defaultPlaywright.includes("require('./playwright.unified.config')"),'default Playwright gate must target the shipped unified product');
+check(!defaultPlaywright.includes('src/index-v8.js'),'default Playwright gate must not launch the internal compatibility runtime');
 check(unifiedPlaywright.includes('src/index-v7.js'),'unified Playwright gate must launch the unified runtime');
 check(!unifiedPlaywright.includes('src/index-v8.js'),'unified Playwright gate must not launch the compatibility runtime');
 check(compatPlaywright.includes('src/index-v8.js'),'compatibility Playwright gate must launch only the internal compatibility runtime');
