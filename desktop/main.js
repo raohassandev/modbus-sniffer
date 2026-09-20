@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const net = require('net');
+const crypto = require('crypto');
 const { prepareDesktopDataDir } = require('./storage');
 const { redactLogSecrets } = require('./logSafety');
 const { isAllowedNavigationUrl } = require('./navigationSafety');
@@ -100,12 +101,14 @@ function startBackend(dataDir, selectedPort) {
   const mode = desktopMode();
   const args = backendArgs(dataDir, selectedPort);
   appendDesktopLog('INFO', `Starting ${mode} backend on 127.0.0.1:${selectedPort}`);
+  const instanceToken = crypto.randomUUID();
   const child = spawn(process.execPath, args, {
     cwd: root,
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', MODBUS_DESKTOP_INSTANCE_TOKEN: instanceToken },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true
   });
+  child.modbusInstanceToken = instanceToken;
   backend = child;
   child.stdout?.on('data', b => {
     const text = String(b).trim();
@@ -149,6 +152,7 @@ function waitReady(selectedPort, child, retries = 80) {
               const status = JSON.parse(body);
               if (status.productName !== 'Modbus Engineering Tool') throw new Error(`unexpected product name ${status.productName || 'missing'}`);
               if (status.productVersion !== expectedVersion) throw new Error(`unexpected product version ${status.productVersion || 'missing'}; expected ${expectedVersion}`);
+              if (status.desktopInstanceToken !== child.modbusInstanceToken) throw new Error('health response does not belong to the backend process launched by this desktop instance');
               resolve();
               return;
             } catch (error) {
