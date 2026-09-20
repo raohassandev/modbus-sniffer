@@ -141,23 +141,30 @@ class MasterMonitorSessionStore{
   constructor({dataDir,file=null}={}){
     if(!dataDir&&!file)throw new MasterMonitorSessionStoreError('DATA_DIR_REQUIRED','A data directory or file is required');
     this.file=path.resolve(file||path.join(dataDir,'master-monitor-sessions.json'));
+    this.backupFile=`${this.file}.bak`;
   }
-  load(){
-    if(!fs.existsSync(this.file))return normalizeMonitorStore();
+  _read(file){
     let parsed;
     try{
-      const stat=fs.statSync(this.file);
+      const stat=fs.statSync(file);
       if(stat.size>2*1024*1024)throw new Error('file exceeds 2 MB safety limit');
-      parsed=JSON.parse(fs.readFileSync(this.file,'utf8'));
+      parsed=JSON.parse(fs.readFileSync(file,'utf8'));
     }
     catch(error){
-      throw new MasterMonitorSessionStoreError('STORE_READ_FAILED','Saved Monitor Sessions could not be read safely',{file:this.file,cause:error.message});
+      throw new MasterMonitorSessionStoreError('STORE_READ_FAILED','Saved Monitor Sessions could not be read safely',{file,cause:error.message});
     }
     try{return normalizeMonitorStore(parsed);}
     catch(error){
       if(error instanceof MasterMonitorSessionStoreError)throw error;
-      throw new MasterMonitorSessionStoreError('STORE_INVALID','Saved Monitor Sessions are invalid',{file:this.file,cause:error.message});
+      throw new MasterMonitorSessionStoreError('STORE_INVALID','Saved Monitor Sessions are invalid',{file,cause:error.message});
     }
+  }
+  load(){
+    if(!fs.existsSync(this.file)){
+      if(fs.existsSync(this.backupFile))return this._read(this.backupFile);
+      return normalizeMonitorStore();
+    }
+    return this._read(this.file);
   }
   save(input){
     // Refuse to overwrite an unreadable existing store. This keeps recovery
@@ -166,7 +173,7 @@ class MasterMonitorSessionStore{
     const normalized=normalizeMonitorStore(input);
     fs.mkdirSync(path.dirname(this.file),{recursive:true});
     const temp=`${this.file}.partial-${process.pid}-${crypto.randomUUID()}`;
-    const backup=`${this.file}.bak`;
+    const backup=this.backupFile;
     const existed=fs.existsSync(this.file);
     try{
       fs.writeFileSync(temp,JSON.stringify(normalized,null,2)+'\n',{encoding:'utf8',flag:'wx'});
