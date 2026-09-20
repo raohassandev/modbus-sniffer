@@ -74,6 +74,7 @@ check(!help.includes('HMI Builder'),'stable Help must not expose generic HMI Bui
 check(server.includes('WEB_EXTERNAL_BIND_CONFIRMATION_REQUIRED'),'web server must require explicit external-bind confirmation');
 check(server.includes('CROSS_ORIGIN_MUTATION_BLOCKED'),'web server must block cross-origin mutations');
 check(server.includes('jsonBodyLimitForPath'),'web server must enforce parser-level JSON limits');
+check(server.includes("app.use('/v8'"),'unified server must block the internal compatibility shell path');
 check(server.includes('Content-Security-Policy'),'web server must emit CSP');
 check(slaveRuntime.includes('out.tls.key = null'),'Slave public config must redact TLS private keys');
 check(masterRuntime.includes('this.safety.preflight'),'Master writes must preflight before unlock/transmit');
