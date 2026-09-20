@@ -6,6 +6,10 @@ const path = require('path');
 function exists(p){try{return fs.existsSync(p);}catch{return false;}}
 function mkdir(p){fs.mkdirSync(p,{recursive:true});return p;}
 function isNonEmptyDir(p){try{return fs.statSync(p).isDirectory()&&fs.readdirSync(p).length>0;}catch{return false;}}
+const MIGRATABLE_DATA=Object.freeze(['workspaces.json','workspaces.json.bak','history','logger-trend']);
+function hasPersistedData(p){
+  try{return fs.statSync(p).isDirectory()&&fs.readdirSync(p).some(name=>name!=='.desktop-storage-v2.json');}catch{return false;}
+}
 function copyTree(src,dst){
   if(!exists(src))return 0;
   let files=0;
@@ -24,7 +28,7 @@ function findLegacyDataDir(candidates=[]){
   for(const candidate of candidates){
     if(!candidate)continue;
     const resolved=path.resolve(candidate);
-    if(exists(path.join(resolved,'workspaces.json'))||isNonEmptyDir(path.join(resolved,'history')))return resolved;
+    if(exists(path.join(resolved,'workspaces.json'))||isNonEmptyDir(path.join(resolved,'history'))||isNonEmptyDir(path.join(resolved,'logger-trend')))return resolved;
   }
   return null;
 }
@@ -34,18 +38,17 @@ function prepareDesktopDataDir({userDataRoot,legacyCandidates=[],copyTreeImpl=co
   const dataDir=path.join(path.resolve(userDataRoot),'data');
   mkdir(dataDir);
   const marker=path.join(dataDir,'.desktop-storage-v2.json');
-  const existingWorkspace=exists(path.join(dataDir,'workspaces.json'));
-  const existingHistory=isNonEmptyDir(path.join(dataDir,'history'));
+  const destinationHasData=hasPersistedData(dataDir);
   let migrated=false,source=null,copiedFiles=0,error=null;
 
   // Never merge an old workspace into an already populated destination. Mixing two
   // stores is more dangerous than leaving the legacy copy untouched.
-  if(!existingWorkspace&&!existingHistory){
+  if(!destinationHasData){
     source=findLegacyDataDir(legacyCandidates.filter(x=>x&&path.resolve(x)!==path.resolve(dataDir)));
     if(source){
       const migrationTargets=[];
       try{
-        for(const name of ['workspaces.json','workspaces.json.bak','history']){
+        for(const name of MIGRATABLE_DATA){
           const from=path.join(source,name),to=path.join(dataDir,name);
           if(exists(from)&&!exists(to)){
             migrationTargets.push(to);
@@ -72,4 +75,4 @@ function prepareDesktopDataDir({userDataRoot,legacyCandidates=[],copyTreeImpl=co
   return report;
 }
 
-module.exports={prepareDesktopDataDir,findLegacyDataDir,copyTree};
+module.exports={prepareDesktopDataDir,findLegacyDataDir,copyTree,hasPersistedData};
