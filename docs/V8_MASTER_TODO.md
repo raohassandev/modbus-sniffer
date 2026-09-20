@@ -1,5 +1,7 @@
 # v8 All-in-One Modbus Engineering Workbench — Master TODO
 
+> **HISTORICAL / SUPERSEDED:** This document records an earlier v8 development phase and is not the current release-status or product-scope source of truth. The shipped unified product is **Modbus Engineering Tool**, the user-facing runtime is `src/index-v7.js`, and generic HMI/SCADA/process-control scope is removed. Use `docs/ACTIVE_TODO.md`, `docs/MODBUS_PARALLEL_LANES.md`, `docs/MODBUS_ONLY_PRODUCT_AUDIT.md`, and `docs/MODBUS_FUNCTION_MATRIX.md` for current status.
+
 **Baseline:** v7.0 analyzer/reverse-engineering platform  
 **Companion plans:** `V8_ALL_IN_ONE_MODBUS_WORKBENCH_PLAN.md`, `V8_PROFESSIONAL_UI_UX_PLAN.md`  
 **Goal:** one professional workstation covering Modbus Master, Slave/Server simulator, passive/proxy analyzer, discovery, raw Test Center, automated recipes, charts/logger, historian, automation and engineering handover.
