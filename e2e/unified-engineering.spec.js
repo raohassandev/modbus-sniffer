@@ -59,30 +59,50 @@ test.describe('unified Modbus engineering product',()=>{
     await expect(page.locator('#page-help')).toContainText('WRITES LOCKED BY DEFAULT');
   });
 
-  test('Master Monitor Sessions load from durable workstation storage across browser reloads',async({page,request})=>{
-    const payload={
+  test('Master Monitor Sessions merge local fallback and durable workstation state across browser reloads',async({page,request})=>{
+    const remotePayload={
       version:1,
-      activeId:'e2e-monitor',
+      activeId:'remote-monitor',
       sessions:[{
-        id:'e2e-monitor',
-        name:'E2E Durable Monitor',
+        id:'remote-monitor',
+        name:'Remote Durable Monitor',
+        createdAt:1000,updatedAt:1000,
         connection:{type:'tcp',host:'127.0.0.1',port:502,timeoutMs:1000},
         definition:{unitId:1,functionCode:3,address:42,quantity:2,pollIntervalMs:1000,timeoutMs:1000},
         format:{type:'uint16',scale:1,offset:0,precision:0,byteOrder:'ABCD'},
         snapshot:{rowsHtml:'<img src=x onerror=alert(1)>'}
       }]
     };
-    const saved=await request.put('/api/master/monitor-sessions',{data:payload});
+    const localPayload={
+      version:1,
+      activeId:'local-monitor',
+      sessions:[{
+        id:'local-monitor',
+        name:'Local Fallback Monitor',
+        createdAt:2000,updatedAt:2000,
+        connection:{type:'tcp',host:'127.0.0.1',port:502,timeoutMs:1000},
+        definition:{unitId:1,functionCode:4,address:84,quantity:1,pollIntervalMs:1500,timeoutMs:1000},
+        format:{type:'uint16',scale:1,offset:0,precision:0,byteOrder:'ABCD'},
+        snapshot:{rowsHtml:'<script>window.__bad=1</script>'}
+      }]
+    };
+    const saved=await request.put('/api/master/monitor-sessions',{data:remotePayload});
     expect(saved.ok()).toBeTruthy();
     const savedBody=await saved.json();
     expect(savedBody.sessions[0].snapshot.rowsHtml).toBe('');
 
+    await page.addInitScript(payload=>{
+      localStorage.setItem('modbus.master.monitor-sessions.v1',JSON.stringify(payload));
+    },localPayload);
     await page.goto('/');
-    await expect(page.locator('#masterSessionActiveName')).toHaveText('E2E Durable Monitor');
-    expect(await page.locator('#masterDataBody img').count()).toBe(0);
+    await expect(page.locator('#masterSessionActiveName')).toHaveText('Local Fallback Monitor');
+    await expect(page.locator('#masterSessionTabs')).toContainText('Remote Durable Monitor');
+    await expect(page.locator('#masterSessionTabs')).toContainText('Local Fallback Monitor');
+    expect(await page.locator('#masterDataBody img, #masterDataBody script').count()).toBe(0);
 
     await page.reload();
-    await expect(page.locator('#masterSessionActiveName')).toHaveText('E2E Durable Monitor');
+    await expect(page.locator('#masterSessionTabs')).toContainText('Remote Durable Monitor');
+    await expect(page.locator('#masterSessionTabs')).toContainText('Local Fallback Monitor');
 
     await page.close({runBeforeUnload:false});
     const cleared=await request.put('/api/master/monitor-sessions',{data:{version:1,activeId:null,sessions:[]}});
