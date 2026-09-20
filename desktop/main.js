@@ -72,9 +72,19 @@ function probePort(requested = 0) {
 }
 
 async function chooseBackendPort() {
-  const requested = Number(process.env.MODBUS_DESKTOP_PORT || 0);
-  if (Number.isInteger(requested) && requested >= 1024 && requested <= 65535) return probePort(requested);
-  return probePort(0);
+  const configured = process.env.MODBUS_DESKTOP_PORT;
+  if (configured != null && String(configured).trim() !== '') {
+    const requested = Number(configured);
+    if (!Number.isInteger(requested) || requested < 1024 || requested > 65535) {
+      throw new Error('MODBUS_DESKTOP_PORT must be an integer from 1024 to 65535.');
+    }
+    return probePort(requested);
+  }
+  // Keep the renderer origin stable across normal launches so browser-backed
+  // preferences/bookmarks remain available. Fall back to an ephemeral port only
+  // when another process already owns the preferred loopback port.
+  try { return await probePort(18787); }
+  catch { return probePort(0); }
 }
 
 function backendEntry(root = backendRoot()) { return path.join(root, 'src', 'index-v7.js'); }
