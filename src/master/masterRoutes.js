@@ -1,6 +1,7 @@
 'use strict';
 
 const { MasterRuntime, normalizeConnectionConfig } = require('./masterRuntime');
+const { MasterMonitorSessionStore } = require('./masterMonitorSessionStore');
 
 function errorStatus(error) {
   if (['MASTER_NOT_CONNECTED'].includes(error?.code)) return 409;
@@ -29,8 +30,12 @@ function installMasterRoutes({
   disconnectSlave = null,
   getRawLabStatus = null,
   disconnectRawLab = null,
+  dataDir = null,
+  monitorStore = null,
 } = {}) {
   if (!app) throw new TypeError('app is required');
+
+  const savedMonitors = monitorStore || (dataDir ? new MasterMonitorSessionStore({ dataDir }) : null);
 
   const passiveStatus = () => {
     try { return state?.getStatus?.() || {}; } catch { return {}; }
@@ -39,6 +44,24 @@ function installMasterRoutes({
   app.get('/api/master/status', (_req, res) => {
     res.json(runtime.status());
   });
+
+  if (savedMonitors) {
+    app.get('/api/master/monitor-sessions', (_req, res) => {
+      try {
+        res.json(savedMonitors.load());
+      } catch (error) {
+        sendError(res, error);
+      }
+    });
+
+    app.put('/api/master/monitor-sessions', (req, res) => {
+      try {
+        res.json(savedMonitors.save(req.body || {}));
+      } catch (error) {
+        sendError(res, error);
+      }
+    });
+  }
 
   app.post('/api/master/connect', async (req, res) => {
     try {
