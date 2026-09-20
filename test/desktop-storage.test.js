@@ -33,6 +33,17 @@ test('desktop storage migrates legacy workspace and history once without deletin
   assert.equal(second.migrated,false);
 });
 
+test('desktop storage can recover a legacy workspace backup even when the primary workspace file is missing',()=>{
+  const root=temp('mbdesk-backup-only-'),legacy=path.join(root,'legacy'),user=path.join(root,'user');
+  fs.mkdirSync(legacy,{recursive:true});
+  fs.writeFileSync(path.join(legacy,'workspaces.json.bak'),'backup-only');
+  const out=prepareDesktopDataDir({userDataRoot:user,legacyCandidates:[legacy]});
+  assert.equal(out.migrated,true);
+  assert.equal(out.source,path.resolve(legacy));
+  assert.equal(fs.readFileSync(path.join(user,'data','workspaces.json.bak'),'utf8'),'backup-only');
+  assert.ok(fs.existsSync(path.join(legacy,'workspaces.json.bak')));
+});
+
 test('desktop storage migrates Logger/Trend evidence with the rest of legacy user data',()=>{
   const root=temp('mbdesk-logger-'),legacy=path.join(root,'legacy'),user=path.join(root,'user');
   fs.mkdirSync(path.join(legacy,'logger-trend','samples'),{recursive:true});
