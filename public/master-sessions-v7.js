@@ -21,7 +21,7 @@
         </div>
       </div>
       <div class="master-session-tabs" id="masterSessionTabs" role="tablist"></div>
-      <div class="master-session-foot"><span id="masterSessionState" class="saved">Saved locally on this workstation.</span><span class="master-session-pill">Active session: <code id="masterSessionActiveName">—</code></span></div>
+      <div class="master-session-foot"><span id="masterSessionState" class="saved">Saved on this workstation.</span><span class="master-session-pill">Active session: <code id="masterSessionActiveName">—</code></span></div>
     </section>`);
 
   const els={
@@ -34,25 +34,61 @@
     'masterTimeout','masterPollInterval','masterRetries','masterRetryDelay','masterInterRequestDelay','masterUnitId','masterFunction','masterAddress','masterQuantity','masterFormat','masterScale','masterOffset','masterPrecision'
   ];
   let dirty=false,switching=false,store=loadStore();
+  let remotePersistChain=Promise.resolve(),remotePersistenceAvailable=false;
 
   function id(){return `monitor-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;}
   function clone(value){return JSON.parse(JSON.stringify(value));}
   function safeName(value){const s=String(value||'').trim().replace(/\s+/g,' ');return s.slice(0,80)||'Untitled Monitor';}
   function defaultName(index=store.sessions.length+1){return `Monitor ${index}`;}
 
-  function loadStore(){
-    try{
-      const parsed=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null');
-      if(parsed&&parsed.version===1&&Array.isArray(parsed.sessions)&&parsed.sessions.length){
-        return {version:1,activeId:parsed.activeId||parsed.sessions[0].id,sessions:parsed.sessions};
-      }
-    }catch{/* invalid local state is ignored */}
+  function normalizeLoadedStore(parsed){
+    if(parsed&&parsed.version===1&&Array.isArray(parsed.sessions)&&parsed.sessions.length){
+      const ids=new Set(parsed.sessions.map(session=>session&&session.id).filter(Boolean));
+      const activeId=ids.has(parsed.activeId)?parsed.activeId:parsed.sessions[0].id;
+      return {version:1,activeId,sessions:parsed.sessions};
+    }
     return {version:1,activeId:null,sessions:[]};
+  }
+
+  function loadStore(){
+    try{return normalizeLoadedStore(JSON.parse(localStorage.getItem(STORAGE_KEY)||'null'));}
+    catch{/* invalid local state is ignored */}
+    return {version:1,activeId:null,sessions:[]};
+  }
+
+  async function loadRemoteStore(){
+    const response=await fetch('/api/master/monitor-sessions',{cache:'no-store'});
+    if(!response.ok)throw new Error('Monitor Session storage returned HTTP '+response.status);
+    const parsed=normalizeLoadedStore(await response.json());
+    remotePersistenceAvailable=true;
+    return parsed;
+  }
+
+  function queueRemotePersist(){
+    const payload=clone(store);
+    remotePersistChain=remotePersistChain
+      .catch(()=>undefined)
+      .then(async()=>{
+        const response=await fetch('/api/master/monitor-sessions',{
+          method:'PUT',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify(payload)
+        });
+        if(!response.ok)throw new Error('Monitor Session storage returned HTTP '+response.status);
+        remotePersistenceAvailable=true;
+        if(!dirty)setState('Saved on this workstation.','saved');
+      })
+      .catch(()=>{
+        remotePersistenceAvailable=false;
+        if(!dirty)setState('Saved in browser fallback only; workstation session file is unavailable.','dirty');
+      });
   }
 
   function persist(){
     localStorage.setItem(STORAGE_KEY,JSON.stringify(store));
-    dirty=false;setState('Saved locally on this workstation.','saved');
+    queueRemotePersist();
+    dirty=false;
+    setState(remotePersistenceAvailable?'Saved on this workstation.':'Saving on this workstation…','saved');
   }
 
   function setState(text,kind=''){
@@ -218,6 +254,18 @@
   els.counterReset?.addEventListener('click',()=>window.ModbusMasterSessionCounters.resetCurrent());
 
   async function ensureInitial(){
+    try{
+      const remote=await loadRemoteStore();
+      if(remote.sessions.length){
+        store=remote;
+        localStorage.setItem(STORAGE_KEY,JSON.stringify(store));
+      }else if(store.sessions.length){
+        queueRemotePersist();
+      }
+    }catch{
+      remotePersistenceAvailable=false;
+      setState('Workstation session storage unavailable; using browser fallback.','dirty');
+    }
     if(!store.sessions.length){const first=buildSession('Monitor 1');store.sessions.push(first);store.activeId=first.id;persist();}
     if(!active())store.activeId=store.sessions[0].id;
     let runtimeStatus=null;
@@ -262,6 +310,16 @@
   });
   if(q('masterDataBody'))snapshotObserver.observe(q('masterDataBody'),{childList:true,subtree:true,characterData:true});
 
-  window.addEventListener('beforeunload',()=>{const a=active();if(a){captureInto(a);localStorage.setItem(STORAGE_KEY,JSON.stringify(store));}});
+  window.addEventListener('beforeunload',()=>{
+    const a=active();if(!a)return;
+    captureInto(a);
+    const payload=JSON.stringify(store);
+    localStorage.setItem(STORAGE_KEY,payload);
+    try{
+      if(navigator.sendBeacon){
+        navigator.sendBeacon('/api/master/monitor-sessions',new Blob([payload],{type:'application/json'}));
+      }
+    }catch{/* browser fallback is already saved */}
+  });
   ensureInitial();
 })();
