@@ -101,6 +101,7 @@ check(masterSessionsUi.includes("/api/master/monitor-sessions")&&masterSessionsU
 check(masterSessionsUi.includes('navigator.sendBeacon'),'Master Monitor Session UI must preserve unload-time changes best-effort');
 check(desktopMain.includes('isAllowedNavigationUrl(url, selectedPort)'),'desktop renderer navigation must be origin-locked');
 check(navigationSafety.includes('parsed.origin === expected.origin'),'desktop navigation must compare exact origins');
+check(desktopMain.includes('probePort(18787)')&&desktopMain.includes('return probePort(0)'),'desktop must prefer a stable loopback origin and safely fall back when occupied');
 check(rawFrameStudio.includes('validateResponseSemantics'),'Raw Lab must perform semantic Modbus response validation');
 check(rawFrameStudio.includes('validateSuccessfulResponsePdu'),'Raw Lab must validate successful response structure/quantity');
 check(loggerTrend.includes('_hydrateHistory'),'Logger/Trend must hydrate persisted history on restart');
