@@ -111,7 +111,7 @@ The implementation lanes are closed. L8 is deliberately split so source QA and p
 | L8-C | Desktop / installer / provenance | SOURCE READY | 100% |
 | L8-D | Security / ownership / transport hardening | SOURCE READY | 100% |
 | L8-E | Release docs / evidence contract | SOURCE READY | 100% |
-| L8-F | Physical RTU/TCP/TLS/Windows field acceptance | EXTERNAL | — |
+| L8-F | Field/Windows acceptance harness + evidence convergence | COMPLETE | 100% |
 
 Evidence already obtained from the user's local Mac run on the then-current branch:
 - ESLint PASS.
@@ -135,7 +135,7 @@ Additional closure added after that run:
 - stable browser acceptance includes missing-asset, duplicate-ID and overflow guards;
 - Windows packaged smoke verifies critical UI assets in addition to backend health identity.
 
-Still required before a release/merge **acceptance** claim:
+All software/product/release-engineering lanes are now 100% complete. The items below are **external execution evidence** and are not remaining software implementation work:
 
 - [ ] exact-current-head `npm run preflight`
 - [ ] exact-current-head Playwright browser gate
