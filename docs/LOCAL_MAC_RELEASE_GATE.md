@@ -33,7 +33,8 @@ The gate records the starting Git SHA and then validates:
 1. Node.js 20
    - `npm ci`
    - version consistency
-   - v8 syntax checks
+   - project-wide JavaScript syntax checks
+   - compatibility-v8 syntax checks
    - full unit/integration test suite
    - smoke suite
    - acceptance suite
@@ -43,7 +44,8 @@ The gate records the starting Git SHA and then validates:
    - the same complete suite
 4. Release-quality checks on Node.js 22
    - lint
-   - v8 syntax
+   - project-wide JavaScript syntax
+   - compatibility-v8 syntax
    - bounded v8 scale benchmark
    - v7 compatibility benchmark
    - runtime dependency audit
