@@ -22,10 +22,11 @@ The final source audit also closes these edge cases:
 - [x] Raw Lab conformance requires semantically matching Modbus responses; unexpected exceptions cannot falsely pass success cases
 - [x] Logger/Trend reloads bounded persisted samples and protocol-event history after restart
 - [x] Logger/Trend persistence is rooted under the configured runtime data directory, including packaged desktop `userData`
-- [x] Master Monitor Sessions persist in a bounded atomic workstation store and survive dynamic/fallback renderer ports
+- [x] Master Monitor Sessions persist in a bounded atomic workstation store, keep a recoverable backup, and survive dynamic/fallback renderer ports
 - [x] Monitor Session state never persists or restores rendered field-derived HTML
 - [x] desktop legacy-data migration rolls back partial failures, preserves Logger/Trend + Monitor Session evidence, and never merges into populated user data
 - [x] desktop prefers a stable loopback renderer origin with an ephemeral fallback so browser-backed mappings/bookmarks/preferences remain available across normal launches
+- [x] desktop readiness is authenticated with a per-process token and rejects health from a backend process that exited or was not launched by the current desktop instance
 - [x] JSON mutation limits are enforced by the parser even without a trusted Content-Length header
 - [x] Discovery Unit-ID limits follow serial vs TCP framing
 - [x] UDP Slave peers expire after bounded idle retention instead of exhausting the peer table indefinitely
