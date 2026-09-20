@@ -34,6 +34,10 @@ test('desktop launches only the unified runtime and retains diagnostics', () => 
   assert.match(main, /BACKEND-ERROR/);
   assert.equal(desktopPackage.build.productName, 'Modbus Engineering Tool');
   assert.equal(desktopPackage.build.artifactName, 'Modbus-Engineering-Tool-Setup-${version}.${ext}');
+  const srcResource=desktopPackage.build.extraResources.find(item=>item.from==='../src');
+  const publicResource=desktopPackage.build.extraResources.find(item=>item.from==='../public');
+  assert.deepEqual(srcResource.filter,['**/*','!index-v8.js']);
+  assert.deepEqual(publicResource.filter,['**/*','!v8/**']);
 });
 
 test('desktop data migration preserves an existing destination and reports migration', () => {
