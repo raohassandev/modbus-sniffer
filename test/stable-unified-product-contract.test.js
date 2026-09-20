@@ -89,6 +89,7 @@ test('unified Playwright acceptance spec parses and covers loopback read plus no
   assert.match(e2e,/all navigation workspaces stay usable without shell overflow at supported desktop viewports/);
   assert.match(e2e,/width:1100,height:700/);
   assert.match(e2e,/\.nav-item\[data-page\]/);
+  assert.match(e2e,/Master Monitor Sessions load from durable workstation storage across browser reloads/);
   assert.match(e2e,/unsafe bulk write is rejected before transmission/);
   assert.match(e2e,/BULK_CONFIRMATION_REQUIRED/);
   assert.match(e2e,/preflightRejected===true&&row\.transmitted===false/);
