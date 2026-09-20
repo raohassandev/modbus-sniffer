@@ -116,6 +116,11 @@ check(releaseNotes.includes(`Modbus Engineering Tool ${pkg.version}`),'release n
 check(releaseNotes.includes('src/index-v7.js'),'release notes must name the unified runtime');
 check(!activeTodo.includes('\\n- [x]'),'ACTIVE_TODO must not contain escaped checklist line breaks');
 check(!laneRegistry.includes('\\n- [x]'),'lane registry must not contain escaped checklist line breaks');
+check(laneRegistry.includes('Software and release-engineering completion: 100%'),'lane registry must declare software/release-engineering completion');
+check(!laneRegistry.includes('EXECUTING'),'lane registry must not retain executing software lanes after source closure');
+for(const lane of ['L8-A','L8-B','L8-C','L8-D','L8-E','L8-F']){
+  check(new RegExp('\\| '+lane.replace('-','\\-')+' \\|[^\\n]*\\| 100% \\|').test(laneRegistry),lane+' must be source-complete at 100%');
+}
 check(localGateDoc.startsWith(`# Local Mac Release Gate — Modbus Engineering Tool ${pkg.version}`),'local release gate heading must match product/version');
 for(const marker of ['primary Modbus workspaces','loopback read','unsafe bulk write'])check(unifiedE2e.includes(marker),`unified E2E missing coverage marker: ${marker}`);
 check(defaultPlaywright.includes("require('./playwright.unified.config')"),'default Playwright gate must target the shipped unified product');
