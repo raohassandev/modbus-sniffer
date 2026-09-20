@@ -28,11 +28,19 @@
     "extraResources": [
       {
         "from": "../src",
-        "to": "backend/src"
+        "to": "backend/src",
+        "filter": [
+          "**/*",
+          "!index-v8.js"
+        ]
       },
       {
         "from": "../public",
-        "to": "backend/public"
+        "to": "backend/public",
+        "filter": [
+          "**/*",
+          "!v8/**"
+        ]
       },
       {
         "from": "../config",
