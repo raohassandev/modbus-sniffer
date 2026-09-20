@@ -100,40 +100,50 @@ function startBackend(dataDir, selectedPort) {
   const mode = desktopMode();
   const args = backendArgs(dataDir, selectedPort);
   appendDesktopLog('INFO', `Starting ${mode} backend on 127.0.0.1:${selectedPort}`);
-  backend = spawn(process.execPath, args, {
+  const child = spawn(process.execPath, args, {
     cwd: root,
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true
   });
-  backend.stdout?.on('data', b => {
+  backend = child;
+  child.stdout?.on('data', b => {
     const text = String(b).trim();
     console.log(text);
     if (text) appendDesktopLog('BACKEND', text);
   });
-  backend.stderr?.on('data', b => {
+  child.stderr?.on('data', b => {
     const text = String(b).trim();
     console.error(text);
     if (text) appendDesktopLog('BACKEND-ERROR', text);
   });
-  backend.on('error', error => appendDesktopLog('ERROR', `Backend process error: ${error?.stack || error}`));
-  backend.on('exit', (code, signal) => {
+  child.on('error', error => appendDesktopLog('ERROR', `Backend process error: ${error?.stack || error}`));
+  child.on('exit', (code, signal) => {
     appendDesktopLog(code ? 'ERROR' : 'INFO', `Backend exited code=${code ?? 'null'} signal=${signal || 'none'}`);
-    backend = null;
+    if (backend === child) backend = null;
     if (code && win && !win.isDestroyed() && !quitInProgress) dialog.showErrorBox('Modbus backend stopped', `Backend exited with code ${code}`);
   });
+  return child;
 }
 
-function waitReady(selectedPort, retries = 80) {
+function waitReady(selectedPort, child, retries = 80) {
   const pathName = healthPath();
   const expectedVersion = app.getVersion();
   return new Promise((resolve, reject) => {
     const ping = () => {
+      if (!child || child.exitCode != null || child.signalCode) {
+        reject(new Error('Backend process exited before readiness was confirmed.'));
+        return;
+      }
       const req = http.get(`http://127.0.0.1:${selectedPort}${pathName}`, res => {
         let body = '';
         res.setEncoding('utf8');
         res.on('data', chunk => { if (body.length < 1024 * 1024) body += chunk; });
         res.on('end', () => {
+          if (!child || child.exitCode != null || child.signalCode) {
+            reject(new Error('Backend process exited before readiness was confirmed.'));
+            return;
+          }
           if (res.statusCode === 200) {
             try {
               const status = JSON.parse(body);
@@ -212,8 +222,8 @@ async function create() {
     return;
   }
 
-  startBackend(storage.dataDir, port);
-  try { await waitReady(port); }
+  const startedBackend = startBackend(storage.dataDir, port);
+  try { await waitReady(port, startedBackend); }
   catch (error) {
     appendDesktopLog('ERROR', `Backend startup failed: ${error?.stack || error}`);
     await terminateBackend();
