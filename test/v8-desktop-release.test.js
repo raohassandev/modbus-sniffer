@@ -64,6 +64,7 @@ test('Windows packaging workflow is manual-only, smoke-tests the unified product
   assert.match(workflow, /slave-v7\.js/);
   assert.match(workflow, /help-v7\.js/);
   assert.match(workflow, /Packaged UI asset failed smoke check/);
+  assert.match(workflow, /unexpectedly exposes the compatibility v8 web shell/);
   assert.match(workflow, /runtime=unified-modbus-engineering-tool/);
   assert.doesNotMatch(workflow, /experimental_runtime=/);
   assert.match(workflow, /SHA256SUMS\.txt/);
