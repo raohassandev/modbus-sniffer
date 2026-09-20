@@ -25,6 +25,8 @@ function baseEvidence(head){
         {name:'unified health identity',ok:true},
         {name:'Master to Slave TCP loopback read',ok:true},
         {name:'unsafe bulk write rejected before transmit',ok:true},
+        {name:'Monitor Session durable save sanitizes rendered HTML',ok:true},
+        {name:'Monitor Sessions persist across runtime restart',ok:true},
         {name:'restart does not restore live write or LAB state',ok:true},
       ]
     },
