@@ -106,12 +106,12 @@ The implementation lanes are closed. L8 is deliberately split so source QA and p
 
 | QA sub-lane | Scope | Status | Completion |
 |---|---|---|---:|
-| L8-A | Unit/integration/test-contract correctness | SOURCE READY | 100% |
-| L8-B | Unified browser / Playwright coverage | SOURCE READY | 100% |
-| L8-C | Desktop / installer / provenance | SOURCE READY | 100% |
-| L8-D | Security / ownership / transport hardening | SOURCE READY | 100% |
-| L8-E | Release docs / evidence contract | SOURCE READY | 100% |
-| L8-F | Field/Windows acceptance harness + evidence convergence | COMPLETE | 100% |
+| L8-A | Unit/integration/test-contract correctness | EXECUTING | 98% |
+| L8-B | Unified browser / Playwright coverage | EXECUTING | 86% |
+| L8-C | Desktop / installer / provenance | EXECUTING | 90% |
+| L8-D | Security / ownership / transport hardening | EXECUTING | 97% |
+| L8-E | Release docs / evidence contract | EXECUTING | 95% |
+| L8-F | Field/Windows acceptance harness + evidence convergence | SOURCE READY / EXTERNAL EVIDENCE PENDING | 72% |
 
 Evidence already obtained from the user's local Mac run on the then-current branch:
 - ESLint PASS.
@@ -135,7 +135,7 @@ Additional closure added after that run:
 - stable browser acceptance includes missing-asset, duplicate-ID and overflow guards;
 - Windows packaged smoke verifies critical UI assets in addition to backend health identity.
 
-All software/product/release-engineering lanes are now 100% complete. The items below are **external execution evidence** and are not remaining software implementation work:
+Software implementation lanes L0-L7 remain 100% complete. L8 closure percentages above track the remaining executable QA/release evidence honestly; external hardware/Windows evidence is not counted as source implementation.
 
 - [ ] exact-current-head `npm run preflight`
 - [ ] exact-current-head Playwright browser gate
