@@ -98,7 +98,7 @@ check(server.includes('dataDir:options.dataDir'),'unified server must bind Maste
 check(masterMonitorStore.includes("master-monitor-sessions.json")&&masterMonitorStore.includes('fs.renameSync'),'Master Monitor Session store must use durable atomic file persistence');
 check(masterMonitorStore.includes("rowsHtml:''"),'Master Monitor Session persistence must not retain rendered field-derived HTML');
 check(masterSessionsUi.includes("/api/master/monitor-sessions")&&masterSessionsUi.includes('loadRemoteStore'),'Master Monitor Session UI must load durable workstation state');
-check(masterSessionsUi.includes('storeFreshness(remote)>=storeFreshness(local)'),'Master Monitor Session UI must reconcile newer browser fallback state without overwriting it');
+check(masterSessionsUi.includes('function mergeStores')&&masterSessionsUi.includes('store=mergeStores(local,remote)'),'Master Monitor Session UI must union local and durable state while preferring newer session revisions');
 check(masterSessionsUi.includes("rowsHtml:''")&&!masterSessionsUi.includes('snap.rowsHtml'),'Master Monitor Session UI must not persist or restore rendered field HTML');
 check(desktopMain.includes('isAllowedNavigationUrl(url, selectedPort)'),'desktop renderer navigation must be origin-locked');
 check(navigationSafety.includes('parsed.origin === expected.origin'),'desktop navigation must compare exact origins');
