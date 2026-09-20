@@ -190,6 +190,7 @@ run_step "quality-v8-syntax" npm run check:v8
 run_step "quality-v8-benchmark" npm run benchmark:v8
 run_step "quality-v7-compat-benchmark" node scripts/benchmark-v7.js --cycles 25000 --min-fps 500 --max-heap-mb 384
 run_step "quality-runtime-audit" npm run audit:runtime
+run_step "quality-l8f-runtime" npm run acceptance:l8f -- --expect-head "$START_HEAD" --json-out "$EVIDENCE_DIR/l8f-runtime.json"
 run_step "quality-v8-soak" npm run soak:v8 -- --seconds "$SOAK_SECONDS"
 run_step "browser-install-chromium" npx playwright install chromium
 run_step "browser-e2e-unified" npm run e2e:unified
