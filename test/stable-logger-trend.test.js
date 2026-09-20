@@ -80,6 +80,14 @@ test('stable Logger/Trend persists profile definitions and logs protocol evidenc
   assert.equal(service.status().hydration.eventsLoaded,1);
 });
 
+test('unified web server routes Logger/Trend persistence under the configured runtime data directory',()=>{
+  const root=path.resolve(__dirname,'..');
+  const server=fs.readFileSync(path.join(root,'src','platformWebServerV61.js'),'utf8');
+  const routes=fs.readFileSync(path.join(root,'src','loggerTrend','loggerTrendRoutes.js'),'utf8');
+  assert.match(server,/installLoggerTrendRoutes\(\{app,state,masterRuntime,broadcast,dataDir:path\.join\(options\.dataDir,'logger-trend'\)\}\)/);
+  assert.match(routes,/new StableLoggerTrendService\(\{state,masterRuntime,\.\.\.\(dataDir\?\{dataDir\}:\{\}\)\}\)/);
+});
+
 test('stable Logger/Trend browser workspace loads and parses',()=>{
   const root=path.resolve(__dirname,'..');
   const loader=fs.readFileSync(path.join(root,'public/platform-v6.js'),'utf8');
