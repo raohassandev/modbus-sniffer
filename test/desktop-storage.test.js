@@ -144,7 +144,10 @@ test('desktop launcher starts the unified backend and keeps loopback dynamic por
   assert.doesNotMatch(source,/url\.startsWith\(allowed\)/);
   assert.match(source,/server\.listen\(requested,\s*['"]127\.0\.0\.1['"]/);
   assert.match(source,/MODBUS_DESKTOP_PORT/);
+  assert.match(source,/probePort\(18787\)/);
   assert.match(source,/return probePort\(0\)/);
+  assert.match(source,/MODBUS_DESKTOP_PORT must be an integer from 1024 to 65535/);
+  assert.match(source,/preferences\/bookmarks remain available/);
   assert.match(source,/contextIsolation:true/);
   assert.match(source,/sandbox:true/);
 });
