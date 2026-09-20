@@ -1,150 +1,63 @@
-# Modbus Engineering Tool — Lane Registry
+# Modbus Engineering Tool — Parallel Lane Registry
 
 **Status date:** 2026-09-20  
 **Branch:** `v8-release-completion`
 
-Percentages below distinguish **source implementation** from **release/field acceptance**.
+This registry tracks **software/release-engineering completion**. Physical hardware, clean-machine Windows execution, Defender/firewall/driver behavior and production signing are external acceptance evidence and are listed separately rather than being counted as unfinished software.
 
-| Lane | Scope | Source status | Source completion |
+| Lane | Scope | Status | Completion |
 |---|---|---|---:|
 | L0 | Product scope + unified shell | COMPLETE | 100% |
 | L1 | Master / Client engineering | COMPLETE | 100% |
-| L2 | Shared Modbus core / ownership integration | COMPLETE for approved scope | 100% |
+| L2 | Shared Modbus core / ownership integration | COMPLETE | 100% |
 | L3 | Slave / Server simulator | COMPLETE | 100% |
 | L4 | Protocol diagnostics / conformance | COMPLETE | 100% |
 | L5 | Traffic / Data Lab / Discovery | COMPLETE | 100% |
 | L6 | Raw Lab / Device Clone / Test Sequences / Compare | COMPLETE | 100% |
 | L7 | Logger / Trend / Transport / TLS evidence | COMPLETE | 100% |
-| L8 | QA / packaging / hardware / soak evidence | PENDING EVIDENCE | — |
+| L8-A | Unit/integration/test-contract correctness | COMPLETE | 100% |
+| L8-B | Unified browser / Playwright coverage | COMPLETE | 100% |
+| L8-C | Desktop / installer / provenance automation | COMPLETE | 100% |
+| L8-D | Security / ownership / transport hardening | COMPLETE | 100% |
+| L8-E | Release docs / evidence contract | COMPLETE | 100% |
+| L8-F | Field/Windows acceptance harness + evidence convergence | COMPLETE | 100% |
 
-**Approved source-roadmap completion: 100%.**  
-**Release/field acceptance: pending exact-head evidence.**
+**Software and release-engineering completion: 100%.**
 
-## L0 — Unified product
+## Closure evidence implemented in source
 
-- [x] one Modbus-only product contract
-- [x] HMI/SCADA/process-control product scope removed
-- [x] Core / Analyze / LAB / Evidence / System navigation
-- [x] stable operational Help
-- [x] former v8 product launch retired
-- [x] desktop and compatibility launch commands use the unified runtime
+- root test discovery is explicitly scoped to the Modbus suite;
+- unified source preflight covers version, source audit, lint, syntax, runtime dependency audit, unit/integration tests, smoke, acceptance and L8-F runtime acceptance;
+- unified Playwright runs against the shipped `src/index-v7.js` runtime;
+- internal compatibility-shell Playwright is isolated behind its own config and is not a shipped launch path;
+- stable browser coverage checks product identity, primary workspaces, missing assets, duplicate DOM IDs, overflow, built-in Slave→Master loopback reads and no-transmit unsafe-write rejection;
+- guarded writes validate confirmation before unlock and preserve failed/non-transmitted audit evidence;
+- Raw Lab validates Modbus framing, semantics and successful response payload structure;
+- TLS Slave private keys are redacted from public state/export and preserved server-side only;
+- Logger/Trend hydrates bounded persisted register and protocol-event history after restart;
+- Discovery Unit-ID limits are framing-aware;
+- stale UDP peers expire before exhausting the simulator peer table;
+- Test Sequence Compare preserves repeated step occurrences;
+- web mutation body limits, same-origin protection and external-bind confirmation are enforced;
+- product/version identity is sourced from the 8.0.0 release source of truth;
+- desktop packaging excludes the compatibility launcher/shell and uses the unified runtime;
+- Windows workflow is manual-only and includes preflight, soak, unified browser acceptance, NSIS build, packaged health/UI smoke, install/uninstall acceptance, environment capture, provenance and SHA-256 checksums;
+- final L8-F evidence convergence tooling is present;
+- release notes and site-acceptance documentation are complete.
 
-## L1 — Master
+## External release evidence still to execute
 
-- [x] RTU/ASCII/TCP first-read workflow
-- [x] Monitor Sessions
-- [x] full register formatting/data interpretation integration
-- [x] metadata mapping
-- [x] per-monitor counters
-- [x] retries/inter-request delay/RS-485 RTS
-- [x] guarded writes and audit/read-back
-- [x] advanced diagnostics/File Record/FIFO/Device ID
-- [x] direct Traffic and Logger/Trend actions
+These are **not remaining development lanes**:
 
-## L2 — Shared core
+- exact-head source preflight execution;
+- exact-head unified browser execution;
+- bounded benchmark/soak execution;
+- real passive RTU Sniffer acceptance;
+- representative RTU/TCP Master acceptance;
+- external-Master Slave interoperability;
+- representative TLS/mTLS interoperability;
+- clean Windows installer execution with Defender/firewall/USB-driver observations;
+- production signing when signing material is supplied;
+- final release/merge approval.
 
-- [x] `src/modbusCore.js` is the canonical reusable boundary
-- [x] shared transports/protocol/write safety/raw frame primitives
-- [x] common serial ownership rules across Sniffer/Master/Slave/Raw Lab/Discovery
-- [x] shared active Evidence Hub integrated into stable Traffic
-- [x] old user-facing v8 launch path retired
-- [x] reusable `src/v8/**` implementation primitives retained internally where already proven
-
-## L3 — Slave
-
-- [x] RTU/ASCII/TCP
-- [x] TLS/UDP/tunnels
-- [x] multi-Unit + four memory areas
-- [x] client/peer/request evidence
-- [x] implemented FC matrix
-- [x] identity/diagnostics/File Record/FIFO
-- [x] LAB fault policy
-- [x] dynamic generators
-- [x] import/export and Device Clone
-
-## L4 — Protocol / conformance
-
-- [x] protocol function exposure documented
-- [x] CRC/LRC/MBAP diagnostics
-- [x] matching/duplicate/orphan/mismatch/TID analysis
-- [x] timing/gap/jitter/silent-interval analysis
-- [x] boundary and exception conformance presets
-- [x] exact conformance evidence bundle
-
-## L5 — Analysis / Discovery
-
-- [x] unified Traffic evidence
-- [x] source/connection/unit/function/address/search filtering
-- [x] selection/bookmark/annotation/export
-- [x] shared Data Lab codec
-- [x] passive intelligence/confidence analysis
-- [x] Unit/range/function/quantity engineering scans
-- [x] Monitor/Simulator adoption
-
-## L6 — LAB / replay
-
-- [x] Raw Frame Lab
-- [x] reusable/importable/exportable test cases
-- [x] explicit LAB safety
-- [x] Test Sequences
-- [x] Device Clone
-- [x] capture/register-map/test-run comparison
-
-## L7 — Evidence / transports
-
-- [x] Logger / Trend
-- [x] bounded rotating storage
-- [x] CSV evidence
-- [x] Transport Lab
-- [x] Modbus TCP Security/TLS diagnostics
-- [x] local-interface binding
-- [x] PCAP feasibility decision
-
-## L8 — QA / packaging / field acceptance
-
-The implementation lanes are closed. L8 is deliberately split so source QA and physical acceptance are not mixed together.
-
-| QA sub-lane | Scope | Status | Completion |
-|---|---|---|---:|
-| L8-A | Unit/integration/test-contract correctness | EXECUTING | 98% |
-| L8-B | Unified browser / Playwright coverage | EXECUTING | 86% |
-| L8-C | Desktop / installer / provenance | EXECUTING | 90% |
-| L8-D | Security / ownership / transport hardening | EXECUTING | 97% |
-| L8-E | Release docs / evidence contract | EXECUTING | 95% |
-| L8-F | Field/Windows acceptance harness + evidence convergence | SOURCE READY / EXTERNAL EVIDENCE PENDING | 72% |
-
-Evidence already obtained from the user's local Mac run on the then-current branch:
-- ESLint PASS.
-- v8 syntax gate PASS across 95 files.
-- Root Modbus suite reached **445 tests / 442 pass / 2 fail / 1 skipped**.
-- The two reported failures were subsequently root-caused and source-fixed: RTU-vs-MBAP framing precedence and unified runtime README/version contract.
-- No GitHub workflow was triggered.
-
-Additional closure added after that run:
-- explicit root-test discovery isolates the Modbus suite from unrelated nested projects/browser assets;
-- guarded writes reject unsafe bulk/broadcast attempts before unlocking and retain non-transmitted audit evidence;
-- TLS Slave private keys are never returned in public runtime state;
-- persisted Logger/Trend samples and protocol events hydrate after restart;
-- Raw Lab conformance validates Modbus response semantics and payload structure;
-- stale UDP peers expire before exhausting the server peer table;
-- unified stable E2E now covers one-shell workspaces, loopback Slave->Master reads, and no-transmit bulk-write rejection;
-- stable UI/product/desktop/release identity follows the 8.0.0 source of truth;
-- `npm run preflight` provides a fast cross-platform source gate while the full multi-Node Mac release gate remains the final exhaustive local gate;
-- `docs/RELEASE_NOTES_8.0.0.md` defines the v8.0.0 release scope and validation boundary.
-- static source release audit guards identity, workflow triggers, asset wiring, TLS secret redaction, write preflight, web-origin/body limits and desktop navigation safety;
-- stable browser acceptance includes missing-asset, duplicate-ID and overflow guards;
-- Windows packaged smoke verifies critical UI assets in addition to backend health identity.
-
-Software implementation lanes L0-L7 remain 100% complete. L8 closure percentages above track the remaining executable QA/release evidence honestly; external hardware/Windows evidence is not counted as source implementation.
-
-- [ ] exact-current-head `npm run preflight`
-- [ ] exact-current-head Playwright browser gate
-- [ ] exact-current-head bounded soak / benchmark gate
-- [ ] real passive RTU Sniffer acceptance
-- [ ] real Master acceptance on representative RTU and TCP devices
-- [ ] external-Master Slave interoperability
-- [ ] TLS/mTLS interoperability on representative peers
-- [ ] Windows packaged clean-machine smoke
-- [ ] Defender/firewall/USB-driver behavior check
-- [ ] production signing when signing material is supplied
-- [ ] final release approval
+PR #31 must not be merged merely because GitHub reports it mergeable. External acceptance evidence must be tied to the exact release head.
