@@ -309,4 +309,21 @@ Long-soak evidence:
 Notes:
 ```
 
+## 12. Final L8-F evidence convergence
+
+Copy `docs/L8F_PHYSICAL_ACCEPTANCE.template.json` to an acceptance evidence folder and complete every physical check only from observed evidence on the exact release head.
+
+After runtime, Windows, field and physical evidence all report PASS for the same commit/version, run:
+
+```bash
+npm run acceptance:l8f:final -- \
+  --runtime ./l8f-runtime.json \
+  --windows ./WINDOWS-ACCEPTANCE.json \
+  --field ./field-acceptance.json \
+  --physical ./L8F_PHYSICAL_ACCEPTANCE.json \
+  --json-out ./L8F-FINAL-ACCEPTANCE.json
+```
+
+The finalizer fails closed if any evidence is missing, not PASS, belongs to another commit/version, or omits any required physical category.
+
 A major application revision, wiring change, adapter/gateway replacement, device firmware change, master-program change or network-topology change requires focused re-validation.
