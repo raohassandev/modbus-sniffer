@@ -86,7 +86,9 @@ test('unified Playwright acceptance spec parses and covers loopback read plus no
   new vm.Script(e2e,{filename:'unified-engineering.spec.js'});
   assert.match(e2e,/primary Modbus workspaces are available from one stable shell/);
   assert.match(e2e,/built-in TCP Slave and stable Master complete a loopback read/);
-  assert.match(e2e,/stable shell has no missing assets, duplicate DOM ids or document-level horizontal overflow/);
+  assert.match(e2e,/all navigation workspaces stay usable without shell overflow at supported desktop viewports/);
+  assert.match(e2e,/width:1100,height:700/);
+  assert.match(e2e,/\.nav-item\[data-page\]/);
   assert.match(e2e,/unsafe bulk write is rejected before transmission/);
   assert.match(e2e,/BULK_CONFIRMATION_REQUIRED/);
   assert.match(e2e,/preflightRejected===true&&row\.transmitted===false/);
