@@ -2,6 +2,7 @@
 
 const fs=require('node:fs');
 const path=require('node:path');
+const crypto=require('node:crypto');
 
 class MasterMonitorSessionStoreError extends Error{
   constructor(code,message,details={}){
@@ -161,7 +162,7 @@ class MasterMonitorSessionStore{
     if(fs.existsSync(this.file))this.load();
     const normalized=normalizeMonitorStore(input);
     fs.mkdirSync(path.dirname(this.file),{recursive:true});
-    const temp=`${this.file}.partial-${process.pid}-${Date.now()}`;
+    const temp=`${this.file}.partial-${process.pid}-${crypto.randomUUID()}`;
     try{
       fs.writeFileSync(temp,JSON.stringify(normalized,null,2)+'\n',{encoding:'utf8',flag:'wx'});
       fs.renameSync(temp,this.file);
