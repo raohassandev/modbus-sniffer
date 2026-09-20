@@ -87,6 +87,7 @@ test('TCP proxy configuration is loopback-safe by default and external bind requ
   assert.throws(()=>validateTcp({listenHost:'0.0.0.0',targetHost:'192.168.1.5'}),e=>e.code==='EXTERNAL_BIND_CONFIRMATION_REQUIRED');
   const external=validateTcp({listenHost:'0.0.0.0',targetHost:'192.168.1.5',confirmExternalBind:true,maxClientSessions:4});assert.equal(external.maxClientSessions,4);
   assert.throws(()=>validateTcp({targetHost:'192.168.1.5',maxClientSessions:129}),/1\.\.128/);
+  assert.throws(()=>validateTcp({targetHost:'192.168.1.5',requestTimeoutMs:'not-a-number'}),/50\.\.60000/);
 });
 
 test('TCP interface inventory separates Ethernet Wi-Fi and loopback and recommends the target subnet',()=>{
