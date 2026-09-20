@@ -23,6 +23,7 @@ const laneRegistry=read('docs/MODBUS_PARALLEL_LANES.md');
 const localGateDoc=read('docs/LOCAL_MAC_RELEASE_GATE.md');
 const unifiedE2e=read('e2e/unified-engineering.spec.js');
 const unifiedPlaywright=read('playwright.unified.config.js');
+const compatPlaywright=read('playwright.compat.config.js');
 const releaseGate=read('scripts/release-gate-mac.sh');
 const server=read('src/platformWebServerV61.js');
 const slaveRuntime=read('src/slave/slaveRuntime.js');
@@ -35,7 +36,9 @@ for(const name of ['start','sniffer','workbench','v7','v8'])check(pkg.scripts?.[
 check(pkg.scripts?.preflight==='node scripts/source-preflight.js','preflight script must exist');
 check(pkg.scripts?.['audit:source']==='node scripts/static-release-audit.js','source audit script must exist');
 check(pkg.scripts?.['e2e:unified']==='playwright test --config=playwright.unified.config.js','unified browser gate script must exist');
-check(pkg.scripts?.['e2e:compat']==='playwright test e2e/v8-*.spec.js','compatibility browser gate script must exist');
+check(pkg.scripts?.['check:syntax']==='node scripts/check-js-syntax.js','project-wide syntax gate must exist');
+check(pkg.scripts?.e2e==='npm run e2e:unified && npm run e2e:compat','default browser gate must run unified then compatibility coverage');
+check(pkg.scripts?.['e2e:compat']==='playwright test --config=playwright.compat.config.js','compatibility browser gate script must use its dedicated config');
 check(versionSource.includes(`PRODUCT_VERSION = '${pkg.version}'`),'product version source must match package.json');
 check(versionSource.includes("PRODUCT_NAME = 'Modbus Engineering Tool'"),'product name source must be unified');
 check(desktop.version===pkg.version,'desktop version must match package version');
@@ -77,6 +80,8 @@ check(localGateDoc.startsWith(`# Local Mac Release Gate — Modbus Engineering T
 for(const marker of ['primary Modbus workspaces','loopback read','unsafe bulk write'])check(unifiedE2e.includes(marker),`unified E2E missing coverage marker: ${marker}`);
 check(unifiedPlaywright.includes('src/index-v7.js'),'unified Playwright gate must launch the unified runtime');
 check(!unifiedPlaywright.includes('src/index-v8.js'),'unified Playwright gate must not launch the compatibility runtime');
+check(compatPlaywright.includes('src/index-v8.js'),'compatibility Playwright gate must launch only the internal compatibility runtime');
+check(!compatPlaywright.includes('src/index-v7.js'),'compatibility Playwright gate must not boot the unified runtime');
 check(releaseGate.indexOf('browser-e2e-unified')>=0,'release gate must run unified browser acceptance');
 check(releaseGate.indexOf('browser-e2e-compatibility')>releaseGate.indexOf('browser-e2e-unified'),'compatibility browser coverage must run after unified acceptance');
 
