@@ -29,6 +29,10 @@ Supporting engineering workspaces include Traffic and Protocol Diagnostics, Regi
 - Shared active/passive Traffic evidence.
 - Request/response, CRC/LRC/MBAP, exception, timing and transaction-order diagnostics.
 - Bounded Logger/Trend persistence with restart hydration.
+- Logger/Trend uses the configured runtime data root, including packaged desktop `userData`.
+- Master Monitor Sessions use bounded atomic workstation persistence and reload across browser/runtime restarts.
+- Saved Monitor Sessions never persist or restore rendered field-derived HTML.
+- The desktop renderer prefers a stable loopback origin and safely falls back to an ephemeral port if the preferred port is occupied.
 - Raw-Lab conformance suites with semantic response validation.
 - Capture, CSV/JSON/XLSX/PDF/ZIP evidence workflows.
 - Deterministic source preflight and Mac release gate.
@@ -60,7 +64,7 @@ Modbus-Engineering-Tool-Setup-8.0.0.exe
 
 ## Upgrade and data
 
-Desktop writable engineering data remains under Electron `userData/data`. Legacy data migration is copy-only into an empty destination and does not merge into an existing populated workspace.
+Desktop writable engineering data remains under Electron `userData/data`. Legacy data migration is copy-only into an empty destination, rolls back partial failures, includes Logger/Trend and durable Master Monitor Sessions, and does not merge into any existing populated user-data store.
 
 ## Release validation boundary
 
