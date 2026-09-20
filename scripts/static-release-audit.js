@@ -115,7 +115,7 @@ check(discoveryEngineering.includes("framing==='tcp'?255:247"),'Discovery Unit-I
 check(udpTransport.includes('_prunePeers'),'UDP server must expire stale peer identities');
 check(udpTransport.includes('expiredPeers'),'UDP peer expiry must be observable in transport stats');
 check(preflight.includes("['l8f-runtime', ['run','acceptance:l8f']]"),'source preflight must execute L8-F runtime acceptance');
-for(const marker of ['Master to Slave TCP loopback read','unsafe bulk write rejected before transmit','restart does not restore live write or LAB state'])check(l8fRuntime.includes(marker),`L8-F runtime harness missing: ${marker}`);
+for(const marker of ['Master to Slave TCP loopback read','unsafe bulk write rejected before transmit','Monitor Session durable save sanitizes rendered HTML','Monitor Sessions persist across runtime restart','restart does not restore live write or LAB state'])check(l8fRuntime.includes(marker),`L8-F runtime harness missing: ${marker}`);
 for(const marker of ['test-windows-sqlite.js','npm run soak -- --cycles 50000','npm run e2e:unified','windows-package-acceptance.ps1'])check(windowsWorkflow.includes(marker),`Windows workflow missing L8-F gate: ${marker}`);
 for(const marker of ['npm run audit:source','npm run check:syntax'])check(macWorkflow.includes(marker),`Mac manual validation missing release gate: ${marker}`);
 for(const marker of ['NSIS clean install','Installed health identity','Installed serial enumerator','NSIS clean uninstall','WINDOWS-ACCEPTANCE.json','WINDOWS-ENVIRONMENT.txt'])check(windowsPackageAcceptance.includes(marker),`Windows package acceptance missing: ${marker}`);
