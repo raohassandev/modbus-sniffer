@@ -153,8 +153,8 @@ test('canonical docs separate source completion from release evidence',()=>{
   const lanes=read('docs/MODBUS_PARALLEL_LANES.md');
   assert.match(todo,/Approved product source scope: COMPLETE/);
   assert.match(todo,/exact-current-head/);
-  assert.match(lanes,/Approved source-roadmap completion: 100%/);
-  assert.match(lanes,/PENDING EVIDENCE/);
+  assert.match(lanes,/Software and release-engineering completion: 100%/);
+  assert.match(lanes,/External release evidence still to execute/);
   assert.match(read('docs/MODBUS_FUNCTION_MATRIX.md'),/\|\s*43\/14\s*\|/);
   assert.match(read('docs/PCAP_FEASIBILITY.md'),/do not generate synthetic PCAP\/PCAPNG/);
 });
