@@ -1,5 +1,7 @@
 # v8 Implementation Status and Release-Candidate Audit
 
+> **HISTORICAL / SUPERSEDED:** This document records an earlier v8 development phase and is not the current release-status or product-scope source of truth. The shipped unified product is **Modbus Engineering Tool**, the user-facing runtime is `src/index-v7.js`, and generic HMI/SCADA/process-control scope is removed. Use `docs/ACTIVE_TODO.md`, `docs/MODBUS_PARALLEL_LANES.md`, `docs/MODBUS_ONLY_PRODUCT_AUDIT.md`, and `docs/MODBUS_FUNCTION_MATRIX.md` for current status.
+
 **Last audited:** 2026-09-16  
 **Release-candidate version:** 8.0.0  
 **Release branch:** `v8-release-completion`  
