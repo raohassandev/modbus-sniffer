@@ -1,5 +1,7 @@
 # Modbus Engineering Workbench v8 — Release Closure Ledger
 
+> **HISTORICAL / SUPERSEDED:** This document records an earlier v8 development phase and is not the current release-status or product-scope source of truth. The shipped unified product is **Modbus Engineering Tool**, the user-facing runtime is `src/index-v7.js`, and generic HMI/SCADA/process-control scope is removed. Use `docs/ACTIVE_TODO.md`, `docs/MODBUS_PARALLEL_LANES.md`, `docs/MODBUS_ONLY_PRODUCT_AUDIT.md`, and `docs/MODBUS_FUNCTION_MATRIX.md` for current status.
+
 **Product:** Modbus Engineering Workbench  
 **Release candidate:** 8.0.0  
 **Integration branch:** `v8-release-completion`  
