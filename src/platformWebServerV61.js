@@ -187,7 +187,8 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     getSlaveStatus:()=>slaveRuntime?.status?.()||null,
     disconnectSlave:async()=>{ if(slaveRuntime) await slaveRuntime.stop(); },
     getRawLabStatus:()=>rawLab?.status?.()||null,
-    disconnectRawLab:async()=>{ if(rawLab) await rawLab.close(); }
+    disconnectRawLab:async()=>{ if(rawLab) await rawLab.close(); },
+    dataDir:options.dataDir
   });
   const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null,masterRuntime});
   slaveRuntime=installSlaveRoutes({
