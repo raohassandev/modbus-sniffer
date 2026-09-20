@@ -106,6 +106,12 @@ check(!siteAcceptance.includes('http://127.0.0.1:8088/v8/'),'site acceptance mus
 check(!siteAcceptance.includes('/api/v8/status'),'site acceptance must not require legacy v8 health endpoint');
 check(siteAcceptance.includes('npm run acceptance:l8f:final'),'site acceptance must document the final L8-F evidence convergence gate');
 for(const marker of ['runtime','windows','field','physical'])check(l8fFinalize.includes("arg('--"+marker+"')"),`L8-F finalizer missing evidence input: ${marker}`);
+for(const marker of [
+  "spawnSync('git',['rev-parse','HEAD']",
+  "evidence is stale for this checkout",
+  "evidence kind mismatch",
+  "Physical acceptance missing evidence reference"
+])check(l8fFinalize.includes(marker),`L8-F finalizer missing fail-closed marker: ${marker}`);
 for(const marker of ['passive-rtu','master-rtu','master-tcp','external-master-slave','tls-mtls','windows-production']){
   check(l8fFinalize.includes("'"+marker+"'"),`L8-F finalizer missing physical gate: ${marker}`);
   check(l8fPhysicalTemplate.includes('"name": "'+marker+'"'),`L8-F physical template missing: ${marker}`);
