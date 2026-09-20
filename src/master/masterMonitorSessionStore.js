@@ -4,6 +4,9 @@ const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
 
+function ignorableSyncError(error){return ['EPERM','EINVAL','ENOTSUP','ENOSYS'].includes(error?.code);}
+function replaceRetryError(error){return ['EPERM','EEXIST','ENOTEMPTY','EACCES'].includes(error?.code);}
+
 class MasterMonitorSessionStoreError extends Error{
   constructor(code,message,details={}){
     super(message);
@@ -163,9 +166,28 @@ class MasterMonitorSessionStore{
     const normalized=normalizeMonitorStore(input);
     fs.mkdirSync(path.dirname(this.file),{recursive:true});
     const temp=`${this.file}.partial-${process.pid}-${crypto.randomUUID()}`;
+    const backup=`${this.file}.bak`;
+    const existed=fs.existsSync(this.file);
     try{
       fs.writeFileSync(temp,JSON.stringify(normalized,null,2)+'\n',{encoding:'utf8',flag:'wx'});
-      fs.renameSync(temp,this.file);
+      let fd=null;
+      try{
+        fd=fs.openSync(temp,'r');
+        try{fs.fsyncSync(fd);}catch(error){if(!ignorableSyncError(error))throw error;}
+      }finally{if(fd!==null)fs.closeSync(fd);}
+      if(existed)fs.copyFileSync(this.file,backup);
+      try{
+        fs.renameSync(temp,this.file);
+      }catch(error){
+        if(!(existed&&replaceRetryError(error)))throw error;
+        try{
+          fs.unlinkSync(this.file);
+          fs.renameSync(temp,this.file);
+        }catch(second){
+          try{if(!fs.existsSync(this.file)&&fs.existsSync(backup))fs.copyFileSync(backup,this.file);}catch{}
+          throw second;
+        }
+      }
     }catch(error){
       try{fs.rmSync(temp,{force:true});}catch{}
       throw new MasterMonitorSessionStoreError('STORE_WRITE_FAILED','Saved Monitor Sessions could not be written safely',{file:this.file,cause:error.message});
