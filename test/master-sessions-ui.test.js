@@ -38,6 +38,15 @@ test('saved monitors persist a versioned definition and connection profile acros
   assert.match(sessions,/beforeunload/);
 });
 
+test('Monitor Sessions never persist or restore rendered field HTML',()=>{
+  const snapshotBlock=sessions.slice(sessions.indexOf('function snapshotFromDom'),sessions.indexOf('function buildSession'));
+  const restoreBlock=sessions.slice(sessions.indexOf('function restoreSnapshot'),sessions.indexOf('function applyDefinition'));
+  assert.match(snapshotBlock,/rowsHtml:''/);
+  assert.doesNotMatch(snapshotBlock,/masterDataBody'\)\?\.innerHTML/);
+  assert.doesNotMatch(restoreBlock,/snap\.rowsHtml/);
+  assert.match(restoreBlock,/Saved monitor loaded\. Press Read Once or Start Polling/);
+});
+
 test('monitor switching stops polling and disconnects when the saved connection profile changes',()=>{
   const switchBlock=sessions.slice(sessions.indexOf('async function switchTo'),sessions.indexOf('function renderTabs'));
   assert.match(switchBlock,/stopPollingIfNeeded/);
