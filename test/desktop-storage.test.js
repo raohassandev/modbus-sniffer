@@ -33,6 +33,34 @@ test('desktop storage migrates legacy workspace and history once without deletin
   assert.equal(second.migrated,false);
 });
 
+test('desktop storage rolls back a partial failed migration so the next launch can retry cleanly',()=>{
+  const root=temp('mbdesk-rollback-'),legacy=path.join(root,'legacy'),user=path.join(root,'user'),dest=path.join(user,'data');
+  fs.mkdirSync(path.join(legacy,'history'),{recursive:true});
+  fs.writeFileSync(path.join(legacy,'workspaces.json'),'legacy-workspace');
+  fs.writeFileSync(path.join(legacy,'history','p1.jsonl'),'legacy-history\n');
+
+  assert.throws(
+    ()=>prepareDesktopDataDir({
+      userDataRoot:user,
+      legacyCandidates:[legacy],
+      copyTreeImpl:(_src,target)=>{
+        fs.mkdirSync(path.dirname(target),{recursive:true});
+        fs.writeFileSync(target,'partial');
+        throw new Error('simulated migration copy failure');
+      }
+    }),
+    error=>error.code==='DESKTOP_DATA_MIGRATION_FAILED'
+  );
+  assert.equal(fs.existsSync(path.join(dest,'workspaces.json')),false);
+  assert.equal(fs.existsSync(path.join(dest,'history')),false);
+  assert.equal(fs.readFileSync(path.join(legacy,'workspaces.json'),'utf8'),'legacy-workspace');
+
+  const retry=prepareDesktopDataDir({userDataRoot:user,legacyCandidates:[legacy]});
+  assert.equal(retry.migrated,true);
+  assert.equal(fs.readFileSync(path.join(dest,'workspaces.json'),'utf8'),'legacy-workspace');
+  assert.equal(fs.readFileSync(path.join(dest,'history','p1.jsonl'),'utf8'),'legacy-history\n');
+});
+
 test('desktop storage never merges legacy data into an existing user workspace',()=>{
   const root=temp('mbdesk-safe-'),legacy=path.join(root,'legacy'),user=path.join(root,'user'),dest=path.join(user,'data');
   fs.mkdirSync(legacy,{recursive:true});fs.mkdirSync(dest,{recursive:true});
