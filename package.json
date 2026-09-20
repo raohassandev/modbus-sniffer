@@ -17,7 +17,7 @@
     "check:v8": "node scripts/check-v8-syntax.js",
     "version:check": "node scripts/version-sync.js",
     "audit:runtime": "npm audit --omit=dev --audit-level=high",
-    "quality": "npm run version:check && npm run lint && npm run check:v8",
+    "quality": "npm run version:check && npm run audit:source && npm run lint && npm run check:syntax && npm run check:v8",
     "benchmark:v8": "node scripts/benchmark-v8.js",
     "smoke": "node scripts/smoke.js",
     "acceptance": "node scripts/acceptance.js",
@@ -26,14 +26,15 @@
     "release:gate:mac": "bash scripts/release-gate-mac.sh",
     "field-check": "node scripts/field-check.js",
     "discover": "node scripts/discover.js",
-    "e2e": "playwright test",
+    "e2e": "npm run e2e:unified && npm run e2e:compat",
     "desktop:install": "npm --prefix desktop install",
     "desktop": "npm --prefix desktop start",
     "desktop:win": "npm --prefix desktop run dist:win",
     "preflight": "node scripts/source-preflight.js",
     "audit:source": "node scripts/static-release-audit.js",
     "e2e:unified": "playwright test --config=playwright.unified.config.js",
-    "e2e:compat": "playwright test e2e/v8-*.spec.js"
+    "e2e:compat": "playwright test --config=playwright.compat.config.js",
+    "check:syntax": "node scripts/check-js-syntax.js"
   },
   "engines": {
     "node": ">=20"
