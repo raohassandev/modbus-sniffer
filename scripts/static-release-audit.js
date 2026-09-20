@@ -49,6 +49,10 @@ check(versionSource.includes("PRODUCT_NAME = 'Modbus Engineering Tool'"),'produc
 check(desktop.version===pkg.version,'desktop version must match package version');
 check(desktop.build?.productName==='Modbus Engineering Tool','desktop productName must be unified');
 check(desktop.build?.artifactName==='Modbus-Engineering-Tool-Setup-${version}.${ext}','desktop artifact name must be unified');
+const desktopSrcResource=desktop.build?.extraResources?.find(item=>item.from==='../src');
+const desktopPublicResource=desktop.build?.extraResources?.find(item=>item.from==='../public');
+check(Array.isArray(desktopSrcResource?.filter)&&desktopSrcResource.filter.includes('!index-v8.js'),'packaged desktop must exclude the compatibility launch entrypoint');
+check(Array.isArray(desktopPublicResource?.filter)&&desktopPublicResource.filter.includes('!v8/**'),'packaged desktop must exclude the compatibility web shell');
 
 check(shell.includes('Modbus Engineering Tool'),'stable shell must identify the unified product');
 check(shell.includes('Sniffer · Master · Slave'),'stable shell must identify primary modes');
