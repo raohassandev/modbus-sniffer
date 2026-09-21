@@ -29,6 +29,11 @@ The final source audit also closes these edge cases:
 - [x] desktop readiness is authenticated with a per-process token and rejects health from a backend process that exited or was not launched by the current desktop instance
 - [x] JSON mutation limits are enforced by the parser even without a trusted Content-Length header
 - [x] Discovery Unit-ID limits follow serial vs TCP framing
+- [x] Analyzer device confirmation now requires at least one matched Modbus request↔response; CRC-valid/unmatched serial noise can no longer become a confirmed device
+- [x] unmatched response-like RTU noise cannot seed register values; read inventory is learned only when response context matches a request
+- [x] stable Dashboard/Devices/Analysis/Traffic/Decoder surfaces are transport/channel aware and keep RTU Slaves separate from TCP Unit IDs by deviceKey
+- [x] Dashboard exposes the actual capture source, flags noisy/wrong serial input, and explains that direct PLC→target TCP traffic bypasses the inline analyzer
+- [x] TCP Analyzer UI documents the inline path and includes a fixed-port-502 preset for PLC clients whose Modbus TCP block cannot change port
 - [x] industrial Network Discovery source scope is complete with bounded large-range scanning, verified Modbus identification, persistent inventory/topology/history and safe Master handoff
 - [x] Master TCP/read reliability hardening closes dropped-session recovery, protocol-appropriate error semantics and actionable polling diagnostics
 - [x] UDP Slave peers expire after bounded idle retention instead of exhausting the peer table indefinitely
