@@ -64,6 +64,12 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   app.post('/api/network/aux-discovery',async(q,r)=>{
     try{
       const out=await auxiliaryDiscovery({ssdp:q.body?.ssdp!==false,mdns:q.body?.mdns!==false,wsd:q.body?.wsd!==false,dhcp:q.body?.dhcp!==false,timeoutMs:Number(q.body?.timeoutMs||1200)});
+      const expectedDhcp=new Set((Array.isArray(q.body?.expectedDhcpServers)?q.body.expectedDhcpServers:String(q.body?.expectedDhcpServers||'').split(/[\s,;]+/)).map(String).map(x=>x.trim()).filter(Boolean));
+      const dhcpServers=[...new Set(out.results.filter(x=>x.method==='dhcp-os'&&x.ip).map(x=>x.ip))];
+      const findings=[];
+      if(dhcpServers.length>1)findings.push({type:'multiple-dhcp-servers',severity:'warning',servers:dhcpServers,message:`${dhcpServers.length} DHCP servers were observed in the local OS network context.`});
+      if(expectedDhcp.size)for(const ip of dhcpServers)if(!expectedDhcp.has(ip))findings.push({type:'unexpected-dhcp-server',severity:'critical',ip,servers:dhcpServers,message:`DHCP server ${ip} is not in the expected-server list.`});
+      for(const finding of findings)store.addEvent(project(),{type:finding.type,source:'dhcp-context',severity:finding.severity,ip:finding.ip||null,details:finding});
       const merged=[];
       for(const row of out.results){
         if(!row.ip)continue;
@@ -72,7 +78,7 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
         const host=store.mergeHost(project(),{...existing,ip:row.ip,hostname,auxDiscovery:[...(existing.auxDiscovery||[]),row].slice(-64),alive:true,state:'online',lastSeen:new Date().toISOString()},row.source||row.method||'aux-discovery');
         merged.push(host);
       }
-      broadcast('network-aux-discovery',{summary:out.summary,hosts:merged});r.json({...out,hosts:merged});
+      broadcast('network-aux-discovery',{summary:out.summary,hosts:merged,findings});r.json({...out,hosts:merged,findings});
     }catch(e){r.status(400).json({error:e.message,code:e.code||null});}
   });
   app.post('/api/network/targets/preview',(q,r)=>{
