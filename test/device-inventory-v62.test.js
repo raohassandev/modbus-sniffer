@@ -18,6 +18,7 @@ test('request-only Unit/Slave IDs are unconfirmed and are not counted as devices
   assert.equal(status.totals.unconfirmedDevices,1);
   assert.equal(device.confirmed,false);
   assert.equal(device.status,'unconfirmed');
+  assert.equal(state.getRegisters({limit:20}).length,0);
 });
 
 test('an unmatched response-like frame remains unconfirmed even when CRC/shape is valid',()=>{
