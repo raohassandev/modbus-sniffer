@@ -39,6 +39,7 @@
             <label>Host concurrency<input id="ndHostConcurrency" type="number" min="1" max="256" value="72"></label>
             <label>Service concurrency<input id="ndServiceConcurrency" type="number" min="1" max="32" value="8"></label>
             <label>Custom TCP ports<input id="ndCustomPorts" placeholder="502, 802, 1502"></label>
+            <label>Expected DHCP servers<input id="ndExpectedDhcp" placeholder="192.168.1.1, 192.168.1.2"></label>
             <label class="nd-check"><input id="ndIcmp" type="checkbox" checked> Use ICMP fallback</label>
             <label class="nd-check"><input id="ndVerifyModbus" type="checkbox" checked> Verify Modbus protocol</label>
             <label class="nd-check"><input id="ndEnrichWeb" type="checkbox" checked> HTTP/TLS metadata</label>
@@ -150,7 +151,7 @@
   q('ndPause').addEventListener('click',async()=>renderStatus(await api('/api/network/scan/pause',{method:'POST'})));
   q('ndResume').addEventListener('click',async()=>renderStatus(await api('/api/network/scan/resume',{method:'POST'})));
   q('ndCancel').addEventListener('click',async()=>renderStatus(await api('/api/network/scan/cancel',{method:'POST'})));
-  q('ndAux').addEventListener('click',async()=>{try{q('ndAux').disabled=true;const out=await api('/api/network/aux-discovery',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({timeoutMs:1500})});notify(`Aux discovery found ${out.summary?.ips||0} unique IP(s)`);await loadInventory();}catch(e){notify(e.message,true);}finally{q('ndAux').disabled=false;}});
+  q('ndAux').addEventListener('click',async()=>{try{q('ndAux').disabled=true;const expectedDhcpServers=q('ndExpectedDhcp').value.split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean);const out=await api('/api/network/aux-discovery',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({timeoutMs:1500,expectedDhcpServers})});const findingText=out.findings?.length?` · ${out.findings.length} DHCP finding(s)`:'';notify(`Aux discovery found ${out.summary?.ips||0} unique IP(s)${findingText}`,Boolean(out.findings?.some(x=>x.severity==='critical')));await loadInventory();}catch(e){notify(e.message,true);}finally{q('ndAux').disabled=false;}});
 
   async function loadInventory(){
     const params=new URLSearchParams();if(q('ndInventorySearch').value.trim())params.set('search',q('ndInventorySearch').value.trim());if(q('ndInventoryClass').value)params.set('classification',q('ndInventoryClass').value);
