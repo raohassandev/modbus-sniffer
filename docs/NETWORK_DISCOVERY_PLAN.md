@@ -3,7 +3,29 @@
 **Status date:** 2026-09-21  
 **Branch:** `v8-release-completion`  
 **Parent product:** Modbus Engineering Tool  
-**Execution model:** live development lanes; no scheduler/background automation is required for project delivery.
+**Execution model:** live development lanes; no scheduler/background automation is required for project delivery.  
+**Implementation status:** **SOURCE COMPLETE — 2026-09-21**
+
+## Implementation closure
+
+The approved Industrial Network Discovery & Device Intelligence source scope is implemented in the unified product. The source now includes:
+
+- bounded IPv4 host/range/CIDR parsing plus compact ranges such as `192.168.1-254.1-254`;
+- bounded IPv6 host/CIDR support with the same target-count safety gates;
+- local-interface/subnet suggestions, neighbor-table enrichment, ICMP fallback and staged TCP service discovery;
+- service and industrial-candidate classification with property provenance;
+- semantic Modbus TCP verification that rejects an open port or echoed request as proof of Modbus;
+- Unit-ID/FC43 continuation into the existing Modbus discovery workflow;
+- persistent project inventory, bounded scan history, baselines, comparisons and event history;
+- duplicate-IP / multi-IP-MAC findings and DHCP-context findings;
+- offline MAC/OUI vendor enrichment, optional safe Nmap enrichment, explicit read-only SNMP/LLDP enrichment, SSDP/mDNS/WSD context discovery;
+- evidence-driven topology, subnet utilization and searchable/pan-zoom topology UI;
+- device detail tabs, diagnostics, monitoring, filtering, configurable result columns and exports;
+- safe **Open in Master** handoff with `connect:false` and `transmit:false`;
+- integration into XLSX/PDF/ZIP/CSV evidence exports and packaged-desktop data migration;
+- deterministic unit/integration/browser contracts covering target safety, persistence, Modbus false positives, diagnostics, protocol parsers and the integrated UI workflow.
+
+Source completion is separate from representative field-network and clean-machine release evidence, which remains governed by the existing exact-head release gates.
 
 ## Goal
 
