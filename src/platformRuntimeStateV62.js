@@ -18,7 +18,7 @@ class PlatformRuntimeStateV62 extends PlatformRuntimeState {
 
   _recordSlave(event){if(this._isRtuBroadcast(event))return;return super._recordSlave(event);}
   _recordPollRequest(event){if(this._isRtuBroadcast(event))return;return super._recordPollRequest(event);}
-  _recordRegisters(tx,timestamp){if(this._isRtuBroadcast(tx))return;return super._recordRegisters(tx,timestamp);}
+  _recordRegisters(tx,timestamp){if(this._isRtuBroadcast(tx))return;if(tx?.direction==='RSP'&&!tx?.request)return;return super._recordRegisters(tx,timestamp);}
 
   recordNoise(count,timestamp=Date.now(),channelId=null){super.recordNoise(count,timestamp);if(channelId){const key=String(channelId);this.rtuNoiseByChannel.set(key,(this.rtuNoiseByChannel.get(key)||0)+Number(count||0));}}
 
@@ -57,15 +57,17 @@ class PlatformRuntimeStateV62 extends PlatformRuntimeState {
   _analysisReferenceTime(){if(this.captureSource==='capture'&&Number.isFinite(this.captureReferenceTime))return this.captureReferenceTime;if(this.captureSource==='replay'&&this.transactions.length){let latest=0;for(const t of this.transactions)latest=Math.max(latest,Number(t.timestamp)||0);return latest||Date.now();}return Date.now();}
 
   _deviceSummary(device){
-    const summary=super._deviceSummary(device),broadcast=this._isRtuBroadcast(summary),confirmed=!broadcast&&Number(summary.responses||0)>0&&Number.isFinite(Number(summary.lastResponseAt));
+    const summary=super._deviceSummary(device),broadcast=this._isRtuBroadcast(summary);
+    const matchedResponses=Math.max(0,Number(summary.responses||0)-Number(summary.unmatchedResponses||0));
+    const confirmed=!broadcast&&matchedResponses>0&&Number.isFinite(Number(summary.lastResponseAt));
     const reference=this._analysisReferenceTime();
     if(!confirmed){
-      return {...summary,confirmed:false,status:broadcast?'broadcast':'unconfirmed',healthScore:null,statusReference:this.captureSource,referenceTime:reference,lastConfirmedAt:null};
+      return {...summary,matchedResponses,confirmed:false,status:broadcast?'broadcast':'unconfirmed',healthScore:null,statusReference:this.captureSource,referenceTime:reference,lastConfirmedAt:null};
     }
     const polls=this.getPollGroups({deviceKey:device.deviceKey}),intervals=polls.map(p=>p.medianIntervalMs).filter(Number.isFinite),expected=intervals.length?median(intervals):null;
     const silenceLimit=Math.max(3000,Number(expected||0)*3),age=Math.max(0,reference-Number(summary.lastResponseAt||reference)),desired=age<=silenceLimit?'online':age<=silenceLimit*3?'silent':'offline';
     const oldPenalty=summary.status==='offline'?30:summary.status==='silent'?10:0,newPenalty=desired==='offline'?30:desired==='silent'?10:0;
-    return {...summary,confirmed:true,status:desired,healthScore:Math.max(0,Math.min(100,Number(summary.healthScore||0)+oldPenalty-newPenalty)),statusReference:this.captureSource,referenceTime:reference,lastConfirmedAt:summary.lastResponseAt};
+    return {...summary,matchedResponses,confirmed:true,status:desired,healthScore:Math.max(0,Math.min(100,Number(summary.healthScore||0)+oldPenalty-newPenalty)),statusReference:this.captureSource,referenceTime:reference,lastConfirmedAt:summary.lastResponseAt};
   }
 
   getDevices(filters={}){

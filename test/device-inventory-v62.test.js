@@ -6,7 +6,7 @@ const {PlatformRuntimeStateV62}=require('../src/platformRuntimeStateV62');
 const {buildRtuChannel,buildTcpChannel,makeDeviceKey}=require('../src/transportIdentity');
 
 function requestTx(channel,unitId,address=100){return{direction:'REQ',transport:channel.transport,channel,decoded:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',startAddress:address,quantity:1}};}
-function responseTx(channel,unitId,value,address=100,requestTimestamp=Date.now()-20){return{direction:'RSP',transport:channel.transport,channel,decoded:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',registers:[{address,value}]},request:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',startAddress:address,quantity:1,timestamp:requestTimestamp},rttMs:20};}
+function responseTx(channel,unitId,value,address=100,requestTimestamp=Date.now()-20,{matched=true}={}){return{direction:'RSP',matched,transport:channel.transport,channel,decoded:{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',registers:[{address,value}]},request:matched?{transport:channel.transport,slaveId:unitId,unitId,functionCode:3,functionName:'Read Holding Registers',startAddress:address,quantity:1,timestamp:requestTimestamp}:null,rttMs:matched?20:null};}
 
 test('request-only Unit/Slave IDs are unconfirmed and are not counted as devices',()=>{
   const state=new PlatformRuntimeStateV62(),channel=buildRtuChannel({port:'COM7',identity:{serialNumber:'COUNT-A'},config:{baudRate:9600}}),now=Date.now();
@@ -17,6 +17,18 @@ test('request-only Unit/Slave IDs are unconfirmed and are not counted as devices
   assert.equal(status.totals.observedUnitIds,1);
   assert.equal(status.totals.unconfirmedDevices,1);
   assert.equal(device.confirmed,false);
+  assert.equal(device.status,'unconfirmed');
+  assert.equal(state.getRegisters({limit:20}).length,0);
+});
+
+test('an unmatched response-like frame remains unconfirmed even when CRC/shape is valid',()=>{
+  const state=new PlatformRuntimeStateV62(),channel=buildRtuChannel({port:'COM7',identity:{serialNumber:'NOISE-A'},config:{baudRate:9600}}),now=Date.now();
+  state.recordFrame(responseTx(channel,31,999,100,now-20,{matched:false}),now,Buffer.from([31,3,2,3,231,0,0]));
+  const status=state.getStatus(),device=state.getDevices()[0];
+  assert.equal(status.totals.devices,0);
+  assert.equal(status.totals.unconfirmedDevices,1);
+  assert.equal(device.confirmed,false);
+  assert.equal(device.matchedResponses,0);
   assert.equal(device.status,'unconfirmed');
 });
 
@@ -31,6 +43,11 @@ test('a valid response promotes an addressed ID to a confirmed device',()=>{
   assert.equal(status.totals.onlineDevices,1);
   assert.equal(device.confirmed,true);
   assert.equal(device.status,'online');
+  assert.equal(device.matchedResponses,1);
+  const regs=state.getRegisters({deviceKey:device.deviceKey,limit:20});
+  assert.equal(regs.length,1);
+  assert.equal(regs[0].address,100);
+  assert.equal(regs[0].lastValue,123);
 });
 
 test('device liveness follows last valid response, not continuing master requests',()=>{

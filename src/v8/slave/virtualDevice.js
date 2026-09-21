@@ -118,6 +118,9 @@ class VirtualDevice {
     sizes = {},
     identity = {},
     writableAreas = {},
+    exceptionStatus = 0,
+    fileRecords = [],
+    fifoQueues = [],
   }) {
     this.unitId = validateUnitId(unitId);
     const defaults = {
@@ -128,6 +131,10 @@ class VirtualDevice {
     };
     const configured = { ...defaults, ...sizes };
     this.writableAreas = normalizeWritableAreas(writableAreas);
+    if (!Number.isInteger(exceptionStatus) || exceptionStatus < 0 || exceptionStatus > 0xFF) throw new VirtualDeviceError('INVALID_EXCEPTION_STATUS', 'exceptionStatus must be 0..255', 3, { exceptionStatus });
+    this.exceptionStatus = exceptionStatus;
+    this.fileRecords = new Map();
+    this.fifoQueues = new Map();
     this.areas = Object.freeze({
       coils: new MemoryArea({ name: 'coils', size: configured.coils, bit: true, writable: this.writableAreas.coils }),
       discreteInputs: new MemoryArea({ name: 'discreteInputs', size: configured.discreteInputs, bit: true, writable: false }),
@@ -141,6 +148,12 @@ class VirtualDevice {
       revision: 'v8',
       ...identity,
     });
+    for (const record of Array.isArray(fileRecords) ? fileRecords : []) {
+      this.writeFileRecord(record.fileNumber, record.recordNumber, record.values || [], { seed: true });
+    }
+    for (const queue of Array.isArray(fifoQueues) ? fifoQueues : []) {
+      this.seedFifo(queue.address, queue.values || []);
+    }
   }
 
   setIdentity(identity = {}) {
@@ -170,6 +183,67 @@ class VirtualDevice {
 
     if (readDeviceIdCode !== 4) ids = ids.filter((id) => id >= objectId);
     return ids.map((id) => ({ id, value: Buffer.from(this.identity.get(id)) }));
+  }
+
+  readFileRecord(fileNumber, recordNumber, recordLength) {
+    if (!Number.isInteger(fileNumber) || fileNumber < 0 || fileNumber > 0xFFFF) throw new VirtualDeviceError('ILLEGAL_VALUE', 'fileNumber must be 0..65535', 3, { fileNumber });
+    if (!Number.isInteger(recordNumber) || recordNumber < 0 || recordNumber > 0xFFFF) throw new VirtualDeviceError('ILLEGAL_VALUE', 'recordNumber must be 0..65535', 3, { recordNumber });
+    if (!Number.isInteger(recordLength) || recordLength < 1 || recordLength > 125) throw new VirtualDeviceError('ILLEGAL_VALUE', 'recordLength must be 1..125', 3, { recordLength });
+    const file = this.fileRecords.get(fileNumber);
+    const out = [];
+    for (let offset = 0; offset < recordLength; offset += 1) out.push(file?.get(recordNumber + offset) ?? 0);
+    return out;
+  }
+
+  writeFileRecord(fileNumber, recordNumber, values, { seed = false } = {}) {
+    if (!Number.isInteger(fileNumber) || fileNumber < 0 || fileNumber > 0xFFFF) throw new VirtualDeviceError('ILLEGAL_VALUE', 'fileNumber must be 0..65535', 3, { fileNumber });
+    if (!Number.isInteger(recordNumber) || recordNumber < 0 || recordNumber > 0xFFFF) throw new VirtualDeviceError('ILLEGAL_VALUE', 'recordNumber must be 0..65535', 3, { recordNumber });
+    if (!Array.isArray(values) || !values.length || values.length > 121) throw new VirtualDeviceError('ILLEGAL_VALUE', 'file record values must contain 1..121 registers', 3, { length: values?.length });
+    const normalized = values.map((value, index) => {
+      if (!Number.isInteger(value) || value < 0 || value > 0xFFFF) throw new VirtualDeviceError('ILLEGAL_VALUE', 'file record value must be 0..65535', 3, { index, value });
+      return value;
+    });
+    let file = this.fileRecords.get(fileNumber);
+    if (!file) { file = new Map(); this.fileRecords.set(fileNumber, file); }
+    normalized.forEach((value, index) => file.set(recordNumber + index, value));
+    return normalized;
+  }
+
+  exportFileRecords() {
+    const records = [];
+    for (const [fileNumber, file] of [...this.fileRecords.entries()].sort((a,b)=>a[0]-b[0])) {
+      const addresses = [...file.keys()].sort((a,b)=>a-b);
+      if (!addresses.length) continue;
+      let start = addresses[0], values = [], previous = start - 1;
+      const flush = () => { if (values.length) records.push({ fileNumber, recordNumber: start, values: [...values] }); values = []; };
+      for (const address of addresses) {
+        if (address !== previous + 1) { flush(); start = address; }
+        values.push(file.get(address));
+        previous = address;
+      }
+      flush();
+    }
+    return records;
+  }
+
+  seedFifo(address, values) {
+    if (!Number.isInteger(address) || address < 0 || address > 0xFFFF) throw new VirtualDeviceError('ILLEGAL_ADDRESS', 'FIFO pointer address must be 0..65535', 2, { address });
+    if (!Array.isArray(values) || values.length < 1 || values.length > 31) throw new VirtualDeviceError('ILLEGAL_VALUE', 'FIFO values must contain 1..31 registers', 3, { length: values?.length });
+    const normalized = values.map((value, index) => {
+      if (!Number.isInteger(value) || value < 0 || value > 0xFFFF) throw new VirtualDeviceError('ILLEGAL_VALUE', 'FIFO value must be 0..65535', 3, { index, value });
+      return value;
+    });
+    this.fifoQueues.set(address, normalized);
+    return [...normalized];
+  }
+
+  readFifo(address) {
+    if (!Number.isInteger(address) || address < 0 || address > 0xFFFF) throw new VirtualDeviceError('ILLEGAL_ADDRESS', 'FIFO pointer address must be 0..65535', 2, { address });
+    return [...(this.fifoQueues.get(address) || [0])];
+  }
+
+  exportFifoQueues() {
+    return [...this.fifoQueues.entries()].sort((a,b)=>a[0]-b[0]).map(([address, values]) => ({ address, values: [...values] }));
   }
 
   read(area, address, quantity) {

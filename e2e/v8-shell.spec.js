@@ -28,8 +28,13 @@ test.describe('v8 application shell', () => {
 
     const row = page.locator('tr[data-connection-id="e2e-virtual"]');
     await expect(row).toBeVisible();
+    await expect(row).toHaveAttribute('tabindex', '0');
     await expect(row.getByText('E2E Virtual')).toBeVisible();
     await expect(row.getByText('LOCKED')).toBeVisible();
+
+    await row.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('tr[data-connection-id="e2e-virtual"]')).toHaveAttribute('aria-selected', 'true');
 
     await row.getByRole('button', { name: 'Open' }).click();
     await expect(row.getByText('OPEN')).toBeVisible();
@@ -39,7 +44,7 @@ test.describe('v8 application shell', () => {
     await expect(row.getByText('CLOSED')).toBeVisible();
   });
 
-  test('command palette and document tabs provide quick workspace navigation', async ({ page }) => {
+  test('command palette and document tabs provide keyboard quick navigation', async ({ page }) => {
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+K' : 'Control+K');
     const palette = page.locator('.command-palette');
     await expect(palette).toBeVisible();
@@ -47,8 +52,12 @@ test.describe('v8 application shell', () => {
     await palette.getByRole('button', { name: 'Open Settings' }).click();
 
     await expect(page.getByRole('heading', { name: 'Workspace Settings' })).toBeVisible();
-    await expect(page.locator('.document-tab', { hasText: 'Settings' })).toBeVisible();
-    await page.locator('.document-tab', { hasText: 'Connections' }).click();
+    const settingsTab = page.getByRole('tab', { name: /Settings/ });
+    const connectionsTab = page.getByRole('tab', { name: /Connections/ });
+    await expect(settingsTab).toHaveAttribute('aria-selected', 'true');
+    await settingsTab.focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(connectionsTab).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('heading', { name: 'Connection Center' })).toBeVisible();
   });
 
@@ -61,4 +70,24 @@ test.describe('v8 application shell', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     await expect(page.locator('html')).toHaveAttribute('data-density', density);
   });
+
+  for (const viewport of [
+    { name: '1366x768', width: 1366, height: 768 },
+    { name: '1920x1080', width: 1920, height: 1080 },
+  ]) {
+    test(`primary shell fits ${viewport.name} without document-level horizontal overflow`, async ({ page }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'Connection Center' })).toBeVisible();
+      await expect(page.locator('.app-bar')).toBeVisible();
+      await expect(page.locator('.primary-nav')).toBeVisible();
+      const metrics = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+        devicePixelRatio: window.devicePixelRatio,
+      }));
+      expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth);
+      expect(metrics.devicePixelRatio).toBeGreaterThanOrEqual(1);
+    });
+  }
 });

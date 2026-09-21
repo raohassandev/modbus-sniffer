@@ -1,12 +1,12 @@
 .simulator-layout {
   display: grid;
-  grid-template-columns: minmax(260px, .8fr) minmax(0, 2.2fr);
+  grid-template-columns: minmax(300px, .9fr) minmax(0, 1.8fr);
   gap: 14px;
   align-items: start;
 }
 
-.simulator-stack { display: grid; gap: 14px; }
-.simulator-card { min-width: 0; }
+.simulator-stack { display: grid; gap: 14px; min-width: 0; }
+.simulator-card { min-width: 0; padding: 14px; }
 .simulator-list { display: grid; gap: 7px; margin-top: 10px; }
 .simulator-list-item {
   display: grid;
@@ -26,12 +26,13 @@
 
 .simulator-form-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 10px;
 }
-.simulator-form-grid.compact { grid-template-columns: repeat(4, minmax(110px, 1fr)); }
+.simulator-form-grid.compact { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
+.simulator-form-grid > * { min-width: 0; }
 .simulator-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
-.simulator-subtitle { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
+.simulator-subtitle { color: var(--muted); font-size: 12px; line-height: 1.4; margin: 2px 0 0; }
 
 .simulator-memory-values {
   display: grid;
@@ -48,7 +49,7 @@
   padding: 7px;
 }
 .simulator-memory-cell span { display: block; color: var(--muted); font-size: 10px; }
-.simulator-memory-cell strong { display: block; margin-top: 3px; font-family: var(--mono, ui-monospace, monospace); }
+.simulator-memory-cell strong { display: block; margin-top: 3px; font-family: var(--font-mono, ui-monospace, monospace); }
 
 .simulator-warning {
   padding: 11px 12px;
@@ -57,28 +58,30 @@
   background: color-mix(in srgb, var(--danger) 10%, var(--surface));
 }
 .simulator-warning strong { color: var(--danger); }
-.simulator-warning p { margin: 4px 0 0; color: var(--muted); }
+.simulator-warning p { margin: 4px 0 0; color: var(--muted); line-height: 1.4; }
 
 .simulator-lab-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(100px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 8px;
   margin-top: 10px;
 }
+.simulator-lab-grid > * { min-width: 0; }
 
 .simulator-audit { max-height: 260px; overflow: auto; }
 .simulator-json {
+  width: 100%;
+  min-width: 0;
   min-height: 74px;
   resize: vertical;
-  font-family: var(--mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   line-height: 1.35;
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 1280px) {
   .simulator-layout { grid-template-columns: 1fr; }
-  .simulator-form-grid, .simulator-form-grid.compact, .simulator-lab-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
 }
 
-@media (max-width: 680px) {
+@media (max-width: 760px) {
   .simulator-form-grid, .simulator-form-grid.compact, .simulator-lab-grid { grid-template-columns: 1fr; }
 }

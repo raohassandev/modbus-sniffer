@@ -12,11 +12,12 @@ const BAD_REQUEST = new Set([
   'DIGITAL_TWIN_APPROVAL_REQUIRED',
 ]);
 const NOT_FOUND = new Set(['TWIN_NOT_FOUND', 'PROJECT_NOT_FOUND', 'SERVER_NOT_FOUND']);
+const CONFLICT = new Set(['SERVER_RUNNING', 'CONNECTION_ACTIVE', 'CONNECTION_ALREADY_ASSIGNED', 'UNIT_ID_CONFLICT', 'TWIN_TARGET_CONFLICT', 'TWIN_SNAPSHOT_UNAVAILABLE']);
 
 function digitalTwinErrorStatus(error) {
   if (BAD_REQUEST.has(error?.code)) return 400;
   if (NOT_FOUND.has(error?.code)) return 404;
-  if (['SERVER_RUNNING', 'CONNECTION_ACTIVE', 'CONNECTION_ALREADY_ASSIGNED', 'UNIT_ID_CONFLICT'].includes(error?.code)) return 409;
+  if (CONFLICT.has(error?.code)) return 409;
   return httpErrorStatus(error);
 }
 
@@ -62,8 +63,12 @@ function mountDigitalTwinRoutes({ app, digitalTwin, flags, assertFeature, broadc
     const body = req.body || {};
     const hasTargetPatch = ['targetConnectionId', 'serverId', 'framing', 'receivePollMs', 'writableAreas', 'name']
       .some((field) => Object.prototype.hasOwnProperty.call(body, field));
-    if (hasTargetPatch) digitalTwin.retarget(req.params.twinId, body);
-    const twin = digitalTwin.apply(req.params.twinId);
+    const twin = hasTargetPatch && typeof digitalTwin.applyWithPatch === 'function'
+      ? digitalTwin.applyWithPatch(req.params.twinId, body)
+      : (() => {
+          if (hasTargetPatch) digitalTwin.retarget(req.params.twinId, body);
+          return digitalTwin.apply(req.params.twinId);
+        })();
     broadcast({ type: 'digital-twin.applied', twinId: twin.twinId, serverId: twin.target.serverId });
     res.json({ ok: true, twin });
   }));

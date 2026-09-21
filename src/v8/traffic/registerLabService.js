@@ -2,6 +2,7 @@
 
 const { EventEmitter } = require('node:events');
 const protocol = require('../protocol');
+const registerCodec = require('../../register/registerCodec');
 
 const READ_AREAS = Object.freeze({
   [protocol.FC.READ_COILS]: 'coils',
@@ -10,22 +11,8 @@ const READ_AREAS = Object.freeze({
   [protocol.FC.READ_INPUT_REGISTERS]: 'inputRegisters',
 });
 
-const TYPE_WORDS = Object.freeze({
-  bool: 1,
-  uint16: 1,
-  int16: 1,
-  uint32: 2,
-  int32: 2,
-  float32: 2,
-  uint64: 4,
-  int64: 4,
-  float64: 4,
-  ascii2: 1,
-  ascii4: 2,
-  ascii8: 4,
-});
-
-const VALID_TYPES = new Set(Object.keys(TYPE_WORDS));
+const TYPE_WORDS = registerCodec.TYPE_WORDS;
+const VALID_TYPES = registerCodec.VALID_TYPES;
 
 class RegisterLabError extends Error {
   constructor(code, message, details = {}) {
@@ -180,34 +167,7 @@ class RegisterLabService extends EventEmitter {
     if (point.area === 'coils' || point.area === 'discreteInputs') {
       return Object.freeze([{ type: 'bool', words: 1, byteOrder: null, value: Boolean(point.rawValue) }]);
     }
-    const words = this._contiguousWords(point, 4);
-    const candidates = [];
-    const add = (type, count, orders) => {
-      if (words.length < count) return;
-      const bytes = wordsToBuffer(words.slice(0, count));
-      for (const byteOrder of orders) {
-        try {
-          let value;
-          if (type.startsWith('uint')) value = protocol.decodeInteger(bytes, { bits: count * 16, signed: false, order: byteOrder });
-          else if (type.startsWith('int')) value = protocol.decodeInteger(bytes, { bits: count * 16, signed: true, order: byteOrder });
-          else if (type.startsWith('float')) value = protocol.decodeFloat(bytes, { bits: count * 16, order: byteOrder });
-          else value = protocol.decodeAscii(bytes);
-          candidates.push(Object.freeze({ type, words: count, byteOrder, value: jsonValue(value) }));
-        } catch { /* an invalid interpretation is simply omitted */ }
-      }
-    };
-    add('uint16', 1, ['AB']);
-    add('int16', 1, ['AB']);
-    add('uint32', 2, ['ABCD', 'CDAB', 'BADC', 'DCBA']);
-    add('int32', 2, ['ABCD', 'CDAB', 'BADC', 'DCBA']);
-    add('float32', 2, ['ABCD', 'CDAB', 'BADC', 'DCBA']);
-    add('uint64', 4, ['ABCDEFGH', 'GHEFCDAB', 'BADCFEHG', 'HGFEDCBA']);
-    add('int64', 4, ['ABCDEFGH', 'GHEFCDAB', 'BADCFEHG', 'HGFEDCBA']);
-    add('float64', 4, ['ABCDEFGH', 'GHEFCDAB', 'BADCFEHG', 'HGFEDCBA']);
-    add('ascii2', 1, ['AB']);
-    add('ascii4', 2, ['ABCD', 'CDAB', 'BADC', 'DCBA']);
-    add('ascii8', 4, ['ABCDEFGH', 'GHEFCDAB', 'BADCFEHG', 'HGFEDCBA']);
-    return Object.freeze(candidates);
+    return registerCodec.interpretationMatrix(this._contiguousWords(point, 8));
   }
 
   getDefinition(sourceKey, projectId = null) {
@@ -393,45 +353,7 @@ class RegisterLabService extends EventEmitter {
   _engineering(point, definition) {
     if (!definition) return null;
     const wordsNeeded = TYPE_WORDS[definition.type] || 1;
-    const words = this._contiguousWords(point, wordsNeeded);
-    if (words.length < wordsNeeded) return Object.freeze({ available: false, reason: `Needs ${wordsNeeded} contiguous register word(s)` });
-    try {
-      let decoded;
-      if (definition.type === 'bool') decoded = Boolean(point.rawValue);
-      else {
-        const bytes = wordsToBuffer(words.slice(0, wordsNeeded));
-        if (definition.type.startsWith('uint')) decoded = protocol.decodeInteger(bytes, { bits: wordsNeeded * 16, signed: false, order: definition.byteOrder });
-        else if (definition.type.startsWith('int')) decoded = protocol.decodeInteger(bytes, { bits: wordsNeeded * 16, signed: true, order: definition.byteOrder });
-        else if (definition.type.startsWith('float')) decoded = protocol.decodeFloat(bytes, { bits: wordsNeeded * 16, order: definition.byteOrder });
-        else decoded = protocol.decodeAscii(bytes);
-      }
-      let value = decoded;
-      if (typeof decoded === 'number') value = decoded * definition.scale + definition.offset;
-      const enumLabel = definition.enum?.[String(decoded)] ?? definition.enum?.[String(value)] ?? null;
-      const activeBits = [];
-      if (Number.isInteger(Number(decoded)) && definition.bitfield) {
-        for (const [bit, label] of Object.entries(definition.bitfield)) {
-          const bitIndex = Number(bit);
-          if (Number.isInteger(bitIndex) && bitIndex >= 0 && bitIndex < 64 && (BigInt(Math.trunc(Number(decoded))) & (1n << BigInt(bitIndex))) !== 0n) activeBits.push(String(label));
-        }
-      }
-      const numericValue = typeof value === 'number' ? value : null;
-      const outOfLimits = numericValue != null && definition.limits
-        ? (definition.limits.min != null && numericValue < definition.limits.min) || (definition.limits.max != null && numericValue > definition.limits.max)
-        : false;
-      return Object.freeze({
-        available: true,
-        rawDecoded: jsonValue(decoded),
-        value: jsonValue(value),
-        display: enumLabel || (typeof value === 'number' ? value.toFixed(definition.precision) : String(value)),
-        enumLabel,
-        activeBits: Object.freeze(activeBits),
-        unit: definition.unit || '',
-        outOfLimits,
-      });
-    } catch (error) {
-      return Object.freeze({ available: false, reason: error.message });
-    }
+    return registerCodec.decodeDefinition(this._contiguousWords(point, wordsNeeded), definition);
   }
 
   _contiguousWords(point, count) {

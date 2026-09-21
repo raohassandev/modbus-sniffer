@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "kind": "modbus-l8f-physical-acceptance",
+  "result": "PENDING",
+  "head": "REPLACE_WITH_EXACT_COMMIT_SHA",
+  "productVersion": "8.0.0",
+  "site": "REPLACE_WITH_SITE_OR_BENCH",
+  "workstation": "REPLACE_WITH_WORKSTATION",
+  "startedAt": null,
+  "completedAt": null,
+  "checks": [
+    {
+      "name": "passive-rtu",
+      "result": "PENDING",
+      "evidence": null,
+      "notes": null
+    },
+    {
+      "name": "master-rtu",
+      "result": "PENDING",
+      "evidence": null,
+      "notes": null
+    },
+    {
+      "name": "master-tcp",
+      "result": "PENDING",
+      "evidence": null,
+      "notes": null
+    },
+    {
+      "name": "external-master-slave",
+      "result": "PENDING",
+      "evidence": null,
+      "notes": null
+    },
+    {
+      "name": "tls-mtls",
+      "result": "PENDING",
+      "evidence": null,
+      "notes": null
+    },
+    {
+      "name": "windows-production",
+      "result": "PENDING",
+      "evidence": null,
+      "notes": null
+    }
+  ],
+  "engineer": null,
+  "notes": null
+}

@@ -6,6 +6,15 @@ const express = require('express');
 const { WebSocketServer, WebSocket } = require('ws');
 const { ConnectionCenterService } = require('./connectionCenterService');
 const { loadFeatureFlags, assertFeature } = require('./featureFlags');
+const { PRODUCT_VERSION } = require('./version');
+const {
+  isLoopbackHostname,
+  loopbackHostGuard,
+  sameOriginMutationGuard,
+  webSocketOriginAllowed,
+  createMutationRateLimiter,
+  createBodyLengthGuard,
+} = require('./security/httpSafety');
 
 function httpErrorStatus(error) {
   const code = error?.code || '';
@@ -31,6 +40,11 @@ function safeJson(value) {
   return JSON.stringify(value, (_key, current) => Buffer.isBuffer(current) ? current.toString('hex').toUpperCase() : current);
 }
 
+function rejectUpgrade(socket, status, reason) {
+  const body = `${reason}\n`;
+  socket.end(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
+}
+
 function startV8WorkbenchServer({
   store,
   broker,
@@ -39,30 +53,41 @@ function startV8WorkbenchServer({
   flags = loadFeatureFlags(),
   publicDir = path.resolve(__dirname, '..', '..', 'public', 'v8'),
   connectionCenter = null,
+  maxWebSocketClients = 128,
+  maxWebSocketPayloadBytes = 64 * 1024,
 } = {}) {
   if (!store) throw new TypeError('store is required');
   if (!broker) throw new TypeError('broker is required');
+  if (!isLoopbackHostname(host)) throw new TypeError('Workbench web host must be a loopback address (127.0.0.0/8, ::1 or localhost)');
+  if (!Number.isInteger(maxWebSocketClients) || maxWebSocketClients < 1 || maxWebSocketClients > 10000) throw new TypeError('maxWebSocketClients must be 1..10000');
+  if (!Number.isInteger(maxWebSocketPayloadBytes) || maxWebSocketPayloadBytes < 1024 || maxWebSocketPayloadBytes > 16 * 1024 * 1024) throw new TypeError('maxWebSocketPayloadBytes must be 1024..16777216');
   assertFeature(flags, 'shell');
   const center = connectionCenter || new ConnectionCenterService({ store, broker });
   center.sync();
 
   const app = express();
   app.disable('x-powered-by');
+  app.use(loopbackHostGuard);
+  app.use(createBodyLengthGuard({ maxBytes: 2 * 1024 * 1024 }));
+  app.use(sameOriginMutationGuard);
+  app.use(createMutationRateLimiter({ windowMs: 60000, max: 240 }));
   app.use(express.json({ limit: '2mb' }));
+  app.use((error, _req, res, next) => {
+    if (error?.type === 'entity.too.large') return res.status(413).json({ ok: false, error: { code: 'BODY_TOO_LARGE', message: 'Request body exceeds 2 MiB' } });
+    if (error instanceof SyntaxError && Object.prototype.hasOwnProperty.call(error, 'body')) return res.status(400).json({ ok: false, error: { code: 'INVALID_JSON', message: 'Request body is not valid JSON' } });
+    return next(error);
+  });
 
   const route = (handler) => async (req, res) => {
-    try {
-      await handler(req, res);
-    } catch (error) {
-      res.status(httpErrorStatus(error)).json(errorPayload(error));
-    }
+    try { await handler(req, res); }
+    catch (error) { res.status(httpErrorStatus(error)).json(errorPayload(error)); }
   };
 
   app.get('/api/v8/status', route(async (_req, res) => {
     const db = store.exportAll();
     res.json({
       ok: true,
-      version: '8-dev',
+      version: PRODUCT_VERSION,
       schemaVersion: db.schemaVersion,
       activeProjectId: db.activeProjectId,
       activeProject: store.getActiveProject(),
@@ -99,10 +124,7 @@ function startV8WorkbenchServer({
       error.code = 'PROJECT_NOT_FOUND';
       throw error;
     }
-    const ui = {
-      ...(project.ui || {}),
-      ...(req.body && typeof req.body === 'object' ? req.body : {}),
-    };
+    const ui = { ...(project.ui || {}), ...(req.body && typeof req.body === 'object' ? req.body : {}) };
     const updated = store.updateProject(req.params.projectId, { ui });
     broadcast({ type: 'project.ui', projectId: req.params.projectId, ui: updated.ui });
     res.json({ ok: true, ui: updated.ui });
@@ -194,31 +216,25 @@ function startV8WorkbenchServer({
   app.get('/v8/*splat', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: maxWebSocketPayloadBytes });
 
   function broadcast(event) {
     const payload = safeJson({ at: Date.now(), ...event });
-    for (const client of wss.clients) {
-      if (client.readyState === WebSocket.OPEN) client.send(payload);
-    }
+    for (const client of wss.clients) if (client.readyState === WebSocket.OPEN) client.send(payload);
   }
 
   server.on('upgrade', (request, socket, head) => {
-    const pathname = new URL(request.url || '/', 'http://localhost').pathname;
-    if (pathname !== '/ws/v8') {
-      socket.destroy();
-      return;
-    }
+    let pathname;
+    try { pathname = new URL(request.url || '/', 'http://localhost').pathname; }
+    catch { socket.destroy(); return; }
+    if (pathname !== '/ws/v8') { socket.destroy(); return; }
+    if (!webSocketOriginAllowed(request)) { rejectUpgrade(socket, '403', 'Forbidden'); return; }
+    if (wss.clients.size >= maxWebSocketClients) { rejectUpgrade(socket, '503', 'Service Unavailable'); return; }
     wss.handleUpgrade(request, socket, head, (ws) => wss.emit('connection', ws, request));
   });
 
   wss.on('connection', (ws) => {
-    ws.send(safeJson({
-      at: Date.now(),
-      type: 'hello',
-      activeProjectId: center.activeProjectId(),
-      flags,
-    }));
+    ws.send(safeJson({ at: Date.now(), type: 'hello', activeProjectId: center.activeProjectId(), flags }));
   });
 
   const onBrokerEvent = (event) => broadcast({ type: 'runtime.event', event });
@@ -255,8 +271,4 @@ function startV8WorkbenchServer({
   });
 }
 
-module.exports = {
-  startV8WorkbenchServer,
-  errorPayload,
-  httpErrorStatus,
-};
+module.exports = { startV8WorkbenchServer, errorPayload, httpErrorStatus, rejectUpgrade };

@@ -153,7 +153,7 @@ function normalizeChannels(project, status) {
   });
 }
 
-function collectExportModel({ project, state, diagnostics, mappings = [], history = [], workspaceBackup = null }) {
+function collectExportModel({ project, state, diagnostics, mappings = [], history = [], workspaceBackup = null, networkSnapshot = null }) {
   const status = state.getStatus();
   const analysis = state.getAnalysis();
   const devices = state.getDevices();
@@ -167,6 +167,9 @@ function collectExportModel({ project, state, diagnostics, mappings = [], histor
   const channels = normalizeChannels(project, status);
   const discovery = flattenDiscovery(project);
   const adoptions = flattenAdoptions(project);
+  const networkHosts = Array.isArray(networkSnapshot?.hosts) ? networkSnapshot.hosts : [];
+  const networkEvents = Array.isArray(networkSnapshot?.events) ? networkSnapshot.events : [];
+  const networkScans = Array.isArray(networkSnapshot?.scans) ? networkSnapshot.scans : [];
 
   const summary = [
     ['Project', project?.name || 'Default'],
@@ -182,6 +185,9 @@ function collectExportModel({ project, state, diagnostics, mappings = [], histor
     ['Discovery runs', (project?.discoveryRuns || []).length],
     ['Discovery results', discovery.length],
     ['Adopted identities', adoptions.length],
+    ['Network hosts', networkHosts.length],
+    ['Network scans', networkScans.length],
+    ['Network events', networkEvents.length],
     ['Requests', status?.totals?.requests ?? 0],
     ['Responses', status?.totals?.responses ?? 0],
     ['Timeouts', status?.totals?.timeouts ?? timeouts.length],
@@ -195,7 +201,7 @@ function collectExportModel({ project, state, diagnostics, mappings = [], histor
     ['Estimated RTU utilization %', diagnostics?.utilizationPct ?? '']
   ];
 
-  return { project, status, analysis, diagnostics, channels, devices, polls, registers, mappings, transactions, timeouts, exceptions, discovery, adoptions, history, capture, workspaceBackup, summary };
+  return { project, status, analysis, diagnostics, channels, devices, polls, registers, mappings, transactions, timeouts, exceptions, discovery, adoptions, history, capture, workspaceBackup, networkSnapshot, networkHosts, networkEvents, networkScans, summary };
 }
 
 function sheetColumns(name) {
@@ -213,7 +219,9 @@ function sheetColumns(name) {
     Traffic: [['ID','id'],['Timestamp','timestampIso'],...id,['Direction','direction'],['FC','functionCode'],['Function','functionName'],['RTT ms','rttMs'],['Timeout ms','timeoutMs'],['Exception','exceptionName'],['Session','sessionId'],['Raw HEX','rawHex']],
     Discovery: [['Run ID','runId'],['Job ID','jobId'],['Saved','savedAt'],['Completed','completedAt'],['Transport','transport'],['Target','target'],['Unit/Slave ID','unitId'],['Responded','responded'],['FC43 Support','identificationSupported'],['Vendor','vendorName'],['Product Code','productCode'],['Product Name','productName'],['Model','modelName'],['Revision','revision'],['Vendor URL','vendorUrl'],['Application','userApplicationName'],['Avg RTT ms','avgRttMs'],['Object Count','objectCount'],['Adopted','adopted'],['Adopted Device Key','adoptedDeviceKey'],['Adopted Channel','adoptedChannelId'],['Adopted At','adoptedAt'],['Overwrite Existing','overwriteExisting'],['Overwritten Fields','overwrittenFields']],
     'Adoption Audit': [['Run ID','runId'],['Job ID','jobId'],['Transport','transport'],['Target','target'],['Channel','channelId'],['Device Key','deviceKey'],['Unit/Slave ID','unitId'],['Adopted At','adoptedAt'],['Overwrite Existing','overwriteExisting'],['Overwritten Fields','overwrittenFields'],['Vendor','vendorName'],['Product Code','productCode'],['Product Name','productName'],['Model','modelName'],['Revision','revision']],
-    'Project History': [['Timestamp','timestampIso'],['Channel','channelId'],['Transport','transport'],['Health','healthScore'],['Frames','frames'],['Devices','devices'],['Timeouts','timeouts'],['Timeout Rate %','timeoutRate'],['Avg RTT ms','avgRttMs'],['Connection','connection']]
+    'Project History': [['Timestamp','timestampIso'],['Channel','channelId'],['Transport','transport'],['Health','healthScore'],['Frames','frames'],['Devices','devices'],['Timeouts','timeouts'],['Timeout Rate %','timeoutRate'],['Avg RTT ms','avgRttMs'],['Connection','connection']],
+    'Network Hosts': [['State','state'],['IP','ip'],['MAC','mac'],['Vendor','macVendor'],['Hostname','hostname'],['Type','type'],['Classification','classification'],['Industrial','industrialText'],['Modbus','modbusText'],['Services','servicesText'],['Avg RTT ms','avgRttMs'],['First Seen','firstSeen'],['Last Seen','lastSeen'],['Last Changed','lastChanged']],
+    'Network Events': [['Time','at'],['Type','type'],['Severity','severity'],['IP','ip'],['Host ID','hostId'],['Source','source'],['Details','detailsText']]
   };
   return defs[name];
 }
@@ -239,6 +247,8 @@ function normalizeRows(model, sheet) {
   if (sheet === 'Discovery') return model.discovery;
   if (sheet === 'Adoption Audit') return model.adoptions;
   if (sheet === 'Project History') return model.history.map(x => ({ timestampIso: x.recordedAt ? new Date(x.recordedAt).toISOString() : '', channelId:x.channelId || '', transport:x.transport || '', healthScore: x.healthScore, frames: x.totals?.frames, devices: x.totals?.devices ?? x.devices?.length, timeouts: x.totals?.timeouts, timeoutRate: x.rates?.timeoutRate, avgRttMs: x.totals?.avgRttMs, connection: x.connection?.status }));
+  if (sheet === 'Network Hosts') return (model.networkHosts||[]).map(x=>({...x,industrialText:x.industrial?'yes':'no',modbusText:x.modbus?.verified?'verified':'no',servicesText:(x.services||[]).map(s=>`${s.port}/${s.protocol||'tcp'} ${s.name||''}`.trim()).join('; ')}));
+  if (sheet === 'Network Events') return (model.networkEvents||[]).map(x=>({...x,detailsText:JSON.stringify(x.details??x.changes??'')}));
   return [];
 }
 
@@ -276,7 +286,7 @@ async function buildWorkbook(model) {
   applySheetStyle(summary);
   summary.getColumn(1).font = { bold: true };
 
-  for (const name of ['Channels','Devices','Polling Groups','Registers','Engineering Values','Timeouts','Exceptions','Traffic','Discovery','Adoption Audit','Project History']) {
+  for (const name of ['Channels','Devices','Polling Groups','Registers','Engineering Values','Timeouts','Exceptions','Traffic','Discovery','Adoption Audit','Project History','Network Hosts','Network Events']) {
     const defs = sheetColumns(name); const ws = wb.addWorksheet(name);
     ws.columns = defs.map(([header,key]) => ({ header, key }));
     for (const source of normalizeRows(model, name)) {
@@ -347,6 +357,10 @@ function buildPdf(model) {
     if (model.adoptions.length) addPdfTable(doc, 'Identification adoption audit', [
       {label:'Run',width:.8,value:r=>r.runId},{label:'Tr',width:.35,value:r=>r.transport},{label:'Channel',width:1.2,value:r=>r.channelId},{label:'ID',width:.35,value:r=>r.unitId},{label:'Vendor',width:1,value:r=>r.vendorName},{label:'Model',width:1,value:r=>r.modelName||r.productName||r.productCode},{label:'Adopted',width:1,value:r=>r.adoptedAt},{label:'Overwrite',width:.6,value:r=>r.overwriteExisting?'yes':'no'}
     ], model.adoptions, 120);
+
+    if (model.networkHosts?.length) addPdfTable(doc, 'Network discovery inventory', [
+      {label:'State',width:.55,value:r=>r.state},{label:'IP',width:1,value:r=>r.ip},{label:'Name',width:1.1,value:r=>r.hostname||r.type},{label:'MAC',width:1.2,value:r=>r.mac},{label:'Vendor',width:1.15,value:r=>r.macVendor},{label:'Type',width:1,value:r=>r.type},{label:'Modbus',width:.55,value:r=>r.modbus?.verified?'yes':'no'},{label:'RTT',width:.55,value:r=>r.avgRttMs}
+    ], model.networkHosts, 160);
     doc.end();
   });
 }
@@ -362,7 +376,9 @@ const columns = {
   engineering: [...identityCsv,{label:'function',value:x=>x.functionCode},{label:'address',value:x=>x.address},{label:'name',value:x=>x.name},{label:'type',value:x=>x.type},{label:'byteOrder',value:x=>x.byteOrder},{label:'scale',value:x=>x.scale},{label:'offset',value:x=>x.offset},{label:'unit',value:x=>x.unit},{label:'engineeringValue',value:x=>x.engineeringValue},{label:'available',value:x=>x.available}],
   traffic: [{label:'id',value:x=>x.id},{label:'timestamp',value:x=>x.timestamp?new Date(x.timestamp).toISOString():''},...identityCsv,{label:'direction',value:x=>x.direction},{label:'function',value:x=>x.functionCode},{label:'functionName',value:x=>x.functionName},{label:'sessionId',value:x=>x.sessionId||''},{label:'rttMs',value:x=>x.rttMs},{label:'timeoutMs',value:x=>x.timeoutMs},{label:'exception',value:x=>x.exceptionName||''},{label:'rawHex',value:x=>x.rawHex}],
   discovery: [{label:'runId',value:x=>x.runId},{label:'jobId',value:x=>x.jobId},{label:'savedAt',value:x=>x.savedAt},{label:'completedAt',value:x=>x.completedAt},{label:'transport',value:x=>x.transport},{label:'target',value:x=>x.target},{label:'unitId',value:x=>x.unitId},{label:'responded',value:x=>x.responded},{label:'identificationSupported',value:x=>x.identificationSupported},{label:'vendorName',value:x=>x.vendorName},{label:'productCode',value:x=>x.productCode},{label:'productName',value:x=>x.productName},{label:'modelName',value:x=>x.modelName},{label:'revision',value:x=>x.revision},{label:'avgRttMs',value:x=>x.avgRttMs},{label:'adopted',value:x=>x.adopted},{label:'adoptedDeviceKey',value:x=>x.adoptedDeviceKey},{label:'adoptedChannelId',value:x=>x.adoptedChannelId},{label:'adoptedAt',value:x=>x.adoptedAt}],
-  adoptions: [{label:'runId',value:x=>x.runId},{label:'jobId',value:x=>x.jobId},{label:'transport',value:x=>x.transport},{label:'target',value:x=>x.target},{label:'channelId',value:x=>x.channelId},{label:'deviceKey',value:x=>x.deviceKey},{label:'unitId',value:x=>x.unitId},{label:'adoptedAt',value:x=>x.adoptedAt},{label:'overwriteExisting',value:x=>x.overwriteExisting},{label:'overwrittenFields',value:x=>x.overwrittenFields},{label:'vendorName',value:x=>x.vendorName},{label:'productCode',value:x=>x.productCode},{label:'productName',value:x=>x.productName},{label:'modelName',value:x=>x.modelName},{label:'revision',value:x=>x.revision}]
+  adoptions: [{label:'runId',value:x=>x.runId},{label:'jobId',value:x=>x.jobId},{label:'transport',value:x=>x.transport},{label:'target',value:x=>x.target},{label:'channelId',value:x=>x.channelId},{label:'deviceKey',value:x=>x.deviceKey},{label:'unitId',value:x=>x.unitId},{label:'adoptedAt',value:x=>x.adoptedAt},{label:'overwriteExisting',value:x=>x.overwriteExisting},{label:'overwrittenFields',value:x=>x.overwrittenFields},{label:'vendorName',value:x=>x.vendorName},{label:'productCode',value:x=>x.productCode},{label:'productName',value:x=>x.productName},{label:'modelName',value:x=>x.modelName},{label:'revision',value:x=>x.revision}],
+  networkHosts: [{label:'state',value:x=>x.state},{label:'ip',value:x=>x.ip},{label:'mac',value:x=>x.mac},{label:'vendor',value:x=>x.macVendor},{label:'hostname',value:x=>x.hostname},{label:'type',value:x=>x.type},{label:'classification',value:x=>x.classification},{label:'industrial',value:x=>x.industrial},{label:'modbusVerified',value:x=>x.modbus?.verified},{label:'services',value:x=>(x.services||[]).map(s=>`${s.port}/${s.protocol||'tcp'} ${s.name||''}`.trim()).join('; ')},{label:'avgRttMs',value:x=>x.avgRttMs},{label:'firstSeen',value:x=>x.firstSeen},{label:'lastSeen',value:x=>x.lastSeen},{label:'lastChanged',value:x=>x.lastChanged}],
+  networkEvents: [{label:'at',value:x=>x.at},{label:'type',value:x=>x.type},{label:'severity',value:x=>x.severity},{label:'ip',value:x=>x.ip},{label:'hostId',value:x=>x.hostId},{label:'source',value:x=>x.source},{label:'details',value:x=>x.details??x.changes??''}]
 };
 
 async function streamProjectZip(res, model, reportHtml) {
@@ -375,8 +391,8 @@ async function streamProjectZip(res, model, reportHtml) {
   const files = [
     'results/modbus-results.xlsx','results/modbus-report.pdf','results/modbus-report.html','results/diagnostics.json',
     'capture/current.mbcap','project/project.json','project/all-workspaces-and-profiles.json','project/history.json',
-    'project/discovery-evidence.json','project/discovery-adoptions.json',
-    'csv/channels.csv','csv/devices.csv','csv/polling-groups.csv','csv/registers.csv','csv/engineering-values.csv','csv/traffic.csv','csv/discovery.csv','csv/discovery-adoptions.csv'
+    'project/discovery-evidence.json','project/discovery-adoptions.json','project/network-discovery.json',
+    'csv/channels.csv','csv/devices.csv','csv/polling-groups.csv','csv/registers.csv','csv/engineering-values.csv','csv/traffic.csv','csv/discovery.csv','csv/discovery-adoptions.csv','csv/network-hosts.csv','csv/network-events.csv'
   ];
 
   zip.append(await buildWorkbook(model), { name: files[0] });
@@ -389,15 +405,18 @@ async function streamProjectZip(res, model, reportHtml) {
   zip.append(jsonSafe(model.history), { name: files[7] });
   zip.append(jsonSafe(model.discovery), { name: files[8] });
   zip.append(jsonSafe(model.adoptions), { name: files[9] });
-  zip.append(csv(model.channels, columns.channels), { name: files[10] });
-  zip.append(csv(normalizeRows(model,'Devices'), columns.devices), { name: files[11] });
-  zip.append(csv(normalizeRows(model,'Polling Groups'), columns.polls), { name: files[12] });
-  zip.append(csv(normalizeRows(model,'Registers'), columns.registers), { name: files[13] });
-  zip.append(csv(normalizeRows(model,'Engineering Values'), columns.engineering), { name: files[14] });
-  zip.append(csv(normalizeRows(model,'Traffic'), columns.traffic), { name: files[15] });
-  zip.append(csv(model.discovery, columns.discovery), { name: files[16] });
-  zip.append(csv(model.adoptions, columns.adoptions), { name: files[17] });
-  zip.append(jsonSafe({ format:'modbus-engineering-analyzer-export', version:2, generatedAt:new Date().toISOString(), analyzerVersion:'7.0.0', project:model.project?.name, channelCount:model.channels.length, discoveryResultCount:model.discovery.length, adoptionCount:model.adoptions.length, formulaInjectionProtection:true, files }), { name: 'manifest.json' });
+  zip.append(jsonSafe(model.networkSnapshot||{}), { name: files[10] });
+  zip.append(csv(model.channels, columns.channels), { name: files[11] });
+  zip.append(csv(normalizeRows(model,'Devices'), columns.devices), { name: files[12] });
+  zip.append(csv(normalizeRows(model,'Polling Groups'), columns.polls), { name: files[13] });
+  zip.append(csv(normalizeRows(model,'Registers'), columns.registers), { name: files[14] });
+  zip.append(csv(normalizeRows(model,'Engineering Values'), columns.engineering), { name: files[15] });
+  zip.append(csv(normalizeRows(model,'Traffic'), columns.traffic), { name: files[16] });
+  zip.append(csv(model.discovery, columns.discovery), { name: files[17] });
+  zip.append(csv(model.adoptions, columns.adoptions), { name: files[18] });
+  zip.append(csv(model.networkHosts||[], columns.networkHosts), { name: files[19] });
+  zip.append(csv(model.networkEvents||[], columns.networkEvents), { name: files[20] });
+  zip.append(jsonSafe({ format:'modbus-engineering-tool-export', version:3, generatedAt:new Date().toISOString(), project:model.project?.name, channelCount:model.channels.length, discoveryResultCount:model.discovery.length, adoptionCount:model.adoptions.length, networkHostCount:model.networkHosts?.length||0, networkScanCount:model.networkScans?.length||0, formulaInjectionProtection:true, files }), { name: 'manifest.json' });
   await zip.finalize();
 }
 

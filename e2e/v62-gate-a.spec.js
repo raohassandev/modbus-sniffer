@@ -1,6 +1,7 @@
 'use strict';
 
 const { test, expect } = require('@playwright/test');
+const { version: PRODUCT_VERSION } = require('../package.json');
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
@@ -8,8 +9,8 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('.theme-control')).toBeVisible();
 });
 
-test('UI identifies v7.0 and uses transport-correct RTU labels in demo mode', async ({ page }) => {
-  await expect(page.locator('body')).toContainText('UI v7.0');
+test('UI identifies the current product version and uses transport-correct RTU labels in demo mode', async ({ page }) => {
+  await expect(page.locator('body')).toContainText(`UI v${PRODUCT_VERSION}`);
   await expect(page.locator('.transport-badge')).toContainText('RTU');
   await page.locator('[data-page="devices"]').click();
   const first=page.locator('#deviceList .device-list-item').first();

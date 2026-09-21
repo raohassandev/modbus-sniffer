@@ -1,0 +1,30 @@
+'use strict';
+
+const { defineConfig, devices } = require('@playwright/test');
+
+module.exports = defineConfig({
+  testDir: './e2e',
+  testMatch: ['v8-*.spec.js'],
+  timeout: 30000,
+  expect: { timeout: 5000 },
+  fullyParallel: false,
+  workers: 1,
+  retries: process.env.CI ? 1 : 0,
+  reporter: process.env.CI ? 'line' : 'list',
+  use: {
+    baseURL: 'http://127.0.0.1:18778',
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    viewport: { width: 1280, height: 800 },
+    deviceScaleFactor: 2
+  },
+  projects: [
+    { name: 'chromium-compat', use: { ...devices['Desktop Chrome'], viewport:{width:1280,height:800}, deviceScaleFactor:2 } }
+  ],
+  webServer: {
+    command: 'node src/index-v8.js --port 18778 --host 127.0.0.1 --data-dir .tmp/e2e-v8',
+    url: 'http://127.0.0.1:18778/api/v8/status',
+    timeout: 20000,
+    reuseExistingServer: !process.env.CI
+  }
+});

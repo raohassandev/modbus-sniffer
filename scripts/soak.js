@@ -47,7 +47,7 @@ if (s.totals.devices !== devices) throw new Error(`Expected ${devices} devices, 
 if (state.transactions.length > historyLimit) throw new Error(`History limit exceeded: ${state.transactions.length}/${historyLimit}`);
 if (s.totals.frames !== cycles * 2) throw new Error(`Frame count mismatch: ${s.totals.frames}/${cycles * 2}`);
 
-console.log('\n=== Modbus Sniffer v4 Soak Test ===');
+console.log('\n=== Modbus Engineering Tool Soak Test ===');
 console.log(`PASS  request/response cycles : ${cycles.toLocaleString()}`);
 console.log(`PASS  frames processed        : ${s.totals.frames.toLocaleString()}`);
 console.log(`PASS  devices maintained      : ${s.totals.devices}`);

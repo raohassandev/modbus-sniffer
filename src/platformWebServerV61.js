@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const net = require('net');
 const express = require('express');
 const { WebSocketServer, WebSocket } = require('ws');
 const { PortManager } = require('./portManager');
@@ -12,6 +13,20 @@ const { reportHtml } = require('./reportGenerator');
 const { collectExportModel, buildWorkbook, buildPdf, streamProjectZip, safeName } = require('./exportBundle');
 const { makeDeviceKey, parseDeviceKey } = require('./transportIdentity');
 const { installActiveDiscoveryRoutes } = require('./activeDiscoveryRoutes');
+const { installMasterRoutes } = require('./master/masterRoutes');
+const { installSlaveRoutes } = require('./slave/slaveRoutes');
+const { installDeviceCloneRoutes } = require('./deviceClone/deviceCloneRoutes');
+const { installTestSequenceRoutes } = require('./testSequences/testSequenceRoutes');
+const { EvidenceHub, mergeEvidence } = require('./evidence/evidenceHub');
+const { analyzeProtocolTraffic } = require('./evidence/protocolDiagnostics');
+const registerCodec = require('./register/registerCodec');
+const { PRODUCT_NAME, PRODUCT_VERSION } = require('./v8/version');
+const { installLoggerTrendRoutes } = require('./loggerTrend/loggerTrendRoutes');
+const { installCompareRoutes } = require('./compare/compareRoutes');
+const { installTransportLabRoutes } = require('./transportLab/transportLabRoutes');
+const { installRawLabRoutes } = require('./rawLab/rawLabRoutes');
+const { installDiscoveryEngineeringRoutes } = require('./discoveryEngineeringRoutes');
+const { installNetworkDiscoveryRoutes } = require('./networkDiscovery/networkDiscoveryRoutes');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -43,9 +58,36 @@ function validateSerialConfig(body) {
   return { port, baudRate, dataBits, stopBits, parity, reconnectMs, requestTimeoutMs };
 }
 
+function normalizedHostname(host){
+  const raw=String(host||'').trim();
+  if(!raw)return '';
+  if(raw.startsWith('[')){
+    const end=raw.indexOf(']');
+    if(end>1){
+      const literal=raw.slice(1,end);
+      if(net.isIP(literal))return literal.toLowerCase();
+    }
+  }
+  if(net.isIP(raw))return raw.toLowerCase();
+  try{return new URL(`http://${raw}`).hostname.replace(/^\[|\]$/g,'').toLowerCase();}
+  catch{
+    const singlePort=/^([^:]+):\d+$/.exec(raw);
+    return String(singlePort?.[1]||raw).replace(/^\[|\]$/g,'').toLowerCase();
+  }
+}
+
 function isLoopbackHost(host){
-  const h=String(host||'').trim().toLowerCase();
-  return h==='127.0.0.1'||h==='localhost'||h==='::1'||h==='[::1]';
+  const h=normalizedHostname(host);
+  return h==='localhost'||h==='::1'||/^127(?:\.|$)/.test(h);
+}
+
+function webHostAllowed(hostHeader,bindHost='127.0.0.1'){
+  const host=normalizedHostname(hostHeader);
+  const bind=normalizedHostname(bindHost);
+  if(!host)return false;
+  if(isLoopbackHost(bind))return isLoopbackHost(host);
+  if(bind==='0.0.0.0'||bind==='::')return isLoopbackHost(host)||net.isIP(host)!==0;
+  return isLoopbackHost(host)||host===bind;
 }
 
 function validateTcp(body) {
@@ -60,7 +102,7 @@ function validateTcp(body) {
   if (!cfg.listenHost) throw new Error('TCP listen host is required.');
   if (!cfg.targetHost) throw new Error('TCP target host is required.');
   for (const k of ['listenPort','targetPort']) if (!Number.isInteger(cfg[k]) || cfg[k] < 1 || cfg[k] > 65535) throw new Error(`${k} must be 1..65535.`);
-  if (cfg.requestTimeoutMs < 50 || cfg.requestTimeoutMs > 60000) throw new Error('TCP request timeout must be 50..60000 ms.');
+  if (!Number.isFinite(cfg.requestTimeoutMs) || cfg.requestTimeoutMs < 50 || cfg.requestTimeoutMs > 60000) throw new Error('TCP request timeout must be 50..60000 ms.');
   if (!Number.isInteger(cfg.maxClientSessions) || cfg.maxClientSessions < 1 || cfg.maxClientSessions > 128) throw new Error('TCP maximum client sessions must be 1..128.');
   if(!isLoopbackHost(cfg.listenHost)&&body.confirmExternalBind!==true){
     const e=new Error(`Binding the Modbus TCP proxy to ${cfg.listenHost} exposes it beyond this computer. Confirm the external bind explicitly before starting.`);
@@ -77,23 +119,38 @@ function sameOriginRequest(req){
   try{return new URL(origin).host===String(req.headers.host||'');}catch{return false;}
 }
 
+const LARGE_JSON_PATHS=new Set(['/api/capture/import','/api/workspace/import']);
+
 function mutationBodyLimit(req){
-  return ['/api/capture/import','/api/workspace/import'].includes(req.path) ? 25*1024*1024 : 2*1024*1024;
+  return LARGE_JSON_PATHS.has(req.path) ? 25*1024*1024 : 2*1024*1024;
+}
+
+function jsonBodyLimitForPath(pathname){
+  return LARGE_JSON_PATHS.has(String(pathname||'')) ? '25mb' : '2mb';
 }
 
 async function startPlatformWebServer({ state, options, configureSerial, disconnectSerial, autoDetectSerial, replay, demo = false, workspaces, history, tcpProxy }) {
+  if(!isLoopbackHost(options.webHost)&&options.confirmWebExternalBind!==true){
+    const error=new Error(`Binding the Modbus Engineering Tool web UI to ${options.webHost} exposes it beyond this computer. Pass --confirm-web-external-bind to acknowledge the exposure.`);
+    error.code='WEB_EXTERNAL_BIND_CONFIRMATION_REQUIRED';
+    throw error;
+  }
   const app = express();
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server, path: '/ws', verifyClient:({origin,req})=>!origin||sameOriginRequest({headers:{...req.headers,origin}}) });
+  const wss = new WebSocketServer({ server, path: '/ws', verifyClient:({origin,req})=>webHostAllowed(req.headers.host,options.webHost)&&(!origin||sameOriginRequest({headers:{...req.headers,origin}})) });
   const publicDir = path.join(__dirname, '..', 'public');
   const baseHtml = fs.readFileSync(path.join(publicDir, 'v4.html'), 'utf8');
   const workbench = baseHtml
-    .replace('UI v4.0', 'UI v7.0')
+    .replace('UI v4.0', `UI v${PRODUCT_VERSION}`)
     .replace('</body>', '<link rel="stylesheet" href="/platform-v6.css?v=20260915"><script src="/platform-v6.js?v=20260915-1"></script></body>');
   const mutationMethods=new Set(['POST','PUT','PATCH','DELETE']);
   const rateBuckets=new Map();
 
   app.disable('x-powered-by');
+  app.use((req,res,next)=>{
+    if(!webHostAllowed(req.headers.host,options.webHost))return res.status(403).json({error:'Host header is not valid for this local Modbus Engineering Tool endpoint.',code:'INVALID_WEB_HOST'});
+    next();
+  });
   app.use((req,res,next) => {
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('X-Frame-Options','DENY');
@@ -110,13 +167,110 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     if(bucket.count>600)return res.status(429).json({error:'Too many state-changing requests. Retry shortly.',code:'MUTATION_RATE_LIMIT'});
     next();
   });
-  app.use(express.json({ limit: '25mb' }));
+  app.use((req,res,next)=>{
+    const parser=express.json({limit:jsonBodyLimitForPath(req.path)});
+    parser(req,res,error=>{
+      if(error?.type==='entity.too.large')return res.status(413).json({error:'Request body exceeds the allowed JSON size.',code:'REQUEST_BODY_TOO_LARGE'});
+      if(error)return res.status(400).json({error:'Invalid JSON request body.',code:'INVALID_JSON_BODY'});
+      next();
+    });
+  });
 
   const broadcast = (type,payload) => {
     const msg = JSON.stringify({ type, payload });
     for (const ws of wss.clients) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
   };
-  const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null});
+  const evidence = new EvidenceHub({ maxRows: 20000 });
+  let slaveRuntime=null;
+  let rawLab=null;
+  const masterRuntime=installMasterRoutes({
+    app,state,demo,disconnectSerial,
+    getSlaveStatus:()=>slaveRuntime?.status?.()||null,
+    disconnectSlave:async()=>{ if(slaveRuntime) await slaveRuntime.stop(); },
+    getRawLabStatus:()=>rawLab?.status?.()||null,
+    disconnectRawLab:async()=>{ if(rawLab) await rawLab.close(); },
+    dataDir:options.dataDir
+  });
+  const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null,masterRuntime});
+  const networkDiscovery=installNetworkDiscoveryRoutes({app,options,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null,broadcast,demo});
+  slaveRuntime=installSlaveRoutes({
+    app,state,demo,disconnectSerial,masterRuntime,activeDiscovery,broadcast,
+    getRawLabStatus:()=>rawLab?.status?.()||null,
+    disconnectRawLab:async()=>{ if(rawLab) await rawLab.close(); }
+  });
+  const deviceClone=installDeviceCloneRoutes({app,state,slaveRuntime,broadcast});
+  const testSequences=installTestSequenceRoutes({app,masterRuntime,broadcast});
+  const loggerTrend=installLoggerTrendRoutes({app,state,masterRuntime,broadcast,dataDir:path.join(options.dataDir,'logger-trend')});
+  installCompareRoutes({app});
+  installTransportLabRoutes({app});
+  rawLab=installRawLabRoutes({app,state,demo,disconnectSerial,masterRuntime,slaveRuntime,activeDiscovery,broadcast});
+  const discoveryEngineering=installDiscoveryEngineeringRoutes({app,masterRuntime,slaveRuntime,broadcast});
+
+  const publishEvidenceRow = row => { if(row){ loggerTrend.ingestEvidence(row); broadcast('transaction',row); } };
+  const onMasterEvent = event => publishEvidenceRow(evidence.ingest(event,{sourceType:'Master'}));
+  const onSlaveEvent = event => {
+    broadcast('slave-event',event);
+    publishEvidenceRow(evidence.ingest(event,{sourceType:'Slave'}));
+  };
+  const onTestSequenceEvent = event => publishEvidenceRow(evidence.ingestAnnotation(event,{sourceType:'Test Sequence',direction:'TEST'}));
+  const onDiscoveryEvidence = event => publishEvidenceRow(evidence.ingest(event,{sourceType:'Discovery'}));
+  const onRawLabEvent = event => {
+    const details=event?.details||{};
+    if(!['traffic.tx','traffic.rx'].includes(event?.type))return;
+    publishEvidenceRow(evidence.ingest({
+      ...event,
+      rawHex:details.rawHex||event.rawHex||'',
+      unitId:details.classification?.unitId??event.unitId??null,
+      functionCode:details.classification?.functionCode??event.functionCode??null,
+      ownerMode:'test',source:'raw-frame-studio',
+      details:{...details,framing:rawLab.status()?.config?.type||details.framing||null}
+    },{sourceType:'Raw Lab'}));
+  };
+  let lastDiscoveryEvidenceKey='';
+  const onDiscoveryStatus = status => {
+    const progress=status?.progress||null;
+    const key=`${status?.jobId||''}:${status?.state||''}:${progress?.current||0}:${progress?.unitId??''}`;
+    if(!status?.jobId||key===lastDiscoveryEvidenceKey)return;
+    lastDiscoveryEvidenceKey=key;
+    const event={
+      timestamp:Date.now(),
+      type:progress?.unitId!=null?'discovery.unit-result':`discovery.${status.state||'status'}`,
+      source:'active-discovery',
+      ownerMode:'discovery',
+      unitId:progress?.unitId??null,
+      functionCode:43,
+      details:{
+        transport:status.transport||progress?.transport||null,
+        jobId:status.jobId,
+        state:status.state,
+        progress:progress?{...progress}:null,
+        summary:status.summary?{...status.summary}:null
+      }
+    };
+    publishEvidenceRow(evidence.ingestAnnotation(event,{sourceType:'Discovery',direction:'DISCOVERY'}));
+  };
+  masterRuntime.on('event',onMasterEvent);
+  slaveRuntime.on('event',onSlaveEvent);
+  testSequences.on('event',onTestSequenceEvent);
+  activeDiscovery.on('evidence',onDiscoveryEvidence);
+  activeDiscovery.on('status',onDiscoveryStatus);
+  rawLab.on('event',onRawLabEvent);
+  const unifiedTransactions = (filters={}) => {
+    const requestedLimit=Math.max(1,Math.min(20000,Number(filters.limit)||1000));
+    const sourceFilter=String(filters.sourceType||'').trim().toLowerCase();
+    const passiveAllowed=!sourceFilter||sourceFilter==='sniffer'||sourceFilter==='passive'||sourceFilter==='passive analyzer';
+    const activeAllowed=!sourceFilter||!passiveAllowed;
+    const passive=passiveAllowed
+      ? state.getTransactions({...filters,limit:requestedLimit}).map(row=>({
+          ...row,
+          sourceType:'Sniffer',
+          source:row.source||'passive-analyzer',
+          ownerMode:row.ownerMode||'sniffer'
+        }))
+      : [];
+    const activeRows=activeAllowed?evidence.list({...filters,limit:requestedLimit}):[];
+    return mergeEvidence(passive,activeRows,{limit:requestedLimit});
+  };
   const active = () => workspaces.getActiveProject();
   const apiError = (r,e,defaultStatus=400) => r.status(e?.code==='AMBIGUOUS_DEVICE'?409:defaultStatus).json({error:e.message,code:e.code||null,deviceKeys:e.deviceKeys||undefined});
   const syncRuntimeChannels = () => {
@@ -149,20 +303,24 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
       diagnostics: analyzeDeep({ state, config: state.config }),
       mappings: engineering(),
       history: history.query(p.id, { limit: 5000 }),
-      workspaceBackup: workspaces.exportAll()
+      workspaceBackup: workspaces.exportAll(),
+      networkSnapshot: networkDiscovery.store.exportProject(p.id)
     });
   };
 
-  app.get('/api/status', (_q,r) => r.json(state.getStatus()));
+  app.get('/api/status', (_q,r) => r.json({ ...state.getStatus(), productName:PRODUCT_NAME, productVersion:PRODUCT_VERSION, desktopInstanceToken:process.env.MODBUS_DESKTOP_INSTANCE_TOKEN||null }));
   app.get('/api/analysis', (_q,r) => r.json(state.getAnalysis()));
   app.get('/api/channels', (_q,r) => { syncRuntimeChannels(); r.json(state.getChannels?.()||[]); });
-  app.get('/api/transactions', (q,r) => { try{r.json(state.getTransactions(q.query));}catch(e){apiError(r,e);} });
+  app.get('/api/transactions', (q,r) => { try{r.json(unifiedTransactions(q.query));}catch(e){apiError(r,e);} });
+  app.get('/api/evidence/status', (_q,r) => r.json(evidence.status()));
+  app.get('/api/diagnostics/protocol', (q,r) => { try { const rows=unifiedTransactions({limit:Number(q.query.limit||10000)}); r.json(analyzeProtocolTraffic(rows,{serialConfig:state.config||{}})); } catch(e){apiError(r,e);} });
   app.get('/api/registers', (q,r) => { try{r.json(state.getRegisters(q.query));}catch(e){apiError(r,e);} });
   app.get('/api/polls', (q,r) => { try{r.json(state.getPollGroups(q.query));}catch(e){apiError(r,e);} });
   app.get('/api/devices', (q,r) => { try{r.json(state.getDevices(q.query));}catch(e){apiError(r,e);} });
   app.get('/api/devices/:ref', (q,r) => { try{const d=state.getDevice(decodeURIComponent(q.params.ref),{channelId:q.query.channelId||null});if(!d)return r.status(404).json({error:`Device ${q.params.ref} has not been observed.`});r.json(d);}catch(e){apiError(r,e);} });
-  app.get('/api/decode', (q,r) => r.json(state.getDataTypeAnalysis(q.query)));
-  app.get('/api/config', (_q,r) => r.json({ ...state.config, demo, version:'7.0.0' }));
+  app.get('/api/decode', (q,r) => { try { const base=state.getDataTypeAnalysis(q.query); const words=(base.words||[]).map(item=>Number(item.value)); const advanced=registerCodec.interpretationMatrix(words); r.json({...base,advancedInterpretations:advanced}); } catch(e){apiError(r,e);} });
+  app.post('/api/register/interpret', (q,r) => { try { const words=Array.isArray(q.body?.words)?q.body.words.map(Number):[]; if(!words.length)return r.status(400).json({error:'words must be a non-empty array'}); const definition=q.body?.definition||{}; r.json({definition:registerCodec.normalizeDefinition(definition),result:registerCodec.decodeDefinition(words,definition),matrix:registerCodec.interpretationMatrix(words)}); } catch(e){apiError(r,e);} });
+  app.get('/api/config', (_q,r) => r.json({ ...state.config, demo, version:PRODUCT_VERSION }));
   app.get('/api/replay/status', (_q,r) => r.json(replay.status()));
   app.get('/api/diagnostics/deep', (_q,r) => r.json(analyzeDeep({ state, config:state.config })));
   app.get('/api/engineering', (_q,r) => { try{r.json(engineering());}catch(e){apiError(r,e);} });
@@ -172,12 +330,12 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.post('/api/serial/disconnect', async (_q,r) => { if (demo) return r.status(409).json({ error:'No serial port is active in demo mode.' }); try { await disconnectSerial(); r.json({ ok:true }); } catch(e) { r.status(500).json({ error:e.message }); } });
   app.post('/api/serial/autodetect', async (q,r) => { if (demo) return r.status(409).json({ error:'Serial auto-detection is disabled in demo mode.' }); try { r.json(await autoDetectSerial(q.body || {})); } catch(e) { r.status(400).json({ error:e.message }); } });
 
-  app.post('/api/capture/clear', (_q,r) => { replay.stop(); state.clearCapture(); r.json({ ok:true }); });
+  app.post('/api/capture/clear', (_q,r) => { replay.stop(); evidence.clear(); state.clearCapture(); r.json({ ok:true }); });
   app.get('/api/capture/export.mbcap', (_q,r) => {
     const capture = state.exportCapture(); capture.project = syncRuntimeChannels(); const stamp = new Date().toISOString().replace(/[:.]/g,'-');
     r.setHeader('Content-Type','application/json; charset=utf-8'); r.setHeader('Content-Disposition',`attachment; filename="modbus-${stamp}.mbcap"`); r.send(JSON.stringify(capture,null,2));
   });
-  app.post('/api/capture/import', async (q,r) => { try { if (!demo && state.connection.status === 'open') await disconnectSerial(); replay.load(q.body); const status = state.loadCapture(q.body,{emit:false}); syncRuntimeChannels(); state.setConnection('capture',{path:'CAPTURE',message:`${q.body.transactions.length} captured events loaded`}); r.json({ok:true,status,replay:replay.status()}); } catch(e) { r.status(400).json({ error:e.message }); } });
+  app.post('/api/capture/import', async (q,r) => { try { if (!demo && state.connection.status === 'open') await disconnectSerial(); evidence.clear(); replay.load(q.body); const status = state.loadCapture(q.body,{emit:false}); syncRuntimeChannels(); state.setConnection('capture',{path:'CAPTURE',message:`${q.body.transactions.length} captured events loaded`}); r.json({ok:true,status,replay:replay.status()}); } catch(e) { r.status(400).json({ error:e.message }); } });
   app.post('/api/replay/start', async (q,r) => { try { if (!demo && state.connection.status === 'open') await disconnectSerial(); r.json({ok:true,replay:replay.start({speed:q.body?.speed})}); } catch(e) { r.status(400).json({ error:e.message }); } });
   app.post('/api/replay/stop', (_q,r) => { replay.stop(); r.json({ok:true,replay:replay.status()}); });
 
@@ -213,14 +371,15 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   app.get('/api/export/results.xlsx', async (_q,r) => { try { const model=exportModel(); const buf=await buildWorkbook(model); const name=safeName(model.project?.name); r.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); r.setHeader('Content-Disposition',`attachment; filename="${name}-modbus-results.xlsx"`); r.send(buf); } catch(e) { r.status(500).json({error:e.message}); } });
   app.get('/api/export/report.pdf', async (_q,r) => { try { const model=exportModel(); const buf=await buildPdf(model); const name=safeName(model.project?.name); r.setHeader('Content-Type','application/pdf'); r.setHeader('Content-Disposition',`attachment; filename="${name}-modbus-report.pdf"`); r.send(buf); } catch(e) { r.status(500).json({error:e.message}); } });
   app.get('/api/export/project.zip', async (_q,r) => { try { const model=exportModel(); const html=reportHtml({project:model.project,state,diagnostics:model.diagnostics,mappings:model.mappings}); await streamProjectZip(r,model,html); } catch(e) { if(!r.headersSent) r.status(500).json({error:e.message}); else r.destroy(e); } });
-  app.get('/api/export/manifest', (_q,r) => r.json({version:'7.0.0',exports:[
+  app.get('/api/export/manifest', (_q,r) => r.json({version:PRODUCT_VERSION,exports:[
     {id:'xlsx',label:'Excel Workbook',href:'/api/export/results.xlsx',extension:'.xlsx'},
     {id:'pdf',label:'Engineering Report',href:'/api/export/report.pdf',extension:'.pdf'},
     {id:'capture',label:'Raw Capture',href:'/api/capture/export.mbcap',extension:'.mbcap'},
     {id:'zip',label:'Complete Project Backup',href:'/api/export/project.zip',extension:'.zip'}
   ]}));
 
-  app.get('/api/export/transactions.csv', (_q,r) => sendCsv(r,'modbus-transactions.csv',state.getTransactions({limit:20000}),[
+  app.get('/api/export/transactions.csv', (_q,r) => sendCsv(r,'modbus-transactions.csv',unifiedTransactions({limit:20000}),[
+    {label:'sourceType',value:x=>x.sourceType||'Sniffer'},{label:'source',value:x=>x.source||''},{label:'ownerMode',value:x=>x.ownerMode||''},{label:'connectionId',value:x=>x.connectionId||''},
     {label:'id',value:x=>x.id},{label:'timestamp',value:x=>new Date(x.timestamp).toISOString()},{label:'transport',value:x=>x.transport||'RTU'},{label:'channelId',value:x=>x.channelId},{label:'deviceKey',value:x=>x.deviceKey},{label:'unitId',value:x=>x.unitId??x.slaveId},{label:'direction',value:x=>x.direction},{label:'function',value:x=>x.functionCode},{label:'functionName',value:x=>x.functionName},{label:'rttMs',value:x=>x.rttMs},{label:'timeoutMs',value:x=>x.timeoutMs},{label:'exception',value:x=>x.exceptionName||''},{label:'rawHex',value:x=>x.rawHex}
   ]));
   app.get('/api/export/registers.csv', (_q,r) => sendCsv(r,'modbus-registers.csv',state.getRegisters({limit:20000}),[
@@ -237,6 +396,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   ]));
 
   app.get('/', (_q,r) => r.type('html').send(workbench));
+  app.use('/v8', (_req,res)=>res.status(404).type('text/plain').send('Not Found'));
   app.use(express.static(publicDir));
   app.use((q,r,n) => { if(q.method==='GET' && !q.path.startsWith('/api/')) return r.type('html').send(workbench); n(); });
 
@@ -246,15 +406,41 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   for (const [ev,fn] of Object.entries(handlers)) state.on(ev,fn);
   tcpProxy.on('status', p=>broadcast('tcp-status',p));
   wss.on('connection', ws => {
-    ws.send(JSON.stringify({type:'hello',payload:{status:state.getStatus(),analysis:state.getAnalysis(),devices:state.getDevices(),replay:replay.status(),project:syncRuntimeChannels(),tcp:tcpProxy.status(),discoveryActive:activeDiscovery.status()}}));
+    ws.send(JSON.stringify({type:'hello',payload:{status:state.getStatus(),analysis:state.getAnalysis(),devices:state.getDevices(),replay:replay.status(),project:syncRuntimeChannels(),tcp:tcpProxy.status(),discoveryActive:activeDiscovery.status(),networkScan:networkDiscovery.manager.status({includeHosts:false}),slave:slaveRuntime.status()}}));
     ws.on('error',()=>{});
   });
 
   await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(options.webPort,options.webHost,resolve); });
   return {
     url:`http://${options.webHost==='0.0.0.0'?'127.0.0.1':options.webHost}:${options.webPort}`,
-    close:async()=>{ await activeDiscovery.close(); for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn); for(const ws of wss.clients)ws.close(); await new Promise(resolve=>server.close(resolve)); }
+    close:async()=>{
+      rawLab.off('event',onRawLabEvent);
+      masterRuntime.off('event',onMasterEvent);
+      slaveRuntime.off('event',onSlaveEvent);
+      testSequences.off('event',onTestSequenceEvent);
+      activeDiscovery.off('evidence',onDiscoveryEvidence);
+      activeDiscovery.off('status',onDiscoveryStatus);
+      for(const[ev,fn]of Object.entries(handlers))state.off(ev,fn);
+
+      const cleanup=await Promise.allSettled([
+        Promise.resolve().then(()=>discoveryEngineering.dispose?.()),
+        Promise.resolve().then(()=>rawLab.dispose?.()),
+        Promise.resolve().then(()=>loggerTrend.dispose?.()),
+        Promise.resolve().then(()=>testSequences.dispose?.()),
+        Promise.resolve().then(()=>masterRuntime.disconnect()),
+        Promise.resolve().then(()=>slaveRuntime.shutdown()),
+        Promise.resolve().then(()=>activeDiscovery.close()),
+        Promise.resolve().then(()=>networkDiscovery.close()),
+        Promise.resolve().then(()=>tcpProxy.stop())
+      ]);
+
+      for(const ws of wss.clients)ws.terminate();
+      await new Promise(resolve=>wss.close(()=>resolve()));
+      await new Promise(resolve=>server.close(resolve));
+      const failed=cleanup.find(result=>result.status==='rejected');
+      if(failed)throw failed.reason;
+    }
   };
 }
 
-module.exports = { startPlatformWebServer, validateSerialConfig, validateTcp, isLoopbackHost, csvEscape, sameOriginRequest, mutationBodyLimit };
+module.exports = { startPlatformWebServer, validateSerialConfig, validateTcp, normalizedHostname, isLoopbackHost, webHostAllowed, csvEscape, sameOriginRequest, mutationBodyLimit, jsonBodyLimitForPath };

@@ -6,6 +6,10 @@ const path = require('path');
 function exists(p){try{return fs.existsSync(p);}catch{return false;}}
 function mkdir(p){fs.mkdirSync(p,{recursive:true});return p;}
 function isNonEmptyDir(p){try{return fs.statSync(p).isDirectory()&&fs.readdirSync(p).length>0;}catch{return false;}}
+const MIGRATABLE_DATA=Object.freeze(['workspaces.json','workspaces.json.bak','master-monitor-sessions.json','master-monitor-sessions.json.bak','network-discovery.json','network-discovery.json.bak','history','logger-trend']);
+function hasPersistedData(p){
+  try{return fs.statSync(p).isDirectory()&&fs.readdirSync(p).some(name=>name!=='.desktop-storage-v2.json');}catch{return false;}
+}
 function copyTree(src,dst){
   if(!exists(src))return 0;
   let files=0;
@@ -24,32 +28,44 @@ function findLegacyDataDir(candidates=[]){
   for(const candidate of candidates){
     if(!candidate)continue;
     const resolved=path.resolve(candidate);
-    if(exists(path.join(resolved,'workspaces.json'))||isNonEmptyDir(path.join(resolved,'history')))return resolved;
+    if(exists(path.join(resolved,'workspaces.json'))||exists(path.join(resolved,'workspaces.json.bak'))||exists(path.join(resolved,'master-monitor-sessions.json'))||exists(path.join(resolved,'master-monitor-sessions.json.bak'))||exists(path.join(resolved,'network-discovery.json'))||exists(path.join(resolved,'network-discovery.json.bak'))||isNonEmptyDir(path.join(resolved,'history'))||isNonEmptyDir(path.join(resolved,'logger-trend')))return resolved;
   }
   return null;
 }
 
-function prepareDesktopDataDir({userDataRoot,legacyCandidates=[]}={}){
+function prepareDesktopDataDir({userDataRoot,legacyCandidates=[],copyTreeImpl=copyTree}={}){
   if(!userDataRoot)throw new Error('Electron user-data directory is required.');
   const dataDir=path.join(path.resolve(userDataRoot),'data');
   mkdir(dataDir);
   const marker=path.join(dataDir,'.desktop-storage-v2.json');
-  const existingWorkspace=exists(path.join(dataDir,'workspaces.json'));
-  const existingHistory=isNonEmptyDir(path.join(dataDir,'history'));
+  const destinationHasData=hasPersistedData(dataDir);
   let migrated=false,source=null,copiedFiles=0,error=null;
 
   // Never merge an old workspace into an already populated destination. Mixing two
   // stores is more dangerous than leaving the legacy copy untouched.
-  if(!existingWorkspace&&!existingHistory){
+  if(!destinationHasData){
     source=findLegacyDataDir(legacyCandidates.filter(x=>x&&path.resolve(x)!==path.resolve(dataDir)));
     if(source){
+      const migrationTargets=[];
       try{
-        for(const name of ['workspaces.json','workspaces.json.bak','history']){
+        for(const name of MIGRATABLE_DATA){
           const from=path.join(source,name),to=path.join(dataDir,name);
-          if(exists(from)&&!exists(to))copiedFiles+=copyTree(from,to);
+          if(exists(from)&&!exists(to)){
+            migrationTargets.push(to);
+            copiedFiles+=copyTreeImpl(from,to);
+          }
         }
         migrated=copiedFiles>0;
-      }catch(e){error=e.message;}
+      }catch(e){
+        // A failed recursive copy may already have created part of a top-level
+        // workspace/history target. Roll back only targets this migration began,
+        // so the next launch can retry without mixing partial legacy state.
+        for(const target of migrationTargets.reverse()){
+          try{fs.rmSync(target,{recursive:true,force:true});}catch{}
+        }
+        copiedFiles=0;
+        error=e.message;
+      }
     }
   }
 
@@ -59,4 +75,4 @@ function prepareDesktopDataDir({userDataRoot,legacyCandidates=[]}={}){
   return report;
 }
 
-module.exports={prepareDesktopDataDir,findLegacyDataDir,copyTree};
+module.exports={prepareDesktopDataDir,findLegacyDataDir,copyTree,hasPersistedData};

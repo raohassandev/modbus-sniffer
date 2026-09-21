@@ -10,10 +10,9 @@ const DEFAULT_FLAGS = Object.freeze({
   registerLabWorkspace: true,
   testCenterWorkspace: true,
   digitalTwinWorkspace: true,
-  chartsWorkspace: false,
-  historianWorkspace: false,
+  chartsWorkspace: true,
+  historianWorkspace: true,
   automationWorkspace: false,
-  hmiWorkspace: false,
 });
 
 function parseBoolean(value, fallback) {

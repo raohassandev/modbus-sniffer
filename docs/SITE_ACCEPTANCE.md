@@ -1,169 +1,330 @@
-# Modbus Engineering Analyzer v7 — Site Acceptance Procedure
+# Modbus Engineering Tool 8.0.0 — L8-F Site / Windows Acceptance
 
-This procedure is the final hardware/network sign-off after software CI passes. Software tests cannot prove RS485 electrical behavior, real gateway timing, plant network policy or long-duration site stability.
+This procedure is the final acceptance boundary for the **unified Modbus Engineering Tool**. It applies only to the exact tested commit, workstation, adapter/gateway, device firmware and network topology.
 
-## 1. Update and validate the workstation
+Software source completion is not proof of RS485 electrical behavior, third-party device interoperability, Windows driver behavior or site-network policy.
 
-```powershell
-git pull origin main
-npm ci
-npm run version:check
-npm test
-npm run smoke
-npm run acceptance
-node scripts/benchmark-v7.js
-```
+## 1. Freeze exact release identity
 
-All commands must pass before field acceptance. Node 22 is recommended for new deployments.
+Record:
 
-## 2. RTU passive-tap wiring
+- Git commit SHA
+- product version
+- workstation OS / architecture
+- Node version when running from source
+- installer SHA-256 and BUILD-PROVENANCE when using Windows desktop
+- date/time and engineer
 
-Use a second isolated/high-impedance USB-RS485 adapter in parallel with the live bus:
+The unified runtime entrypoint is:
 
-```text
-Master A+ ----+---------------- Device A+
-              +---- Sniffer A+
-Master B- ----+---------------- Device B-
-              +---- Sniffer B-
-GND ----------+---------------- Device GND/reference
-              +---- Sniffer GND/reference
-```
+`src/index-v7.js`
 
-Do not add a new 120-ohm terminator only for the sniffer. Normal RTU capture is software RX-only, but that does not guarantee the electrical behavior of a USB adapter; use appropriate isolated hardware for production tapping.
+Normal source launch:
 
-## 3. Start the analyzer
-
-```powershell
+```bash
 npm start
 ```
 
-Open `http://127.0.0.1:8080`, select the adapter and known serial settings, or use passive Quick Detect / Full Detect. Confirm the Dashboard mode badge says RTU passive capture and not an active/transmitting mode.
+Normal browser URL:
 
-## 4. Capture enough normal traffic
-
-Capture at least 60 seconds for fast polling. For 5 s / 10 s / 60 s groups, capture long enough to observe at least ten repetitions of the slowest expected group. Keep the analyzer attached while the process experiences normal load/state changes so engineering values and polling behavior can be compared against known equipment values.
-
-## 5. Device and channel identity
-
-On **Devices** and **Discovery**, verify:
-
-- every expected RTU Slave ID appears under the correct RTU channel;
-- duplicate Slave IDs on different physical buses remain separate devices;
-- TCP Unit IDs are shown under the correct endpoint/channel;
-- the same Unit ID behind two TCP gateways does not share registers, history, names or health;
-- channel endpoint/serial configuration is correct.
-
-For a ten-device RTU bus:
-
-```powershell
-npm run field-check -- --min-devices 10 --min-frames 500
+```text
+http://127.0.0.1:8080/
 ```
 
-If the site has an accepted amount of communication loss/noise, set documented thresholds rather than silently ignoring it.
+The former `/v8/` compatibility shell is not a shipped product surface.
 
-## 6. Register and engineering-value validation
+## 2. Exact-head automated runtime acceptance
 
-Spot-check at least two devices that use identical register addresses and verify their values remain isolated. For mapped engineering values, compare known voltage/current/power/energy or another trusted value against the equipment/HMI. Verify datatype, word/byte order, scale, offset and unit.
+Before field work, the exact checkout must pass the automated source gates.
 
-Multiword mappings must not overlap another mapping on the same device/function unless the engineering design intentionally changes the mapping first.
+Cross-platform fast gate:
 
-## 7. Polling and missing-response behavior
+```bash
+npm ci
+npm run preflight
+```
 
-Compare at least three known polling groups with PLC/HMI settings. Use median interval and jitter rather than one sample. For a stable wired RTU bus, ±10% of the configured interval is a practical initial acceptance target unless the master intentionally schedules/bursts requests.
+L8-F runtime lifecycle gate:
 
-If safe and permitted, disconnect one non-critical slave during maintenance and confirm a missing reply becomes a `TIMEOUT` after the configured timeout. Do not interrupt production-critical equipment merely to create a test fault.
+```bash
+npm run acceptance:l8f -- --expect-head <COMMIT_SHA> --json-out ./l8f-runtime.json
+```
 
-## 8. Passive Discovery and FC43 identity
+The L8-F runtime gate verifies:
 
-Passive Discovery must not transmit. Where devices naturally answer FC43 / MEI 0x0E, confirm Vendor/Product/Model/Revision evidence is tied to the exact channel/device.
+- unified product/version identity
+- critical UI assets and blocked compatibility shell
+- serial enumeration API safety
+- built-in TCP Slave startup
+- Master → Slave FC03 loopback read
+- write lock initially LOCKED
+- unsafe FC16 bulk write rejected before transmission
+- failed/non-transmitted write audit evidence
+- Raw Lab and Slave LAB unarmed by default
+- restart does not restore Master connection, write enable, running Slave or LAB arming
 
-If an identity is adopted into the project, use Preview first and verify the exact target channel/device. Overwriting existing identification requires an explicit decision and must remain visible in the adoption audit.
+On macOS, the exhaustive release evidence gate is:
 
-## 9. Active Discovery safety
+```bash
+npm run release:gate:mac
+```
 
-Active Discovery is intentionally separate from passive analysis.
+It validates Node 20/22/24, source/test/smoke/acceptance, benchmarks, bounded soak, unified browser E2E and internal compatibility regression coverage while preserving exact-head evidence.
 
-For RTU, use it only during a maintenance window with exclusive-bus permission. Confirm both safety acknowledgements before scanning. For TCP, enter the exact intended target endpoint. Active Discovery sends only read-only FC43 / MEI 0x0E Device Identification requests; it must not be used as a general register scanner or write tool.
+## 3. Passive RTU Sniffer acceptance
 
-Stop the scan immediately if the site/equipment behavior is unexpected.
+Use an isolated/high-impedance USB-RS485 adapter in parallel with the live bus.
 
-## 10. Modbus TCP inline-proxy acceptance
+Recommended tap:
 
-The TCP analyzer is an inline forwarding proxy, not a passive Ethernet tap.
+```text
+Master A+ ----+---------------- Device A+
+              +---- Analyzer tap A+
+Master B- ----+---------------- Device B-
+              +---- Analyzer tap B-
+GND ----------+---------------- Device reference
+              +---- Analyzer tap reference
+```
 
-1. Start with loopback binding where possible.
-2. Configure the exact target host/port.
-3. Point the existing Modbus TCP master/client at the analyzer listen endpoint.
-4. Verify normal plant/client operation while the analyzer runs.
-5. Confirm transaction IDs, Unit IDs, requests/responses, RTT and exceptions appear correctly.
-6. Verify a controlled client disconnect is reported separately from a silent request timeout.
-7. Confirm endpoint/channel identity remains stable across reconnects.
+Do not add a new termination resistor only for the passive tap.
 
-A non-loopback proxy bind requires explicit confirmation and should only be used on a trusted engineering/control network.
+Verify:
 
-## 11. Capture, replay and handover
+- correct COM device and baud/data/parity/stop configuration
+- passive Analyzer does not transmit
+- expected Unit IDs appear
+- polling groups and intervals are learned
+- requests and responses pair correctly
+- known register values agree with a trusted meter/HMI/reference
+- timeout/noise/unmatched-response rates remain within site limits
+- duplicate Unit IDs on different channels remain isolated
 
-Save a `.mbcap`, stop live capture, reload it, and replay it at 2× or another accelerated speed. Polling intervals/RTT analysis must remain based on source timestamps rather than compressed replay wall-clock time.
+Collect at least ten repetitions of the slowest expected polling group.
 
-From **Reports**, export the XLSX, PDF and complete ZIP. Verify the ZIP includes channel/device identity, Discovery evidence, Adoption Audit and the raw capture needed for later engineering review.
+Machine-readable evidence:
 
-## 12. Desktop installer acceptance
+```bash
+npm run field-check -- \
+  --min-devices <N> \
+  --min-frames <N> \
+  --max-noise-pct <LIMIT> \
+  --max-timeout-pct <LIMIT> \
+  --max-unmatched-pct <LIMIT> \
+  --expect-version 8.0.0 \
+  --expect-head <COMMIT_SHA> \
+  --json-out ./field-acceptance.json
+```
 
-On the intended Windows class of workstation:
+## 4. Master RTU acceptance
 
-- install the generated NSIS package;
-- launch without requiring the source checkout;
-- verify the UI and v7 backend start locally;
-- connect the real USB-RS485 adapter and confirm the serial module opens it;
-- restart the PC/app and verify project/history persistence;
-- perform an upgrade install and confirm data is retained;
-- uninstall and confirm project data retention/removal behavior follows the site policy.
+Use an approved non-critical device or maintenance setup.
 
-Compare the installer/file checksum with `SHA256SUMS.txt` from the same CI artifact and retain `BUILD-PROVENANCE.txt` with the handover record.
+Verify FC01–04 on representative addresses and quantities:
 
-## 13. Long-duration sign-off
+- connect with correct serial format
+- Unit ID and address notation are correct
+- Read Once returns trusted values
+- cyclic polling remains serialized
+- configured retry / inter-request delay works as expected
+- RTS direction control works with the selected RS485 adapter when required
+- timeouts are reported when a non-critical device is intentionally unavailable
+- Traffic shows exact Tx/Rx evidence
+- disconnect/reconnect does not restore an armed write state
 
-A short 2-hour run is useful for commissioning, but final production sign-off should include a representative long-duration soak; 24 hours is the default target where site operations permit it.
+For guarded writes, test only an approved writable point.
 
-During the soak confirm:
+Verify:
 
-- no application/backend crash or restart;
-- expected devices/channels remain stable;
-- no unexplained rise in RTU noise or TCP parser errors;
-- timeout/exception rates remain within the site threshold;
-- register values and history continue updating;
-- no unbounded memory growth or UI slowdown;
-- exports still complete successfully near the end of the run.
+- write state begins LOCKED
+- explicit confirmation is required
+- bulk/broadcast writes require stronger confirmation
+- rejected write has `transmitted=false`
+- successful write audit contains target/function/address/timestamp/evidence
+- read-back verification works where supported
+- write state returns LOCKED after operation/reconnect
 
-## Acceptance record
+## 5. Master TCP acceptance
+
+Against a representative Modbus TCP device/gateway verify:
+
+- endpoint and Unit ID
+- FC01–04 reads
+- MBAP transaction matching
+- RTT and timeout behavior
+- reconnect behavior
+- multiple gateways with the same Unit ID remain distinct channels/devices
+- no serial-only diagnostic is incorrectly offered as TCP-compatible
+
+If using inline/proxy operation, treat the tool as active network infrastructure and verify forwarded request/response semantics remain unchanged.
+
+## 6. Slave interoperability acceptance
+
+Test the built-in Slave with at least one independent external Master/client.
+
+Verify:
+
+- TCP server start/stop and multiple client behavior
+- representative FC01/02/03/04 reads
+- representative guarded writable areas for FC05/06/15/16 where enabled
+- Modbus exceptions for illegal function/address/value
+- Unit-ID isolation
+- Device Identification when used
+- File Record/FIFO/diagnostic functions where applicable
+- imported simulator maps preserve identity/memory
+- LAB fault policy remains disabled unless explicitly armed
+- dynamic generators require explicit LAB confirmation
+
+For serial Slave mode, also verify actual adapter direction control and response timing.
+
+## 7. TLS / mTLS interoperability
+
+Use representative certificates/endpoints from the deployment.
+
+Verify:
+
+- Modbus TCP Security uses the intended TLS endpoint (default product guidance: port 802)
+- trusted CA succeeds
+- wrong/untrusted server certificate fails
+- hostname/SNI policy behaves as configured
+- mTLS client-certificate requirement behaves as configured
+- there is no silent downgrade to plain TCP
+- logs/status/export never expose private-key material
+- restart/reconfigure does not require the application to expose retained private keys
+
+Retain certificate subjects/fingerprints/policy in evidence. Never copy private keys into acceptance records.
+
+## 8. Windows installer acceptance
+
+The repository Windows workflow is manual-only and must be run against the exact release head.
+
+It performs:
+
+- source preflight
+- Windows SQLite handle/isolation checks
+- bounded synthetic soak
+- unified Chromium browser acceptance
+- runtime dependency audit
+- NSIS build
+- unpacked package smoke
+- **actual silent NSIS install**
+- installed application health/UI/serial-enumerator check
+- compatibility-shell block check
+- Defender/firewall/USB/serial inventory capture
+- **actual silent uninstall**
+- release provenance and SHA-256 generation
+
+Required evidence from `desktop/dist`:
+
+- `Modbus-Engineering-Tool-Setup-8.0.0.exe`
+- `BUILD-PROVENANCE.txt`
+- `SHA256SUMS.txt`
+- `WINDOWS-ACCEPTANCE.json`
+- `WINDOWS-ENVIRONMENT.txt`
+
+On a representative production workstation additionally verify:
+
+- installer launches without source checkout
+- expected USB-RS485 driver creates the COM port
+- real adapter opens successfully
+- Defender does not quarantine/block the application
+- required Windows Firewall behavior matches the intended loopback/network bind
+- reboot preserves user/project data but does not restore live ownership/write/LAB states
+- upgrade install retains user data according to policy
+- uninstall behavior matches site data-retention policy
+
+## 9. Device Clone / evidence acceptance
+
+Verify:
+
+- captured/discovered data can seed Device Clone / built-in Slave only after review
+- generated simulator memory is scoped to the intended Unit/channel
+- no simulator server is silently replaced
+- writable areas are deliberate
+- Traffic, Logger/Trend, Raw Lab and Compare exports preserve device/channel identity
+- TLS/private-key fields are redacted
+- CSV/export filenames and content remain safe
+
+## 10. Long-duration acceptance
+
+For software-only bounded stress:
+
+```bash
+npm run soak -- --cycles 50000
+npm run soak:v8 -- --seconds 60
+```
+
+For final production commissioning, a representative long-duration run (24 hours where operations permit) should verify:
+
+- no backend/UI crash or unexplained restart
+- no unbounded memory/disk growth
+- stable channel/device identity
+- acceptable timeout/noise/exception rates
+- Logger/Trend retention remains bounded
+- reconnects do not leak handles/resources
+- export still works near the end of the run
+- restart/reopen remains safe
+
+## 11. Acceptance record
 
 ```text
 Site:
 Date/time:
-Analyzer commit/version:
-Windows/Node version:
-RTU adapter + serial number:
-RTU COM / baud / data / parity / stop:
-TCP listen endpoint (if used):
-TCP target endpoint (if used):
-Expected RTU slaves:
-Expected TCP units/endpoints:
-Detected devices/channels:
-Capture duration:
-Frames / requests / responses:
-Timeout rate:
-RTU noise ratio:
-TCP MBAP/parser errors:
-Unmatched response rate:
-Average / P95 RTT:
-Field-check result:
-Discovery evidence run ID(s):
-Capture filename:
-Export ZIP filename:
-Installer SHA-256:
 Engineer:
 Result: PASS / FAIL
+
+Commit SHA:
+Product version:
+Release evidence path/run:
+Windows installer:
+Installer SHA-256:
+BUILD-PROVENANCE commit:
+
+Workstation OS/architecture:
+Node version (source run):
+Defender/firewall result:
+USB-RS485 adapter / serial:
+COM / baud / data / parity / stop:
+
+Passive RTU result:
+Master RTU result:
+Master TCP result:
+External-Master Slave result:
+TLS/mTLS result:
+
+Expected devices:
+Detected devices:
+Observation duration:
+Frames / requests / responses:
+Timeout rate:
+Noise ratio:
+Unmatched-response rate:
+Average / P95 RTT:
+
+Write-safety target/result:
+Field acceptance JSON:
+L8-F runtime JSON:
+Windows acceptance JSON:
+Long-soak evidence:
+
 Notes:
 ```
 
-Production acceptance is valid for the tested hardware/site/network combination. A major wiring, adapter, gateway, firmware, master-program or network-topology change should trigger a focused re-validation.
+## 12. Final L8-F evidence convergence
+
+Copy `docs/L8F_PHYSICAL_ACCEPTANCE.template.json` to an acceptance evidence folder and complete every physical check only from observed evidence on the exact release head.
+
+After runtime, Windows, field and physical evidence all report PASS for the same commit/version, run:
+
+```bash
+npm run acceptance:l8f:final -- \
+  --runtime ./l8f-runtime.json \
+  --windows ./WINDOWS-ACCEPTANCE.json \
+  --field ./field-acceptance.json \
+  --physical ./L8F_PHYSICAL_ACCEPTANCE.json \
+  --expect-head <COMMIT_SHA> \
+  --json-out ./L8F-FINAL-ACCEPTANCE.json
+```
+
+The finalizer fails closed if any evidence is missing, not PASS, has the wrong evidence kind, belongs to another commit/version, does not match the current checkout, omits required automated checks, or marks a required physical category PASS without an evidence reference.
+
+A major application revision, wiring change, adapter/gateway replacement, device firmware change, master-program change or network-topology change requires focused re-validation.
