@@ -5,6 +5,12 @@ const path=require('node:path');
 const crypto=require('node:crypto');
 const {normalizeMac}=require('./deviceFingerprint');
 
+const MAX_STORE_BYTES=64*1024*1024;
+const MAX_HOSTS=10000;
+const MAX_SCANS=24;
+const MAX_BASELINES=8;
+const MAX_EVENTS=10000;
+
 function clone(v){return JSON.parse(JSON.stringify(v));}
 function now(){return new Date().toISOString();}
 function safeId(prefix='network'){return `${prefix}-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;}
@@ -20,6 +26,22 @@ function normalizedServices(list=[]){
 }
 function signature(host={}){
   return JSON.stringify({ip:host.ip||null,mac:normalizeMac(host.mac),hostname:host.hostname||null,type:host.type||null,services:normalizedServices(host.services).map(s=>[s.protocol,s.port,s.name]),modbus:Boolean(host.modbus?.verified),modbusPort:host.modbus?.port||null});
+}
+function compactHostSnapshot(input={}){
+  const units=(input.modbusUnits||[]).slice(0,256).map(row=>{
+    const i=row.identification||{};
+    return{unitId:Number(row.unitId),identificationSupported:row.identificationSupported??null,identification:{vendorName:cleanText(i.vendorName,160)||null,productCode:cleanText(i.productCode,160)||null,productName:cleanText(i.productName,160)||null,modelName:cleanText(i.modelName,160)||null,revision:cleanText(i.revision,160)||null,userApplicationName:cleanText(i.userApplicationName,160)||null}};
+  }).filter(row=>Number.isInteger(row.unitId)&&row.unitId>=0&&row.unitId<=255);
+  return{
+    id:cleanText(input.id||hostKey(input),180),scannerId:cleanText(input.scannerId||'local',120)||'local',
+    ip:cleanText(input.ip,80),mac:normalizeMac(input.mac),macVendor:cleanText(input.macVendor,200)||null,
+    hostname:cleanText(input.hostname,255)||null,type:cleanText(input.type||'Unknown',160)||'Unknown',
+    classification:['trusted','unknown','unexpected','ignored','decommissioned'].includes(input.classification)?input.classification:'unknown',
+    state:cleanText(input.state||'unknown',40),industrial:Boolean(input.industrial),
+    services:normalizedServices(input.services),
+    modbus:{verified:Boolean(input.modbus?.verified),port:Number(input.modbus?.port)||null,unitId:Number.isInteger(Number(input.modbus?.unitId))?Number(input.modbus.unitId):null},
+    modbusUnits:units,firstSeen:input.firstSeen||null,lastSeen:input.lastSeen||null,lastChanged:input.lastChanged||null
+  };
 }
 function normalizeHost(input={},existing=null){
   const stamp=now(),mac=normalizeMac(input.mac),ip=cleanText(input.ip,80),id=existing?.id||hostKey({mac,ip});
@@ -64,7 +86,7 @@ class NetworkStore{
   }
   _empty(){return{version:1,projects:{}};}
   _load(){
-    const tryRead=file=>{const raw=fs.readFileSync(file,'utf8');if(Buffer.byteLength(raw)>20*1024*1024)throw new Error('Network discovery store exceeds 20 MB safety limit.');const x=JSON.parse(raw);if(Number(x?.version)!==1||!x.projects||typeof x.projects!=='object')throw new Error('Unsupported network discovery store schema.');return x;};
+    const tryRead=file=>{const raw=fs.readFileSync(file,'utf8');if(Buffer.byteLength(raw)>MAX_STORE_BYTES)throw new Error('Network discovery store exceeds the 64 MB safety limit.');const x=JSON.parse(raw);if(Number(x?.version)!==1||!x.projects||typeof x.projects!=='object')throw new Error('Unsupported network discovery store schema.');return x;};
     if(!fs.existsSync(this.file)){if(fs.existsSync(this.backup)){const x=tryRead(this.backup);fs.copyFileSync(this.backup,this.file);return x;}return this._empty();}
     try{return tryRead(this.file);}catch(error){
       if(fs.existsSync(this.backup)){
@@ -77,8 +99,19 @@ class NetworkStore{
     }
   }
   _atomic(){
-    const tmp=`${this.file}.tmp-${process.pid}-${crypto.randomUUID()}`,json=JSON.stringify(this.db);
-    if(Buffer.byteLength(json)>20*1024*1024)throw new Error('Network discovery store exceeds 20 MB safety limit.');
+    let json=JSON.stringify(this.db),passes=0;
+    while(Buffer.byteLength(json)>MAX_STORE_BYTES&&passes++<100){
+      let changed=false;
+      for(const p of Object.values(this.db.projects||{})){
+        if((p.scans||[]).length>4){p.scans.shift();changed=true;}
+        else if((p.events||[]).length>2000){p.events.splice(0,Math.min(500,p.events.length-2000));changed=true;}
+        else if((p.baselines||[]).length>2){p.baselines.shift();changed=true;}
+      }
+      if(!changed)break;
+      json=JSON.stringify(this.db);
+    }
+    if(Buffer.byteLength(json)>MAX_STORE_BYTES)throw new Error('Network discovery store exceeds the 64 MB safety limit after bounded history pruning.');
+    const tmp=`${this.file}.tmp-${process.pid}-${crypto.randomUUID()}`;
     fs.writeFileSync(tmp,json,{encoding:'utf8',mode:0o600});try{const fd=fs.openSync(tmp,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}catch{}
     const existed=fs.existsSync(this.file);
     if(existed)fs.copyFileSync(this.file,this.backup);
@@ -121,7 +154,7 @@ class NetworkStore{
     const p=this._project(projectId),prev=p.hosts[String(id)];if(!prev)return null;const allowed={classification:patch.classification,notes:patch.notes,tags:patch.tags};const next=normalizeHost({...prev,...allowed},prev);const changes=diffHost(prev,next);if(changes.length){next.lastChanged=now();p.events.push({id:safeId('event'),at:now(),type:'host-user-update',hostId:next.id,ip:next.ip,source:'user',changes});}p.hosts[next.id]=next;this._trimProject(p);this._atomic();return clone(next);
   }
   saveScan(projectId,input={}){
-    const p=this._project(projectId),scan={id:cleanText(input.id,180)||safeId('scan'),startedAt:input.startedAt||now(),completedAt:input.completedAt||now(),state:cleanText(input.state||'completed',40),profile:cleanText(input.profile||'standard',40),target:cleanText(input.target,2000),settings:clone(input.settings||{}),summary:clone(input.summary||{}),findings:clone((input.findings||[]).slice(0,1024)),hosts:clone((input.hosts||[]).slice(0,4096)).map(h=>normalizeHost(h,null))};
+    const p=this._project(projectId),scan={id:cleanText(input.id,180)||safeId('scan'),startedAt:input.startedAt||now(),completedAt:input.completedAt||now(),state:cleanText(input.state||'completed',40),profile:cleanText(input.profile||'standard',40),target:cleanText(input.target,2000),settings:clone(input.settings||{}),summary:clone(input.summary||{}),findings:clone((input.findings||[]).slice(0,1024)),hosts:(input.hosts||[]).slice(0,MAX_HOSTS).map(compactHostSnapshot)};
     p.scans=[...p.scans.filter(x=>x.id!==scan.id),scan].slice(-100);this._trimProject(p);this._atomic();return clone(scan);
   }
   listScans(projectId){return this._project(projectId).scans.slice().reverse().map(s=>({id:s.id,startedAt:s.startedAt,completedAt:s.completedAt,state:s.state,profile:s.profile,target:s.target,summary:clone(s.summary),hostCount:s.hosts.length,findingsCount:s.findings.length}));}
@@ -156,8 +189,8 @@ class NetworkStore{
     });
   }
   _trimProject(p){
-    const hosts=Object.values(p.hosts);if(hosts.length>4096){hosts.sort((a,b)=>String(b.lastSeen||'').localeCompare(String(a.lastSeen||'')));p.hosts=Object.fromEntries(hosts.slice(0,4096).map(h=>[h.id,h]));}
-    p.scans=p.scans.slice(-100);p.baselines=p.baselines.slice(-10);p.events=p.events.slice(-5000);
+    const hosts=Object.values(p.hosts);if(hosts.length>MAX_HOSTS){hosts.sort((a,b)=>String(b.lastSeen||'').localeCompare(String(a.lastSeen||'')));p.hosts=Object.fromEntries(hosts.slice(0,MAX_HOSTS).map(h=>[h.id,h]));}
+    p.scans=p.scans.slice(-MAX_SCANS);p.baselines=p.baselines.slice(-MAX_BASELINES);p.events=p.events.slice(-MAX_EVENTS);
   }
 }
-module.exports={NetworkStore,normalizeHost,diffHost,hostKey,normalizedServices,signature,unitIdentity};
+module.exports={NetworkStore,normalizeHost,diffHost,hostKey,normalizedServices,signature,unitIdentity,compactHostSnapshot,MAX_STORE_BYTES,MAX_HOSTS,MAX_SCANS,MAX_BASELINES,MAX_EVENTS};
