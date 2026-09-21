@@ -30,7 +30,7 @@ function publicStatus(job){
   return{
     state:job.state,running:job.running,paused:job.paused,jobId:job.jobId,profile:job.profile,target:job.target,
     startedAt:job.startedAt,completedAt:job.completedAt||null,progress:{...job.progress},summary:summary(job.hosts,job.progress),
-    hosts:job.hosts.map(x=>({...x})),findings:job.findings.map(x=>({...x})),error:job.error?{...job.error}:null,
+    hosts:job.hosts.map(x=>({...x})),findings:job.findings.map(x=>({...x})),savedScanId:job.savedScanId||null,error:job.error?{...job.error}:null,
     settings:{hostConcurrency:job.settings.hostConcurrency,serviceConcurrency:job.settings.serviceConcurrency,timeoutMs:job.settings.timeoutMs,useIcmp:job.settings.useIcmp,verifyModbus:job.settings.verifyModbus}
   };
 }
@@ -61,8 +61,8 @@ async function enrichAliveHost(host,{profile,customPorts,timeoutMs,serviceConcur
   return{...host,...fp,rawServices:services,metadata,avgRttMs:rtts.length?Math.round(rtts.reduce((a,b)=>a+b,0)/rtts.length*100)/100:host.avgRttMs,lastSeen:new Date().toISOString()};
 }
 class NetworkScanManager extends EventEmitter{
-  constructor({store=null,getProjectId=()=>null,verifyModbus=verifyModbusEndpoint}={}){
-    super();this.store=store;this.getProjectId=getProjectId;this.verifyModbus=verifyModbus;this.job=null;this.controller=null;this._pauseWaiters=[];
+  constructor({store=null,getProjectId=()=>null,verifyModbus=verifyModbusEndpoint,discover=discoverHost,enrich=enrichAliveHost,neighbors=readNeighborTable}={}){
+    super();this.store=store;this.getProjectId=getProjectId;this.verifyModbus=verifyModbus;this.discover=discover;this.enrich=enrich;this.neighbors=neighbors;this.job=null;this.controller=null;this._pauseWaiters=[];
   }
   status(){return publicStatus(this.job);}
   _emit(){const s=this.status();this.emit('status',s);return s;}
@@ -86,7 +86,8 @@ class NetworkScanManager extends EventEmitter{
     const profile=normalizeProfile(input.profile),parsed=parseTargets({targets:input.targets??input.target,exclude:input.exclude,maxTargets:input.maxTargets??262144});
     if(parsed.hasPublicTargets&&input.confirmPublicTargets!==true){const e=new Error('Target includes public/non-local IPv4 addresses. Explicitly confirm public target scanning before starting.');e.code='PUBLIC_TARGET_CONFIRMATION_REQUIRED';e.publicCount=parsed.publicCount;throw e;}
     const jobId=crypto.randomUUID(),settings=this._settings(input,profile,parsed.count),controller=new AbortController(),target=Array.isArray(input.targets)?input.targets.join(', '):String(input.targets??input.target||'');
-    this.controller=controller;this.job={jobId,profile,target,parsed,settings,state:'running',running:true,paused:false,startedAt:Date.now(),completedAt:null,hosts:[],findings:[],error:null,progress:{total:parsed.count,scanned:0,current:null,stage:'host-discovery',warnings:0,errors:0,truncated:false}};
+    const projectId=this.getProjectId?.()||'default';
+    this.controller=controller;this.job={jobId,projectId,profile,target,parsed,settings,state:'running',running:true,paused:false,startedAt:Date.now(),completedAt:null,hosts:[],findings:[],error:null,progress:{total:parsed.count,scanned:0,current:null,stage:'host-discovery',warnings:0,errors:0,truncated:false}};
     this._run(this.job,controller).catch(()=>{});return this._emit();
   }
   pause(){if(!this.job?.running||this.job.paused)return this.status();this.job.paused=true;this.job.state='paused';return this._emit();}
@@ -98,14 +99,14 @@ class NetworkScanManager extends EventEmitter{
   }
   async _scanIp(job,ip,neighborMap,signal){
     await this._waitIfPaused(job,signal);job.progress.current=ip;job.progress.stage='host-discovery';
-    const base=await discoverHost(ip,{profile:'quick',timeoutMs:job.settings.timeoutMs,serviceConcurrency:4,useIcmp:job.settings.useIcmp,signal,neighborMap,verifyModbus:null});
+    const base=await this.discover(ip,{profile:'quick',timeoutMs:job.settings.timeoutMs,serviceConcurrency:4,useIcmp:job.settings.useIcmp,signal,neighborMap,verifyModbus:null});
     job.progress.scanned++;
     if(!base.alive)return null;
     await this._waitIfPaused(job,signal);job.progress.stage='enrichment';
-    return enrichAliveHost(base,{profile:job.profile,customPorts:job.settings.customPorts,timeoutMs:job.settings.timeoutMs,serviceConcurrency:job.settings.serviceConcurrency,verifyModbus:job.settings.verifyModbus,enrichWeb:job.settings.enrichWeb,signal,neighborMap});
+    return this.enrich(base,{profile:job.profile,customPorts:job.settings.customPorts,timeoutMs:job.settings.timeoutMs,serviceConcurrency:job.settings.serviceConcurrency,verifyModbus:job.settings.verifyModbus,enrichWeb:job.settings.enrichWeb,signal,neighborMap});
   }
   async _run(job,controller){
-    const signal=controller.signal,neighborMap=await readNeighborTable(),iterator=iterateTargets(job.parsed);let exhausted=false;
+    const signal=controller.signal,neighborMap=await this.neighbors(),iterator=iterateTargets(job.parsed);let exhausted=false;
     const nextIp=()=>{if(exhausted)return null;const n=iterator.next();if(n.done){exhausted=true;return null;}return n.value;};
     const worker=async()=>{
       while(true){
@@ -126,7 +127,7 @@ class NetworkScanManager extends EventEmitter{
     try{
       const count=Math.min(job.settings.hostConcurrency,job.parsed.count||1);await Promise.all(Array.from({length:count},worker));
       job.findings=duplicateFindings(job.hosts);job.progress.warnings=job.findings.length;job.progress.stage='complete';job.state='completed';job.running=false;job.completedAt=Date.now();
-      const projectId=this.getProjectId?.()||'default';
+      const projectId=job.projectId;
       if(this.store){
         const merged=this.store.replaceScanHosts(projectId,job.hosts,'network-scan');job.hosts=merged;
         const saved=this.store.saveScan(projectId,{id:job.jobId,startedAt:new Date(job.startedAt).toISOString(),completedAt:new Date(job.completedAt).toISOString(),state:job.state,profile:job.profile,target:job.target,settings:job.settings,summary:summary(job.hosts,job.progress),findings:job.findings,hosts:job.hosts});
@@ -136,7 +137,7 @@ class NetworkScanManager extends EventEmitter{
     }catch(error){
       const cancelled=error?.code==='NETWORK_SCAN_CANCELLED'||signal.aborted;job.state=cancelled?'cancelled':'error';job.running=false;job.paused=false;job.completedAt=Date.now();job.progress.stage=job.state;job.error=cancelled?null:{message:error?.message||String(error),code:error?.code||null};this._emit();
       if(cancelled&&this.store&&job.hosts.length){
-        const projectId=this.getProjectId?.()||'default',merged=this.store.replaceScanHosts(projectId,job.hosts,'network-scan-partial');job.hosts=merged;this.store.saveScan(projectId,{id:job.jobId,startedAt:new Date(job.startedAt).toISOString(),completedAt:new Date(job.completedAt).toISOString(),state:'cancelled',profile:job.profile,target:job.target,settings:job.settings,summary:summary(job.hosts,job.progress),findings:duplicateFindings(job.hosts),hosts:job.hosts});
+        const projectId=job.projectId,merged=this.store.replaceScanHosts(projectId,job.hosts,'network-scan-partial');job.hosts=merged;this.store.saveScan(projectId,{id:job.jobId,startedAt:new Date(job.startedAt).toISOString(),completedAt:new Date(job.completedAt).toISOString(),state:'cancelled',profile:job.profile,target:job.target,settings:job.settings,summary:summary(job.hosts,job.progress),findings:duplicateFindings(job.hosts),hosts:job.hosts});
       }
       if(!cancelled)this.emit('error-state',error);
     }finally{if(this.controller===controller)this.controller=null;}
