@@ -1,6 +1,7 @@
 'use strict';
 
 const dgram=require('node:dgram');
+const net=require('node:net');
 const crypto=require('node:crypto');
 
 function encLen(n){if(n<128)return Buffer.from([n]);const bytes=[];let x=n;while(x>0){bytes.unshift(x&255);x>>>=8;}return Buffer.from([0x80|bytes.length,...bytes]);}
@@ -70,7 +71,7 @@ function snmpRequest({host,port=161,community,oids,pduTag=0xA0,timeoutMs=900,sig
   if(!community){const e=new Error('SNMP community is required explicitly.');e.code='SNMP_COMMUNITY_REQUIRED';return Promise.reject(e);}
   const {requestId,packet}=requestPacket({community,oids,requestId:null,pduTag});
   return new Promise((resolve,reject)=>{
-    const socket=dgram.createSocket('udp4');let settled=false;
+    const family=net.isIP(String(host));if(!family){const e=new Error('SNMP host must be an IP literal.');e.code='SNMP_IP_REQUIRED';return reject(e);}const socket=dgram.createSocket(family===6?'udp6':'udp4');let settled=false;
     const finish=(err,value)=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener?.('abort',onAbort);try{socket.close();}catch{}err?reject(err):resolve(value);};
     const onAbort=()=>{const e=new Error('SNMP request cancelled.');e.code='NETWORK_SCAN_CANCELLED';finish(e);};
     const timer=setTimeout(()=>{const e=new Error('SNMP request timed out.');e.code='SNMP_TIMEOUT';finish(e);},Math.max(100,Math.min(5000,Number(timeoutMs)||900)));
