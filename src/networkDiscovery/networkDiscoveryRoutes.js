@@ -182,7 +182,7 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   app.get('/api/network/scans/:id',(q,r)=>{const x=store.getScan(project(),q.params.id);if(!x)return r.status(404).json({error:'Network scan not found.',code:'NETWORK_SCAN_NOT_FOUND'});r.json(x);});
   app.get('/api/network/scans/:id/export.json',(q,r)=>{const x=store.getScan(project(),q.params.id);if(!x)return r.status(404).json({error:'Network scan not found.',code:'NETWORK_SCAN_NOT_FOUND'});r.setHeader('Content-Disposition',`attachment; filename="network-scan-${String(x.id).replace(/[^a-z0-9._-]/gi,'_')}.json"`);r.json(x);});
   app.get('/api/network/hosts.csv',(_q,r)=>{
-    const rows=store.listHosts(project(),{limit:4096}),esc=v=>{const s=String(v??'');return /[",\r\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;};
+    const rows=store.listHosts(project(),{limit:4096}),esc=v=>{let s=String(v??'');if(/^[\t\r\n ]*[=+\-@]/.test(s))s=`'${s}`;return /[",\r\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;};
     const lines=['state,ip,mac,hostname,type,classification,services,modbus,avgRttMs,lastSeen'];
     for(const h of rows)lines.push([h.state,h.ip,h.mac,h.hostname,h.type,h.classification,(h.services||[]).map(s=>`${s.port}/${s.protocol||'tcp'} ${s.name}`).join('; '),h.modbus?.verified?'yes':'no',h.avgRttMs,h.lastSeen].map(esc).join(','));
     r.setHeader('Content-Type','text/csv; charset=utf-8');r.setHeader('Content-Disposition','attachment; filename="network-hosts.csv"');r.send(lines.join('\r\n'));
