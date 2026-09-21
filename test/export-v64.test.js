@@ -44,14 +44,18 @@ test('discovery export rows preserve source and adoption audit identity',()=>{
 
 test('XLSX export contains transport-aware channel discovery and adoption sheets',async()=>{
   const project=fixtureProject(),state=fixtureState();
-  const model=collectExportModel({project,state,diagnostics:{findings:[]},mappings:[{transport:'TCP',channelId:'tcp:proxy:b',deviceKey:'tcp:proxy:b|1',unitId:1,slaveId:1,functionCode:3,address:100,name:'Power',type:'uint16',byteOrder:'ABCD',scale:1,offset:0,unit:'kW',rawWords:[1],engineeringValue:1,available:true}],history:[]});
+  const networkSnapshot={hosts:[{id:'mac:00:11:22:33:44:55',state:'online',ip:'10.0.0.5',mac:'00:11:22:33:44:55',macVendor:'ACME',hostname:'gateway',type:'Modbus Device',classification:'trusted',industrial:true,modbus:{verified:true},services:[{port:502,protocol:'tcp',name:'Modbus TCP'}],avgRttMs:4,firstSeen:'2026-09-15T00:00:00.000Z',lastSeen:'2026-09-15T00:01:00.000Z',lastChanged:'2026-09-15T00:01:00.000Z'}],events:[{at:'2026-09-15T00:01:00.000Z',type:'host-discovered',severity:'info',ip:'10.0.0.5',hostId:'mac:00:11:22:33:44:55',source:'network-scan'}],scans:[{id:'net-1'}]};
+  const model=collectExportModel({project,state,diagnostics:{findings:[]},mappings:[{transport:'TCP',channelId:'tcp:proxy:b',deviceKey:'tcp:proxy:b|1',unitId:1,slaveId:1,functionCode:3,address:100,name:'Power',type:'uint16',byteOrder:'ABCD',scale:1,offset:0,unit:'kW',rawWords:[1],engineeringValue:1,available:true}],history:[],networkSnapshot});
   const buf=await buildWorkbook(model),wb=new ExcelJS.Workbook();await wb.xlsx.load(buf);
-  for(const name of ['Summary','Channels','Devices','Polling Groups','Registers','Engineering Values','Timeouts','Exceptions','Traffic','Discovery','Adoption Audit','Project History'])assert.ok(wb.getWorksheet(name),`missing ${name}`);
+  for(const name of ['Summary','Channels','Devices','Polling Groups','Registers','Engineering Values','Timeouts','Exceptions','Traffic','Discovery','Adoption Audit','Project History','Network Hosts','Network Events'])assert.ok(wb.getWorksheet(name),`missing ${name}`);
   const devices=wb.getWorksheet('Devices');
   assert.deepEqual(devices.getRow(1).values.slice(1,6),['Transport','Channel','Endpoint','Device Key','Unit/Slave ID']);
   assert.equal(devices.getRow(2).getCell(1).value,'TCP');assert.equal(devices.getRow(2).getCell(2).value,'tcp:proxy:b');assert.equal(devices.getRow(2).getCell(4).value,'tcp:proxy:b|1');
   const discovery=wb.getWorksheet('Discovery');assert.equal(discovery.getRow(2).getCell(10).value,'ACME');
   const audit=wb.getWorksheet('Adoption Audit');assert.equal(audit.getRow(2).getCell(5).value,'tcp:proxy:b');
+  const networkHosts=wb.getWorksheet('Network Hosts');
+  assert.equal(networkHosts.getRow(2).getCell(2).value,'10.0.0.5');
+  assert.equal(networkHosts.getRow(2).getCell(9).value,'verified');
 });
 
 test('safe export names handle Windows reserved names, separators, Unicode and length',()=>{
