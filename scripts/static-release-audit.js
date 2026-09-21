@@ -13,6 +13,9 @@ const pkg=json('package.json');
 const desktop=json('desktop/package.json');
 const versionSource=read('src/v8/version.js');
 const shell=read('public/v4.html');
+const stableApp=read('public/app-v4.js');
+const tcpUi=read('public/platform-v6-main.js');
+const runtimeV62=read('src/platformRuntimeStateV62.js');
 const loader=read('public/platform-v6.js');
 const master=read('public/master-v7.js');
 const masterWrite=read('public/master-write-v7.js');
@@ -85,6 +88,15 @@ check(shell.includes('Modbus Engineering Tool'),'stable shell must identify the 
 check(shell.includes('Sniffer · Master · Slave'),'stable shell must identify primary modes');
 check(!shell.includes('PASSIVE / RX ONLY'),'global shell must not claim all modes are passive');
 check(!shell.includes('UI v7.0'),'stable shell must not hard-code an obsolete product version');
+check(shell.includes('id="sourceBanner"'),'dashboard must expose the active capture-source banner');
+check(stableApp.includes('WRONG / NOISY SOURCE'),'dashboard must clearly flag noisy/wrong serial sources');
+check(stableApp.includes("d.confirmed!==false"),'dashboard/analysis must distinguish confirmed devices from observed-only IDs');
+check(stableApp.includes("state.tcpStatus=m.payload.tcp"),'dashboard websocket state must retain current TCP proxy status');
+check(stableApp.includes("deviceKey")&&stableApp.includes("trafficDeviceKey"),'stable UI must keep transport/channel-aware device identity when drilling into traffic');
+check(runtimeV62.includes('matchedResponses')&&runtimeV62.includes("matchedResponses>0"),'device confirmation must require at least one matched request/response');
+check(runtimeV62.includes("tx?.direction==='RSP'&&!tx?.request"),'read register learning must reject unmatched response-like frames');
+check(tcpUi.includes('direct PLC traffic sent straight to the target device bypasses this application'),'TCP analyzer must explain the inline-proxy capture boundary');
+check(tcpUi.includes('tcpFixed502'),'TCP analyzer must provide the fixed-port-502 PLC preset');
 
 for(const asset of [
   'master-v7.js','slave-v7.js','traffic-evidence-v7.js','protocol-diagnostics-v7.js',
