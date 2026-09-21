@@ -3,6 +3,7 @@
 const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
 const net=require('node:net');
+const {parseTargets}=require('./targetParser');
 const execFileAsync=promisify(execFile);
 
 function candidates(){
@@ -49,6 +50,7 @@ async function discoverWithNmap({targets=[],exclude=[],timeoutMs=120000}={}){
   const targetArgs=(Array.isArray(targets)?targets:[targets]).flatMap(v=>String(v||'').split(/[\n,;]+/)).map(x=>x.trim()).filter(Boolean);
   if(!targetArgs.length)throw new Error('At least one target is required.');
   const excludeArgs=(Array.isArray(exclude)?exclude:[exclude]).flatMap(v=>String(v||'').split(/[\n,;]+/)).map(x=>x.trim()).filter(Boolean);
+  parseTargets({targets:targetArgs,exclude:excludeArgs,maxTargets:262144,hardMaxTargets:1000000,excludeNetworkBroadcast:false});
   const args=['-sn','-n','--max-retries','1','-oX','-'];
   if(excludeArgs.length)args.push('--exclude',excludeArgs.join(','));
   args.push(...targetArgs);
