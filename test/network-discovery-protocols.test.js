@@ -5,9 +5,9 @@ const assert=require('node:assert/strict');
 const {
   parseTargets,iterateTargets,previewTargets,ipv6ToBigInt,bigIntToIpv6,privateIpv6,targetContains
 }=require('../src/networkDiscovery/targetParser');
-const {buildLogicalTopology,addressUtilization}=require('../src/networkDiscovery/topology');
+const {buildLogicalTopology,addressUtilization,subnetGroup}=require('../src/networkDiscovery/topology');
 const {parseNmapXml,discoverWithNmap}=require('../src/networkDiscovery/nmapAdapter');
-const {tlv,encInt,encOctet,encOid,requestPacket,parseResponse,SYSTEM_OIDS}=require('../src/networkDiscovery/snmpClient');
+const {tlv,encInt,encOctet,encOid,requestPacket,parseResponse,snmpGet,SYSTEM_OIDS}=require('../src/networkDiscovery/snmpClient');
 const {encodeDnsName,decodeDnsName,parseHttpLike}=require('../src/networkDiscovery/multicastDiscovery');
 const {parseNmapPrefixes,parseIeeeCsv,prefix}=require('../src/networkDiscovery/ouiResolver');
 
@@ -42,6 +42,19 @@ test('logical topology does not invent physical links',()=>{
   assert.equal(util[0].modbus,1);
 });
 
+test('IPv6 hosts participate in /64 topology without fake free-address counts',()=>{
+  assert.deepEqual(subnetGroup('fd00:1::25'),{family:6,subnet:'fd00:1::/64'});
+  const top=buildLogicalTopology([{id:'v6',ip:'fd00:1::25',hostname:'PLC-v6',state:'online',modbus:{verified:true}}]);
+  assert.equal(top.summary.hosts,1);
+  assert.equal(top.summary.subnets,1);
+  assert.equal(top.nodes.some(n=>n.kind==='subnet'&&n.family===6&&n.subnet==='fd00:1::/64'),true);
+  const util=addressUtilization([{ip:'fd00:1::25',state:'online',modbus:{verified:true}}]);
+  assert.equal(util[0].family,6);
+  assert.equal(util[0].used,1);
+  assert.equal(util[0].free,null);
+  assert.deepEqual(util[0].usedAddresses,['fd00:1::25']);
+});
+
 test('Nmap XML parser preserves host, MAC vendor, service and OS provenance',()=>{
   const xml=`<?xml version="1.0"?><nmaprun><host><status state="up"/><address addr="192.168.1.10" addrtype="ipv4"/><address addr="00:11:22:33:44:55" addrtype="mac" vendor="Example Controls"/><hostnames><hostname name="plc-1.local"/></hostnames><ports><port protocol="tcp" portid="502"><state state="open"/><service name="modbus" product="Example PLC" version="1.2" method="probed" conf="10"/></port></ports><os><osmatch name="Embedded Linux" accuracy="92" line="1"/></os></host></nmaprun>`;
   const hosts=parseNmapXml(xml);
@@ -72,6 +85,10 @@ test('SNMP BER parser decodes a bounded v2c GetResponse',()=>{
   const req=requestPacket({community:'public',oids:[SYSTEM_OIDS.sysDescr],requestId:7});
   assert.equal(req.requestId,7);
   assert.equal(Buffer.isBuffer(req.packet),true);
+});
+
+test('SNMP read-only client rejects non-IP destinations before UDP transmission',async()=>{
+  await assert.rejects(snmpGet({host:'device.local',community:'public',oids:[SYSTEM_OIDS.sysName],timeoutMs:100}),e=>e?.code==='SNMP_IP_REQUIRED');
 });
 
 test('multicast helpers parse DNS names and SSDP-like headers safely',()=>{
