@@ -39,6 +39,12 @@ const loggerTrend=read('src/loggerTrend/loggerTrendService.js');
 const loggerTrendRoutes=read('src/loggerTrend/loggerTrendRoutes.js');
 const desktopStorage=read('desktop/storage.js');
 const discoveryEngineering=read('src/discoveryEngineering.js');
+const networkDiscoveryUi=read('public/network-discovery-v8.js');
+const networkTargetParser=read('src/networkDiscovery/targetParser.js');
+const networkScanManager=read('src/networkDiscovery/scanManager.js');
+const networkRoutes=read('src/networkDiscovery/networkDiscoveryRoutes.js');
+const networkStore=read('src/networkDiscovery/networkStore.js');
+const networkModbusVerifier=read('src/networkDiscovery/modbusVerifier.js');
 const udpTransport=read('src/v8/transports/udpTransport.js');
 const preflight=read('scripts/source-preflight.js');
 const l8fRuntime=read('scripts/l8f-runtime-acceptance.js');
@@ -80,7 +86,7 @@ check(!shell.includes('UI v7.0'),'stable shell must not hard-code an obsolete pr
 for(const asset of [
   'master-v7.js','slave-v7.js','traffic-evidence-v7.js','protocol-diagnostics-v7.js',
   'data-lab-v7.js','logger-trend-v7.js','compare-v7.js','transport-lab-v7.js',
-  'raw-lab-v7.js','discovery-engineering-v7.js','slave-lab-v7.js','help-v7.js','navigation-v7.js'
+  'raw-lab-v7.js','discovery-engineering-v7.js','network-discovery-v8.js','slave-lab-v7.js','help-v7.js','navigation-v7.js'
 ])check(loader.includes(asset),`stable loader missing ${asset}`);
 
 check(!master.includes('id="masterOpenTraffic"'),'base Master must not duplicate masterOpenTraffic');
@@ -120,6 +126,18 @@ check(desktopStorage.includes("'master-monitor-sessions.json.bak'"),'desktop mig
 check(desktopStorage.includes('hasPersistedData'),'desktop migration must refuse to mix legacy data into any populated user-data store');
 check(loggerTrend.includes('eventsLoaded'),'Logger/Trend must hydrate protocol-event evidence');
 check(discoveryEngineering.includes("framing==='tcp'?255:247"),'Discovery Unit-ID limits must be framing-aware');
+check(server.includes('installNetworkDiscoveryRoutes'),'unified server must install industrial network discovery routes');
+check(server.includes('networkSnapshot: networkDiscovery.store.exportProject'),'project exports must include network discovery evidence');
+check(desktopStorage.includes("'network-discovery.json'")&&desktopStorage.includes("'network-discovery.json.bak'"),'desktop migration must preserve network discovery inventory and recovery backup');
+check(networkTargetParser.includes("kind:'compact'")&&networkTargetParser.includes("kind:'cidr6'"),'network target parser must support compact IPv4 ranges and bounded IPv6 CIDR');
+check(networkTargetParser.includes('TARGET_HARD_LIMIT')&&networkTargetParser.includes('TARGET_LIMIT'),'network target parser must fail closed on oversized scans');
+check(networkScanManager.includes('PUBLIC_TARGET_CONFIRMATION_REQUIRED'),'network scans must require explicit confirmation for public targets');
+check(networkScanManager.includes('targetContains(job.parsed,neighbor.ip)'),'neighbor reconciliation must remain constrained to the requested target set');
+check(networkModbusVerifier.includes('buildReadHoldingRequest')&&networkModbusVerifier.includes('fc!==3&&fc!==0x83'),'network Modbus verification must validate a real read-only Modbus response');
+check(networkRoutes.includes("transmit:false")&&networkRoutes.includes("connect:false"),'network-to-Master handoff must prepare only and never auto-connect/transmit');
+check(networkRoutes.includes('SNMP_COMMUNITY_REQUIRED')&&networkRoutes.includes('readLldpNeighbors'),'SNMP/LLDP enrichment must be explicit and read-only');
+check(networkStore.includes('network-discovery.json')&&networkStore.includes('fs.fsyncSync'),'network inventory store must use durable bounded persistence');
+check(networkDiscoveryUi.includes('Open in Master')&&networkDiscoveryUi.includes('VERIFIED')&&networkDiscoveryUi.includes('CANDIDATE'),'network discovery UI must distinguish verified Modbus from candidates and support Master handoff');
 check(udpTransport.includes('_prunePeers'),'UDP server must expire stale peer identities');
 check(udpTransport.includes('expiredPeers'),'UDP peer expiry must be observable in transport stats');
 check(preflight.includes("['l8f-runtime', ['run','acceptance:l8f']]"),'source preflight must execute L8-F runtime acceptance');
