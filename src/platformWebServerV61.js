@@ -303,7 +303,8 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
       diagnostics: analyzeDeep({ state, config: state.config }),
       mappings: engineering(),
       history: history.query(p.id, { limit: 5000 }),
-      workspaceBackup: workspaces.exportAll()
+      workspaceBackup: workspaces.exportAll(),
+      networkSnapshot: networkDiscovery.store.exportProject(p.id)
     });
   };
 
