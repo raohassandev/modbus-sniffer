@@ -5,6 +5,7 @@ const {previewTargets}=require('./targetParser');
 const {NetworkStore}=require('./networkStore');
 const {NetworkScanManager}=require('./scanManager');
 const {scanTcpDeviceIds}=require('../activeDiscovery');
+const {addressUtilization}=require('./topology');
 
 function bodyBool(v){return v===true;}
 function activeProjectId(workspaces,getActiveProjectId){return typeof getActiveProjectId==='function'?(getActiveProjectId()||'default'):(workspaces?.getActiveProject?.()?.id||'default');}
@@ -65,11 +66,19 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
 
   app.get('/api/network/scans',(_q,r)=>r.json(store.listScans(project())));
   app.get('/api/network/scans/:id',(q,r)=>{const x=store.getScan(project(),q.params.id);if(!x)return r.status(404).json({error:'Network scan not found.',code:'NETWORK_SCAN_NOT_FOUND'});r.json(x);});
+  app.get('/api/network/scans/:id/export.json',(q,r)=>{const x=store.getScan(project(),q.params.id);if(!x)return r.status(404).json({error:'Network scan not found.',code:'NETWORK_SCAN_NOT_FOUND'});r.setHeader('Content-Disposition',`attachment; filename="network-scan-${String(x.id).replace(/[^a-z0-9._-]/gi,'_')}.json"`);r.json(x);});
+  app.get('/api/network/hosts.csv',(_q,r)=>{
+    const rows=store.listHosts(project(),{limit:4096}),esc=v=>{const s=String(v??'');return /[",\r\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;};
+    const lines=['state,ip,mac,hostname,type,classification,services,modbus,avgRttMs,lastSeen'];
+    for(const h of rows)lines.push([h.state,h.ip,h.mac,h.hostname,h.type,h.classification,(h.services||[]).map(s=>`${s.port}/${s.protocol||'tcp'} ${s.name}`).join('; '),h.modbus?.verified?'yes':'no',h.avgRttMs,h.lastSeen].map(esc).join(','));
+    r.setHeader('Content-Type','text/csv; charset=utf-8');r.setHeader('Content-Disposition','attachment; filename="network-hosts.csv"');r.send(lines.join('\r\n'));
+  });
   app.post('/api/network/scans/:id/baseline',(q,r)=>{try{r.status(201).json(store.saveBaseline(project(),q.params.id,q.body?.name));}catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}});
   app.get('/api/network/baselines',(_q,r)=>r.json(store.listBaselines(project())));
   app.get('/api/network/compare',(q,r)=>{try{r.json(store.compare(project(),{leftScanId:q.query.left||null,rightScanId:q.query.right||null,baselineId:q.query.baseline||null}));}catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}});
   app.get('/api/network/events',(q,r)=>r.json(store.listEvents(project(),{limit:q.query.limit})));
   app.get('/api/network/topology',(_q,r)=>r.json(store.getTopology(project())));
+  app.get('/api/network/utilization',(_q,r)=>r.json({subnets:addressUtilization(store.listHosts(project(),{limit:4096}))}));
   app.put('/api/network/topology',(q,r)=>{try{r.json(store.setTopology(project(),q.body||{}));}catch(e){r.status(400).json({error:e.message,code:e.code||null});}});
 
   return{manager,store,close:()=>manager.close()};
