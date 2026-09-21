@@ -302,6 +302,7 @@ class MasterRuntime extends EventEmitter {
       writeFailures: 0,
       advancedOperations: 0,
       retryAttempts: 0,
+      transportRecoveries: 0,
     };
   }
 
@@ -402,27 +403,59 @@ class MasterRuntime extends EventEmitter {
     const retryCount = retries == null ? Number(this.config?.retries || 0) : intInRange(retries, 0, 10, 'retries');
     const retryDelay = retryDelayMs == null ? Number(this.config?.retryDelayMs || 0) : intInRange(retryDelayMs, 0, 60000, 'retryDelayMs');
     const spacing = interRequestDelayMs == null ? Number(this.config?.interRequestDelayMs || 0) : intInRange(interRequestDelayMs, 0, 60000, 'interRequestDelayMs');
-    const transient = new Set(['TIMEOUT','CONNECTION_LOST','RECONNECTING']);
+    const retryable = new Set(['TIMEOUT','CONNECTION_LOST','RECONNECTING','CONNECTION_NOT_OPEN','NOT_OPEN','CLOSED','WRITE_FAILED']);
+    const reconnectable = new Set(['CONNECTION_LOST','RECONNECTING','CONNECTION_NOT_OPEN','NOT_OPEN','CLOSED','WRITE_FAILED']);
+    let userRetriesUsed = 0;
+    let recoveryRetriesUsed = 0;
+    let attempts = 0;
     let lastError = null;
-    for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+
+    while (true) {
       const elapsed = Date.now() - Number(this._lastRequestCompletedAt || 0);
       if (spacing > 0 && elapsed < spacing) await sleep(spacing - elapsed);
-      if (attempt > 0) {
-        this.stats.retryAttempts += 1;
-        if (retryDelay > 0) await sleep(retryDelay);
-      }
+      if (attempts > 0 && retryDelay > 0) await sleep(retryDelay);
+
+      attempts += 1;
       this.stats.txRequests += 1;
       try {
         const result = await this.engine.request({ unitId, pdu, timeoutMs });
         this._lastRequestCompletedAt = Date.now();
-        return Object.freeze({ result, attempts: attempt + 1 });
+        return Object.freeze({ result, attempts });
       } catch (error) {
         this._lastRequestCompletedAt = Date.now();
         lastError = error;
-        if (attempt >= retryCount || !transient.has(error?.code)) throw error;
+        const code = error?.code || null;
+        if (!retryable.has(code)) throw error;
+
+        const mayRecoverTransport = this.config?.type === 'tcp' && reconnectable.has(code) && recoveryRetriesUsed < 1;
+        if (mayRecoverTransport) {
+          recoveryRetriesUsed += 1;
+          this.stats.retryAttempts += 1;
+          this.stats.transportRecoveries += 1;
+          try {
+            await this.engine.open();
+          } catch (reopenError) {
+            reopenError.details = {
+              ...(reopenError.details || {}),
+              recoveryFromCode: code,
+              originalError: String(error?.message || error),
+            };
+            lastError = reopenError;
+            if (userRetriesUsed >= retryCount) throw reopenError;
+            userRetriesUsed += 1;
+            this.stats.retryAttempts += 1;
+          }
+          continue;
+        }
+
+        if (userRetriesUsed < retryCount) {
+          userRetriesUsed += 1;
+          this.stats.retryAttempts += 1;
+          continue;
+        }
+        throw error;
       }
     }
-    throw lastError;
   }
 
   async read(input) {
