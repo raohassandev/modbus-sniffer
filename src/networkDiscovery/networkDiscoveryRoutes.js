@@ -7,13 +7,15 @@ const {NetworkScanManager}=require('./scanManager');
 const {scanTcpDeviceIds}=require('../activeDiscovery');
 const {addressUtilization}=require('./topology');
 const {detectNmap,fingerprintWithNmap}=require('./nmapAdapter');
-const {SERVICE_CATALOG}=require('./serviceScanner');
+const {SERVICE_CATALOG,scanTcpServices,profilePorts,classifyServices,reverseDns,fetchHttpMetadata,fetchTlsCertificate}=require('./serviceScanner');
 const {readSnmpSystem,readLldpNeighbors}=require('./snmpClient');
 const {auxiliaryDiscovery}=require('./multicastDiscovery');
 const {NetworkMonitorManager}=require('./monitorManager');
 const {OuiResolver}=require('./ouiResolver');
 const {normalizeHost}=require('../transportIdentity');
 const {pingDiagnostic,tracerouteHost}=require('./diagnostics');
+const {verifyModbusEndpoint}=require('./modbusVerifier');
+const {buildHostFingerprint}=require('./deviceFingerprint');
 
 function bodyBool(v){return v===true;}
 function activeProjectId(workspaces,getActiveProjectId){return typeof getActiveProjectId==='function'?(getActiveProjectId()||'default'):(workspaces?.getActiveProject?.()?.id||'default');}
@@ -135,6 +137,30 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
       const result=await tracerouteHost(host.ip,{maxHops:Number(q.body?.maxHops||24),perHopTimeoutMs:Number(q.body?.perHopTimeoutMs||1000),timeoutMs:Number(q.body?.timeoutMs||30000)});
       store.addEvent(project(),{type:'traceroute-diagnostic',hostId:host.id,ip:host.ip,source:'network-diagnostics',details:{ok:result.ok,hops:result.hops,error:result.error||null}});
       r.json(result);
+    }catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}
+  });
+
+  app.post('/api/network/hosts/:id/deep-scan',async(q,r)=>{
+    try{
+      const host=persistedHost(q.params.id);if(!host){const e=new Error('Network host not found.');e.code='NETWORK_HOST_NOT_FOUND';throw e;}
+      const timeoutMs=Math.max(100,Math.min(5000,Number(q.body?.timeoutMs)||600)),ports=profilePorts('deep',Array.isArray(q.body?.ports)?q.body.ports:[]);
+      const services=await scanTcpServices(host.ip,{ports,timeoutMs,concurrency:Math.max(1,Math.min(24,Number(q.body?.concurrency)||10))});
+      const classes=classifyServices(services),hostnames=await reverseDns(host.ip,{timeoutMs:Math.max(700,timeoutMs*2)});
+      let modbus=host.modbus||null;
+      for(const candidate of classes.modbusCandidates){
+        const result=await verifyModbusEndpoint({host:host.ip,port:candidate.port,unitIds:[host.modbus?.unitId??1,255],timeoutMs:Math.max(500,timeoutMs*2)});
+        if(result.verified){modbus={...result,port:candidate.port};break;}
+      }
+      const metadata={...(host.metadata||{})};
+      for(const svc of classes.web.slice(0,6)){
+        if(svc.port===443||svc.name==='HTTPS'){
+          metadata[`https:${svc.port}`]=await fetchHttpMetadata(host.ip,svc.port,{httpsMode:true,timeoutMs:Math.max(900,timeoutMs*2)});
+          metadata[`tls:${svc.port}`]=await fetchTlsCertificate(host.ip,svc.port,{timeoutMs:Math.max(1000,timeoutMs*3)});
+        }else metadata[`http:${svc.port}`]=await fetchHttpMetadata(host.ip,svc.port,{httpsMode:false,timeoutMs:Math.max(900,timeoutMs*2)});
+      }
+      const fp=buildHostFingerprint({ip:host.ip,hostname:hostnames[0]||host.hostname,hostnames:hostnames.length?hostnames:host.hostnames,mac:host.mac,macObservations:host.macObservations,services,modbus});
+      const updated=store.mergeHost(project(),{...host,...fp,macVendor:host.macVendor||oui.lookup(host.mac)||null,metadata,nativeDeepScan:{scannedAt:new Date().toISOString(),portsScanned:ports.length,openPorts:classes.open.length},lastSeen:new Date().toISOString()},'native-deep-scan');
+      broadcast('network-host-updated',{host:updated});r.json({host:updated,services,summary:{portsScanned:ports.length,openPorts:classes.open.length,industrial:classes.industrial.length,modbusVerified:Boolean(updated.modbus?.verified)}});
     }catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}
   });
 
