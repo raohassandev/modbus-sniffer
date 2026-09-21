@@ -63,8 +63,8 @@ async function enrichAliveHost(host,{profile,customPorts,timeoutMs,serviceConcur
   return{...host,...fp,rawServices:services,metadata,avgRttMs:rtts.length?Math.round(rtts.reduce((a,b)=>a+b,0)/rtts.length*100)/100:host.avgRttMs,lastSeen:new Date().toISOString()};
 }
 class NetworkScanManager extends EventEmitter{
-  constructor({store=null,getProjectId=()=>null,verifyModbus=verifyModbusEndpoint,discover=discoverHost,enrich=enrichAliveHost,neighbors=readNeighborTable}={}){
-    super();this.store=store;this.getProjectId=getProjectId;this.verifyModbus=verifyModbus;this.discover=discover;this.enrich=enrich;this.neighbors=neighbors;this.job=null;this.controller=null;this._pauseWaiters=[];
+  constructor({store=null,getProjectId=()=>null,verifyModbus=verifyModbusEndpoint,discover=discoverHost,enrich=enrichAliveHost,neighbors=readNeighborTable,lookupVendor=()=>null}={}){
+    super();this.store=store;this.getProjectId=getProjectId;this.verifyModbus=verifyModbus;this.discover=discover;this.enrich=enrich;this.neighbors=neighbors;this.lookupVendor=lookupVendor;this.job=null;this.controller=null;this._pauseWaiters=[];
   }
   status(){return publicStatus(this.job);}
   _emit(){const s=this.status();this.emit('status',s);return s;}
@@ -116,7 +116,7 @@ class NetworkScanManager extends EventEmitter{
         try{
           const discovered=await this._scanIp(job,ip,neighborMap,signal);
           if(discovered){
-            const host={...discovered,id:discovered.id||hostKey(discovered)};
+            const host={...discovered,macVendor:discovered.macVendor||this.lookupVendor(discovered.mac)||null,id:discovered.id||hostKey(discovered)};
             if(job.hosts.length<job.settings.maxResults){job.hosts.push(host);this.emit('host',{jobId:job.jobId,host:{...host}});}
             else job.progress.truncated=true;
           }
@@ -136,7 +136,7 @@ class NetworkScanManager extends EventEmitter{
         if(job.hosts.length>=job.settings.maxResults){job.progress.truncated=true;break;}
         if(!neighbor?.ip||knownIps.has(neighbor.ip)||!targetContains(job.parsed,neighbor.ip))continue;
         const base={id:null,ip:neighbor.ip,alive:true,state:'online',mac:neighbor.mac||null,macObservations:neighbor.macs||[neighbor.mac].filter(Boolean),hostname:null,hostnames:[],services:[],rawServices:[],industrial:false,modbus:null,type:'Unknown',typeConfidence:0,confidence:75,avgRttMs:null,firstSeen:new Date().toISOString(),lastSeen:new Date().toISOString(),discoveryMethods:['neighbor-table'],evidence:[{field:'ip',value:neighbor.ip,source:'neighbor-refresh',confidence:100,status:'observed'},{field:'mac',value:neighbor.mac,source:'neighbor-table',confidence:95,status:'observed'}]};
-        const host={...base,id:hostKey(base)};job.hosts.push(host);knownIps.add(host.ip);this.emit('host',{jobId:job.jobId,host:{...host}});
+        const host={...base,macVendor:this.lookupVendor(base.mac)||null,id:hostKey(base)};job.hosts.push(host);knownIps.add(host.ip);this.emit('host',{jobId:job.jobId,host:{...host}});
       }
       job.findings=duplicateFindings(job.hosts);job.progress.warnings=job.findings.length;job.progress.stage='complete';job.state='completed';job.running=false;job.completedAt=Date.now();
       const projectId=job.projectId;
