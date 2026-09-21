@@ -8,7 +8,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist:win": "electron-builder --win nsis"
+    "dist:win": "node clean-dist.js && electron-builder --win nsis"
   },
   "devDependencies": {
     "electron": "^38.0.0",
@@ -23,7 +23,8 @@
       "main.js",
       "storage.js",
       "logSafety.js",
-      "navigationSafety.js"
+      "navigationSafety.js",
+      "clean-dist.js"
     ],
     "extraResources": [
       {
