@@ -24,7 +24,7 @@ function signature(host={}){
 function normalizeHost(input={},existing=null){
   const stamp=now(),mac=normalizeMac(input.mac),ip=cleanText(input.ip,80),id=existing?.id||hostKey({mac,ip});
   return{
-    ...(existing||{}),...clone(input),id,ip,mac,hostname:cleanText(input.hostname??existing?.hostname,255)||null,
+    ...(existing||{}),...clone(input),id,scannerId:cleanText(input.scannerId??existing?.scannerId??'local',120)||'local',ip,mac,hostname:cleanText(input.hostname??existing?.hostname,255)||null,
     hostnames:Array.isArray(input.hostnames)?input.hostnames.map(x=>cleanText(x,255)).filter(Boolean).slice(0,16):(existing?.hostnames||[]),
     services:normalizedServices(input.services??existing?.services??[]),
     classification:['trusted','unknown','unexpected','ignored','decommissioned'].includes(input.classification)?input.classification:(existing?.classification||'unknown'),
