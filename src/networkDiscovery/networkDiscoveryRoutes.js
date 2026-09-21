@@ -10,6 +10,7 @@ const {detectNmap,fingerprintWithNmap}=require('./nmapAdapter');
 const {SERVICE_CATALOG}=require('./serviceScanner');
 const {readSnmpSystem,readLldpNeighbors}=require('./snmpClient');
 const {auxiliaryDiscovery}=require('./multicastDiscovery');
+const {NetworkMonitorManager}=require('./monitorManager');
 
 function bodyBool(v){return v===true;}
 function activeProjectId(workspaces,getActiveProjectId){return typeof getActiveProjectId==='function'?(getActiveProjectId()||'default'):(workspaces?.getActiveProject?.()?.id||'default');}
@@ -23,15 +24,18 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   const store=providedStore||new NetworkStore({dataDir:options.dataDir});
   const project=()=>activeProjectId(workspaces,getActiveProjectId);
   const manager=providedManager||new NetworkScanManager({store,getProjectId:project});
+  const monitor=new NetworkMonitorManager({store,getProjectId:project});
   manager.on('status',s=>broadcast('network-scan',s));
   manager.on('host',x=>broadcast('network-host',x));
   manager.on('complete',s=>broadcast('network-scan-complete',s));
   manager.on('scan-error',x=>broadcast('network-scan-error',{jobId:x.jobId,ip:x.ip,error:x.error?.message||String(x.error||'error')}));
+  monitor.on('result',x=>broadcast('network-monitor-result',x));
+  monitor.on('status',x=>broadcast('network-monitor-status',x));
 
   app.get('/api/network/interfaces',(_q,r)=>r.json({interfaces:listNetworkInterfaces()}));
   app.get('/api/network/capabilities',async(_q,r)=>{
     const nmap=await detectNmap().catch(()=>({available:false,command:null,version:null}));
-    r.json({nmap,ipv4:true,ipv6Model:'planned',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:true,lldp:true,multicastDiscovery:true,ssdp:true,mdns:true,wsd:true,dhcpContext:true});
+    r.json({nmap,ipv4:true,ipv6Model:'planned',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:true,lldp:true,multicastDiscovery:true,ssdp:true,mdns:true,wsd:true,dhcpContext:true,monitoring:true});
   });
   app.post('/api/network/aux-discovery',async(q,r)=>{
     try{
@@ -113,6 +117,18 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
     }catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}
   });
 
+  app.get('/api/network/monitor',(_q,r)=>r.json(monitor.list()));
+  app.post('/api/network/hosts/:id/monitor',(q,r)=>{
+    try{
+      const host=store.getHost(project(),q.params.id);if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});
+      const ports=Array.isArray(q.body?.ports)?q.body.ports:(host.services||[]).slice(0,8).map(s=>s.port);
+      const modbusPort=Number(q.body?.modbusPort||host.modbus?.port||0)||null;
+      r.status(201).json(monitor.start({hostId:host.id,ip:host.ip,ports,modbusPort,intervalMs:Number(q.body?.intervalMs||30000)}));
+    }catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}
+  });
+  app.post('/api/network/hosts/:id/monitor/check',async(q,r)=>{try{r.json(await monitor.checkNow(q.params.id));}catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}});
+  app.delete('/api/network/hosts/:id/monitor',(q,r)=>r.json({ok:monitor.stop(q.params.id)}));
+
   app.get('/api/network/scans',(_q,r)=>r.json(store.listScans(project())));
   app.get('/api/network/scans/:id',(q,r)=>{const x=store.getScan(project(),q.params.id);if(!x)return r.status(404).json({error:'Network scan not found.',code:'NETWORK_SCAN_NOT_FOUND'});r.json(x);});
   app.get('/api/network/scans/:id/export.json',(q,r)=>{const x=store.getScan(project(),q.params.id);if(!x)return r.status(404).json({error:'Network scan not found.',code:'NETWORK_SCAN_NOT_FOUND'});r.setHeader('Content-Disposition',`attachment; filename="network-scan-${String(x.id).replace(/[^a-z0-9._-]/gi,'_')}.json"`);r.json(x);});
@@ -130,6 +146,6 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   app.get('/api/network/utilization',(_q,r)=>r.json({subnets:addressUtilization(store.listHosts(project(),{limit:4096}))}));
   app.put('/api/network/topology',(q,r)=>{try{r.json(store.setTopology(project(),q.body||{}));}catch(e){r.status(400).json({error:e.message,code:e.code||null});}});
 
-  return{manager,store,close:()=>manager.close()};
+  return{manager,store,monitor,close:async()=>{await Promise.allSettled([manager.close(),monitor.close()]);}};
 }
 module.exports={installNetworkDiscoveryRoutes};
