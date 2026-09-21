@@ -104,6 +104,27 @@ test('scan manager streams a compact range through injected workers and persists
   assert.equal(saved.every(x=>x[1]==='p-start'),true);
 });
 
+test('scan manager pause resume and cancel remain race-safe',async()=>{
+  const manager=new NetworkScanManager({
+    neighbors:async()=>new Map(),
+    discover:async ip=>{await new Promise(r=>setTimeout(r,15));return{ip,alive:false,state:'unknown',services:[],hostnames:[]};},
+    enrich:async host=>host
+  });
+  manager.start({target:'192.168.2.1-192.168.2.8',profile:'quick',hostConcurrency:1,useIcmp:false});
+  manager.pause();
+  await new Promise(r=>setTimeout(r,25));
+  assert.equal(manager.status().state,'paused');
+  assert.equal(manager.status().progress.scanned,0);
+  manager.resume();
+  for(let i=0;i<100&&manager.status().progress.scanned<1;i++)await new Promise(r=>setTimeout(r,5));
+  assert.equal(manager.status().progress.scanned>=1,true);
+  const cancelled=manager.cancel();
+  assert.equal(['cancelling','cancelled'].includes(cancelled.state),true);
+  for(let i=0;i<100&&manager.status().running;i++)await new Promise(r=>setTimeout(r,5));
+  assert.equal(manager.status().state,'cancelled');
+  assert.equal(manager.status().running,false);
+});
+
 test('scan manager requires explicit confirmation for public targets',()=>{
   const manager=new NetworkScanManager({neighbors:async()=>new Map(),discover:async()=>({alive:false})});
   assert.throws(()=>manager.start({target:'8.8.8.8'}),e=>e?.code==='PUBLIC_TARGET_CONFIRMATION_REQUIRED');
