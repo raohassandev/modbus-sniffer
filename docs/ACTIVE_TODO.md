@@ -30,6 +30,7 @@ The final source audit also closes these edge cases:
 - [x] JSON mutation limits are enforced by the parser even without a trusted Content-Length header
 - [x] Discovery Unit-ID limits follow serial vs TCP framing
 - [x] industrial Network Discovery source scope is complete with bounded large-range scanning, verified Modbus identification, persistent inventory/topology/history and safe Master handoff
+- [x] Master TCP/read reliability hardening closes dropped-session recovery, protocol-appropriate error semantics and actionable polling diagnostics
 - [x] UDP Slave peers expire after bounded idle retention instead of exhausting the peer table indefinitely
 - [x] Test Sequence Compare preserves every repeated step occurrence instead of collapsing duplicate execution IDs
 - [x] product/runtime version surfaces use the release version source of truth
@@ -87,6 +88,10 @@ Basic path remains:
 - [x] scale/offset/precision, enum, bitfield and limit interpretation
 - [x] per-register name/unit/notes mapping
 - [x] read retries, retry delay and inter-request delay
+- [x] one-shot automatic TCP transport recovery on dropped read sessions, independent of user retry count
+- [x] timeout / Modbus-exception / transport errors return actionable structured guidance instead of misleading gateway-style 504/502 statuses
+- [x] Master UI reconciles backend connection state after read failures and stops stale polling when the transport is no longer connected
+- [x] TCP Master UI supports Unit IDs through 255 while serial remains capped at 247
 - [x] RS-485 RTS direction/settle controls
 - [x] direct current-monitor Traffic action
 - [x] direct current-register Logger / Trend action
