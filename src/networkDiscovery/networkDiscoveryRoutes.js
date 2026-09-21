@@ -199,7 +199,7 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
       const host=persistedHost(q.params.id);if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});
       const ports=Array.isArray(q.body?.ports)?q.body.ports:(host.services||[]).slice(0,8).map(s=>s.port);
       const modbusPort=Number(q.body?.modbusPort||host.modbus?.port||0)||null;
-      r.status(201).json(monitor.start({hostId:host.id,ip:host.ip,ports,modbusPort,intervalMs:Number(q.body?.intervalMs||30000)}));
+      r.status(201).json(monitor.start({hostId:host.id,ip:host.ip,ports,modbusPort,intervalMs:Number(q.body?.intervalMs||30000),pingAlways:q.body?.pingAlways!==false}));
     }catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}
   });
   app.post('/api/network/hosts/:id/monitor/check',async(q,r)=>{try{r.json(await monitor.checkNow(q.params.id));}catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}});
