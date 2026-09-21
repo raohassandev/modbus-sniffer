@@ -88,6 +88,84 @@ test.describe('unified Modbus engineering product',()=>{
     expect((await status.json()).running).toBe(false);
   });
 
+  test('network discovery UI covers scan controls, safe rendering, device drawer, topology and baseline compare',async({page})=>{
+    const host={
+      id:'mac:00:11:22:33:44:55',scannerId:'local',state:'online',alive:true,ip:'192.168.10.25',
+      mac:'00:11:22:33:44:55',macVendor:'Example Controls',hostname:'<img src=x onerror=alert(1)>',
+      type:'Modbus Device',typeConfidence:95,confidence:98,industrial:true,
+      services:[{port:80,protocol:'tcp',name:'HTTP',category:'web'},{port:502,protocol:'tcp',name:'Modbus TCP',category:'modbus-candidate'}],
+      modbus:{verified:true,port:502,unitId:1},avgRttMs:3.2,classification:'trusted',
+      firstSeen:'2026-09-21T00:00:00.000Z',lastSeen:'2026-09-21T00:01:00.000Z',lastChanged:'2026-09-21T00:01:00.000Z',
+      evidence:[{field:'modbus',value:'192.168.10.25:502',source:'modbus-protocol-verification',confidence:100,status:'verified'}],
+      correlations:{channels:[{channelId:'tcp:existing',name:'Existing TCP',endpoint:'192.168.10.25:502'}],devices:[{deviceKey:'tcp:existing|1',unitId:1,manufacturer:'Example',model:'PLC'}]}
+    };
+    let status={state:'idle',running:false,paused:false,jobId:null,profile:null,target:null,progress:{total:0,scanned:0,stage:null},summary:{targets:0,scanned:0,online:0,industrial:0,modbus:0,unknown:0,warnings:0},hosts:[],findings:[]};
+    const json=(route,body,statusCode=200)=>route.fulfill({status:statusCode,contentType:'application/json',body:JSON.stringify(body)});
+    await page.route('**/api/network/**',async route=>{
+      const req=route.request(),url=new URL(req.url()),p=url.pathname,method=req.method();
+      if(p==='/api/network/capabilities')return json(route,{scannerId:'local',ipv4:true,ipv6:true,ipv6Model:'bounded-cidr',snmp:true,lldp:true,multicastDiscovery:true,modbusVerification:true,nmap:{available:false},oui:{available:true,count:123}});
+      if(p==='/api/network/interfaces')return json(route,{interfaces:[{id:'eth|192.168.10.5',name:'Ethernet',family:'IPv4',address:'192.168.10.5',cidr:'192.168.10.5/24',suggestedTarget:'192.168.10.0/24'}]});
+      if(p==='/api/network/targets/preview')return json(route,{version:2,count:6,theoreticalCount:6,privateCount:6,publicCount:0,hasPublicTargets:false,samples:['192.168.10.1','192.168.10.2']});
+      if(p==='/api/network/scan/status')return json(route,status);
+      if(p==='/api/network/scan/start'){
+        status={state:'running',running:true,paused:false,jobId:'scan-ui',profile:'standard',target:'192.168.10.1-192.168.10.6',progress:{total:6,scanned:2,stage:'host-discovery'},summary:{targets:6,scanned:2,online:1,industrial:1,modbus:1,unknown:0,warnings:1},hosts:[host],findings:[{type:'duplicate-ip',severity:'critical',message:'Duplicate IP detected'}]};
+        return json(route,status,202);
+      }
+      if(p==='/api/network/scan/pause'){status={...status,state:'paused',paused:true};return json(route,status);}
+      if(p==='/api/network/scan/resume'){status={...status,state:'running',paused:false};return json(route,status);}
+      if(p==='/api/network/scan/cancel'){status={...status,state:'cancelled',running:false,paused:false,progress:{...status.progress,stage:'cancelled'}};return json(route,status);}
+      if(p==='/api/network/hosts.csv')return route.fulfill({status:200,contentType:'text/csv',body:'ip\\r\\n192.168.10.25'});
+      if(p==='/api/network/hosts'&&method==='GET')return json(route,[host]);
+      if(p==='/api/network/monitor')return json(route,[]);
+      if(p==='/api/network/hosts/'+encodeURIComponent(host.id)&&method==='GET')return json(route,host);
+      if(p==='/api/network/hosts/'+encodeURIComponent(host.id)+'/open-master'&&method==='POST')return json(route,{prepared:{type:'tcp',host:host.ip,port:502,unitId:1,connect:false,transmit:false,source:'network-discovery'},correlations:host.correlations});
+      if(p==='/api/network/topology')return json(route,{nodes:[{id:'subnet:192.168.10.0/24',kind:'subnet',label:'192.168.10.0/24'},{id:host.id,kind:'host',label:'PLC-25',ip:host.ip,state:'online',industrial:true,modbus:true}],edges:[{id:'e1',from:'subnet:192.168.10.0/24',to:host.id,kind:'logical-membership',source:'address-membership',confidence:100,physical:false}]});
+      if(p==='/api/network/utilization')return json(route,{subnets:[{subnet:'192.168.10.0/24',used:1,free:253,online:1,modbus:1,industrial:1,conflicts:0,usedHosts:[25]}]});
+      if(p==='/api/network/scans')return json(route,[{id:'s2',profile:'standard',target:'192.168.10.0/24',completedAt:'2026-09-21T00:02:00.000Z',hostCount:1,findingsCount:0}]);
+      if(p==='/api/network/baselines')return json(route,[{id:'b1',scanId:'s1',name:'Commissioning',createdAt:'2026-09-20T00:00:00.000Z',hostCount:1}]);
+      if(p==='/api/network/events')return json(route,[{id:'ev1',at:'2026-09-21T00:01:00.000Z',type:'host-discovered',ip:host.ip,source:'network-scan'}]);
+      if(p==='/api/network/compare')return json(route,{summary:{added:0,removed:0,changed:1,unchanged:0},added:[],removed:[],unchanged:[],changed:[{before:{...host,hostname:'PLC-OLD'},after:host,changes:[{field:'hostname',before:'PLC-OLD',after:host.hostname}]}]});
+      return json(route,{});
+    });
+
+    await page.goto('/');
+    await page.locator('[data-page="discovery"]').click();
+    await expect(page.locator('#networkDiscoveryRoot')).toBeVisible();
+    await page.locator('#ndTarget').fill('192.168.10.1-192.168.10.6');
+    await page.locator('#ndPreview').click();
+    await expect(page.locator('#ndPreviewBox')).toContainText('6 unique target(s)');
+    await page.locator('#ndStart').click();
+    await expect(page.locator('#ndProgressTitle')).toHaveText('Scanning');
+    await expect(page.locator('#ndKpiModbus')).toHaveText('1');
+    await expect(page.locator('#ndFindings')).toContainText('Duplicate IP detected');
+    await expect(page.locator('#ndScanRows')).toContainText('192.168.10.25');
+    expect(await page.locator('#ndScanRows img').count()).toBe(0);
+
+    await page.locator('#ndPause').click();await expect(page.locator('#ndProgressTitle')).toHaveText('Paused');
+    await page.locator('#ndResume').click();await expect(page.locator('#ndProgressTitle')).toHaveText('Scanning');
+
+    await page.locator('#ndScanRows tr[data-nd-host]').click();
+    await expect(page.locator('#ndDrawer')).toHaveClass(/open/);
+    expect(await page.locator('#ndDrawer img').count()).toBe(0);
+    await page.locator('[data-drawer-tab="evidence"]').click();
+    await expect(page.locator('[data-drawer-panel="evidence"]')).toContainText('modbus-protocol-verification');
+    await page.locator('#ndDrawerClose').click();
+
+    await page.locator('[data-nd-tab="topology"]').click();
+    await expect(page.locator('#ndTopologyViewport')).toContainText('PLC-25');
+    await expect(page.locator('#ndTopologyEdges')).toContainText('address-membership');
+
+    await page.locator('[data-nd-tab="history"]').click();
+    await page.locator('#ndBaseline').selectOption('b1');
+    await page.locator('#ndCompareScan').selectOption('s2');
+    await page.locator('#ndCompare').click();
+    await expect(page.locator('#ndCompareResult')).toContainText('Changed');
+
+    await page.locator('[data-nd-tab="scan"]').click();
+    await page.locator('#ndCancel').click();
+    await expect(page.locator('#ndProgressTitle')).toHaveText('Cancelled');
+  });
+
   test('Master Monitor Sessions merge local fallback and durable workstation state across browser reloads',async({page,request})=>{
     const remotePayload={
       version:1,
