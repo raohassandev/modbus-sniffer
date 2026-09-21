@@ -141,13 +141,13 @@ class NetworkStore{
     this._trimProject(p);this._atomic();return clone(merged);
   }
   replaceScanHosts(projectId,hosts=[],source='scan'){
-    const out=[];for(const h of hosts.slice(0,4096)){const p=this._project(projectId),mac=normalizeMac(h.mac),ip=cleanText(h.ip,80),existing=Object.values(p.hosts).find(x=>(mac&&normalizeMac(x.mac)===mac)||(ip&&x.ip===ip))||null,before=existing?clone(existing):null,merged=normalizeHost(h,existing),changes=diffHost(before,merged);if(changes.length)merged.lastChanged=now();if(existing&&existing.id!==merged.id)delete p.hosts[existing.id];p.hosts[merged.id]=merged;if(changes.length)p.events.push({id:safeId('event'),at:now(),type:before?'host-changed':'host-discovered',hostId:merged.id,ip:merged.ip,source,changes});out.push(clone(merged));}
+    const out=[];for(const h of hosts.slice(0,MAX_HOSTS)){const p=this._project(projectId),mac=normalizeMac(h.mac),ip=cleanText(h.ip,80),existing=Object.values(p.hosts).find(x=>(mac&&normalizeMac(x.mac)===mac)||(ip&&x.ip===ip))||null,before=existing?clone(existing):null,merged=normalizeHost(h,existing),changes=diffHost(before,merged);if(changes.length)merged.lastChanged=now();if(existing&&existing.id!==merged.id)delete p.hosts[existing.id];p.hosts[merged.id]=merged;if(changes.length)p.events.push({id:safeId('event'),at:now(),type:before?'host-changed':'host-discovered',hostId:merged.id,ip:merged.ip,source,changes});out.push(clone(merged));}
     const p=this._project(projectId);this._trimProject(p);this._atomic();return out;
   }
-  listHosts(projectId,{state=null,search=null,modbus=null,classification=null,limit=4096}={}){
+  listHosts(projectId,{state=null,search=null,modbus=null,classification=null,limit=MAX_HOSTS}={}){
     let rows=Object.values(this._project(projectId).hosts);if(state)rows=rows.filter(x=>x.state===state);if(modbus!=null)rows=rows.filter(x=>Boolean(x.modbus?.verified)===Boolean(modbus));if(classification)rows=rows.filter(x=>x.classification===classification);
     const q=cleanText(search,200).toLowerCase();if(q)rows=rows.filter(x=>[x.ip,x.mac,x.hostname,x.type,...(x.hostnames||[]),...(x.services||[]).map(s=>s.name)].some(v=>String(v||'').toLowerCase().includes(q)));
-    return rows.sort((a,b)=>String(a.ip).localeCompare(String(b.ip),undefined,{numeric:true})).slice(0,Math.max(1,Math.min(4096,Number(limit)||4096))).map(clone);
+    return rows.sort((a,b)=>String(a.ip).localeCompare(String(b.ip),undefined,{numeric:true})).slice(0,Math.max(1,Math.min(MAX_HOSTS,Number(limit)||MAX_HOSTS))).map(clone);
   }
   getHost(projectId,id){const x=this._project(projectId).hosts[String(id)];return x?clone(x):null;}
   updateHost(projectId,id,patch={}){
@@ -155,14 +155,14 @@ class NetworkStore{
   }
   saveScan(projectId,input={}){
     const p=this._project(projectId),scan={id:cleanText(input.id,180)||safeId('scan'),startedAt:input.startedAt||now(),completedAt:input.completedAt||now(),state:cleanText(input.state||'completed',40),profile:cleanText(input.profile||'standard',40),target:cleanText(input.target,2000),settings:clone(input.settings||{}),summary:clone(input.summary||{}),findings:clone((input.findings||[]).slice(0,1024)),hosts:(input.hosts||[]).slice(0,MAX_HOSTS).map(compactHostSnapshot)};
-    p.scans=[...p.scans.filter(x=>x.id!==scan.id),scan].slice(-100);this._trimProject(p);this._atomic();return clone(scan);
+    p.scans=[...p.scans.filter(x=>x.id!==scan.id),scan].slice(-MAX_SCANS);this._trimProject(p);this._atomic();return clone(scan);
   }
   listScans(projectId){return this._project(projectId).scans.slice().reverse().map(s=>({id:s.id,startedAt:s.startedAt,completedAt:s.completedAt,state:s.state,profile:s.profile,target:s.target,summary:clone(s.summary),hostCount:s.hosts.length,findingsCount:s.findings.length}));}
   getScan(projectId,id){const x=this._project(projectId).scans.find(s=>s.id===String(id));return x?clone(x):null;}
   saveBaseline(projectId,scanId,name='Reference Network'){
     const p=this._project(projectId),scan=p.scans.find(s=>s.id===String(scanId));if(!scan)throw Object.assign(new Error('Network scan not found.'),{code:'NETWORK_SCAN_NOT_FOUND'});
     const b={id:safeId('baseline'),scanId:scan.id,name:cleanText(name,160)||'Reference Network',createdAt:now(),hosts:clone(scan.hosts),summary:clone(scan.summary)};
-    p.baselines=[...p.baselines,b].slice(-10);this._atomic();return clone(b);
+    p.baselines=[...p.baselines,b].slice(-MAX_BASELINES);this._atomic();return clone(b);
   }
   listBaselines(projectId){return this._project(projectId).baselines.slice().reverse().map(b=>({id:b.id,scanId:b.scanId,name:b.name,createdAt:b.createdAt,hostCount:b.hosts.length,summary:clone(b.summary)}));}
   compare(projectId,{leftScanId=null,rightScanId=null,baselineId=null}={}){
@@ -177,8 +177,8 @@ class NetworkStore{
     const p=this._project(projectId),event={id:safeId('event'),at:input.at||now(),type:cleanText(input.type||'network-event',80),hostId:input.hostId?cleanText(input.hostId,180):null,ip:input.ip?cleanText(input.ip,80):null,source:cleanText(input.source||'network-discovery',80),...clone(input)};
     p.events.push(event);this._trimProject(p);if(options.persist!==false)this._atomic();return clone(event);
   }
-  listEvents(projectId,{limit=500,hostId=null,ip=null,type=null}={}){const p=this._project(projectId);let rows=p.events;if(hostId)rows=rows.filter(x=>String(x.hostId||'')===String(hostId));if(ip)rows=rows.filter(x=>String(x.ip||'')===String(ip));if(type)rows=rows.filter(x=>String(x.type||'')===String(type));return rows.slice(-Math.max(1,Math.min(5000,Number(limit)||500))).reverse().map(clone);}
-  setTopology(projectId,topology={}){const p=this._project(projectId);p.topology={nodes:clone((topology.nodes||[]).slice(0,4096)),edges:clone((topology.edges||[]).slice(0,8192)),updatedAt:now()};this._atomic();return clone(p.topology);}
+  listEvents(projectId,{limit=500,hostId=null,ip=null,type=null}={}){const p=this._project(projectId);let rows=p.events;if(hostId)rows=rows.filter(x=>String(x.hostId||'')===String(hostId));if(ip)rows=rows.filter(x=>String(x.ip||'')===String(ip));if(type)rows=rows.filter(x=>String(x.type||'')===String(type));return rows.slice(-Math.max(1,Math.min(MAX_EVENTS,Number(limit)||500))).reverse().map(clone);}
+  setTopology(projectId,topology={}){const p=this._project(projectId);p.topology={nodes:clone((topology.nodes||[]).slice(0,MAX_HOSTS+512)),edges:clone((topology.edges||[]).slice(0,MAX_HOSTS*2)),updatedAt:now()};this._atomic();return clone(p.topology);}
   getTopology(projectId){return clone(this._project(projectId).topology||{nodes:[],edges:[]});}
   exportProject(projectId){
     const p=this._project(projectId);
