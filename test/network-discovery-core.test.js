@@ -10,6 +10,7 @@ const {buildHostFingerprint,duplicateFindings,normalizeMac}=require('../src/netw
 const {buildReadHoldingRequest}=require('../src/networkDiscovery/modbusVerifier');
 const {NetworkStore,diffHost}=require('../src/networkDiscovery/networkStore');
 const {NetworkScanManager}=require('../src/networkDiscovery/scanManager');
+const {computeMonitorMetrics}=require('../src/networkDiscovery/monitorManager');
 
 test('network interface helpers derive prefix and suggested target',()=>{
   assert.equal(prefixFromNetmask('255.255.255.0'),24);
@@ -123,6 +124,18 @@ test('scan manager pause resume and cancel remain race-safe',async()=>{
   for(let i=0;i<100&&manager.status().running;i++)await new Promise(r=>setTimeout(r,5));
   assert.equal(manager.status().state,'cancelled');
   assert.equal(manager.status().running,false);
+});
+
+test('monitor metrics compute packet loss average RTT and jitter from bounded samples',()=>{
+  const metrics=computeMonitorMetrics([
+    {pingResponded:true,pingRttMs:10},{pingResponded:false,pingRttMs:null},
+    {pingResponded:true,pingRttMs:16},{pingResponded:true,pingRttMs:13}
+  ]);
+  assert.equal(metrics.sampleCount,4);
+  assert.equal(metrics.icmpReceived,3);
+  assert.equal(metrics.packetLossPct,25);
+  assert.equal(metrics.avgPingRttMs,13);
+  assert.equal(metrics.jitterMs,4.5);
 });
 
 test('scan manager requires explicit confirmation for public targets',()=>{
