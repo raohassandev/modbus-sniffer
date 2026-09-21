@@ -142,6 +142,7 @@ class NetworkScanManager extends EventEmitter{
       const projectId=job.projectId;
       if(this.store){
         const merged=this.store.replaceScanHosts(projectId,job.hosts,'network-scan');job.hosts=merged;
+        for(const finding of job.findings)this.store.addEvent?.(projectId,{type:finding.type||'network-finding',source:'network-scan',severity:finding.severity||'warning',ip:finding.ip||null,details:finding},{persist:false});
         const saved=this.store.saveScan(projectId,{id:job.jobId,startedAt:new Date(job.startedAt).toISOString(),completedAt:new Date(job.completedAt).toISOString(),state:job.state,profile:job.profile,target:job.target,settings:job.settings,summary:summary(job.hosts,job.progress),findings:job.findings,hosts:job.hosts});
         this.store.setTopology?.(projectId,buildLogicalTopology(job.hosts));
         job.savedScanId=saved.id;
