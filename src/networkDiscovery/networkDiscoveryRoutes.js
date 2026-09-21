@@ -9,6 +9,7 @@ const {addressUtilization}=require('./topology');
 const {detectNmap,fingerprintWithNmap}=require('./nmapAdapter');
 const {SERVICE_CATALOG}=require('./serviceScanner');
 const {readSnmpSystem,readLldpNeighbors}=require('./snmpClient');
+const {auxiliaryDiscovery}=require('./multicastDiscovery');
 
 function bodyBool(v){return v===true;}
 function activeProjectId(workspaces,getActiveProjectId){return typeof getActiveProjectId==='function'?(getActiveProjectId()||'default'):(workspaces?.getActiveProject?.()?.id||'default');}
@@ -30,7 +31,21 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   app.get('/api/network/interfaces',(_q,r)=>r.json({interfaces:listNetworkInterfaces()}));
   app.get('/api/network/capabilities',async(_q,r)=>{
     const nmap=await detectNmap().catch(()=>({available:false,command:null,version:null}));
-    r.json({nmap,ipv4:true,ipv6Model:'planned',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:true,lldp:true,multicastDiscovery:false});
+    r.json({nmap,ipv4:true,ipv6Model:'planned',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:true,lldp:true,multicastDiscovery:true,ssdp:true,mdns:true,wsd:true,dhcpContext:true});
+  });
+  app.post('/api/network/aux-discovery',async(q,r)=>{
+    try{
+      const out=await auxiliaryDiscovery({ssdp:q.body?.ssdp!==false,mdns:q.body?.mdns!==false,wsd:q.body?.wsd!==false,dhcp:q.body?.dhcp!==false,timeoutMs:Number(q.body?.timeoutMs||1200)});
+      const merged=[];
+      for(const row of out.results){
+        if(!row.ip)continue;
+        const existing=store.listHosts(project(),{search:row.ip,limit:64}).find(h=>h.ip===row.ip)||{};
+        const hostname=row.names?.[0]||existing.hostname||null;
+        const host=store.mergeHost(project(),{...existing,ip:row.ip,hostname,auxDiscovery:[...(existing.auxDiscovery||[]),row].slice(-64),alive:true,state:'online',lastSeen:new Date().toISOString()},row.source||row.method||'aux-discovery');
+        merged.push(host);
+      }
+      broadcast('network-aux-discovery',{summary:out.summary,hosts:merged});r.json({...out,hosts:merged});
+    }catch(e){r.status(400).json({error:e.message,code:e.code||null});}
   });
   app.post('/api/network/targets/preview',(q,r)=>{
     try{r.json(previewTargets({targets:q.body?.targets??q.body?.target,exclude:q.body?.exclude,maxTargets:q.body?.maxTargets??262144}));}
