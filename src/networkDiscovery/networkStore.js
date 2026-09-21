@@ -33,13 +33,29 @@ function normalizeHost(input={},existing=null){
     updatedAt:stamp
   };
 }
+function unitIdentity(row={}){
+  const i=row.identification||{};
+  return JSON.stringify({
+    unitId:Number(row.unitId),supported:row.identificationSupported??null,
+    vendor:i.vendorName||null,productCode:i.productCode||null,product:i.productName||null,
+    model:i.modelName||null,revision:i.revision||null,application:i.userApplicationName||null
+  });
+}
 function diffHost(before,after){
   if(!before)return[{field:'host',before:null,after:'added'}];
-  const changes=[];for(const field of ['ip','mac','hostname','type','classification'])if((before[field]??null)!==(after[field]??null))changes.push({field,before:before[field]??null,after:after[field]??null});
+  const changes=[];
+  for(const field of ['ip','mac','macVendor','hostname','type','classification'])if((before[field]??null)!==(after[field]??null))changes.push({field,before:before[field]??null,after:after[field]??null});
   const b=new Set(normalizedServices(before.services).map(serviceKey)),a=new Set(normalizedServices(after.services).map(serviceKey));
-  for(const x of a)if(!b.has(x))changes.push({field:'service',before:null,after:x});
-  for(const x of b)if(!a.has(x))changes.push({field:'service',before:x,after:null});
-  if(Boolean(before.modbus?.verified)!==Boolean(after.modbus?.verified))changes.push({field:'modbus',before:Boolean(before.modbus?.verified),after:Boolean(after.modbus?.verified)});
+  for(const x of a)if(!b.has(x))changes.push({field:'service-opened',before:null,after:x});
+  for(const x of b)if(!a.has(x))changes.push({field:'service-closed',before:x,after:null});
+  if(Boolean(before.modbus?.verified)!==Boolean(after.modbus?.verified))changes.push({field:'modbus-verification',before:Boolean(before.modbus?.verified),after:Boolean(after.modbus?.verified)});
+  const bu=new Map((before.modbusUnits||[]).filter(x=>Number.isInteger(Number(x.unitId))).map(x=>[Number(x.unitId),unitIdentity(x)]));
+  const au=new Map((after.modbusUnits||[]).filter(x=>Number.isInteger(Number(x.unitId))).map(x=>[Number(x.unitId),unitIdentity(x)]));
+  for(const [unitId,sig] of au){
+    if(!bu.has(unitId))changes.push({field:'modbus-unit-added',before:null,after:unitId});
+    else if(bu.get(unitId)!==sig)changes.push({field:'modbus-identity-changed',unitId,before:bu.get(unitId),after:sig});
+  }
+  for(const unitId of bu.keys())if(!au.has(unitId))changes.push({field:'modbus-unit-removed',before:unitId,after:null});
   return changes;
 }
 class NetworkStore{
@@ -131,9 +147,17 @@ class NetworkStore{
   listEvents(projectId,{limit=500}={}){const p=this._project(projectId);return p.events.slice(-Math.max(1,Math.min(5000,Number(limit)||500))).reverse().map(clone);}
   setTopology(projectId,topology={}){const p=this._project(projectId);p.topology={nodes:clone((topology.nodes||[]).slice(0,4096)),edges:clone((topology.edges||[]).slice(0,8192)),updatedAt:now()};this._atomic();return clone(p.topology);}
   getTopology(projectId){return clone(this._project(projectId).topology||{nodes:[],edges:[]});}
+  exportProject(projectId){
+    const p=this._project(projectId);
+    return clone({
+      version:1,projectId:projectKey(projectId),exportedAt:now(),
+      hosts:Object.values(p.hosts||{}),scans:p.scans||[],baselines:p.baselines||[],
+      events:p.events||[],topology:p.topology||{nodes:[],edges:[]}
+    });
+  }
   _trimProject(p){
     const hosts=Object.values(p.hosts);if(hosts.length>4096){hosts.sort((a,b)=>String(b.lastSeen||'').localeCompare(String(a.lastSeen||'')));p.hosts=Object.fromEntries(hosts.slice(0,4096).map(h=>[h.id,h]));}
     p.scans=p.scans.slice(-100);p.baselines=p.baselines.slice(-10);p.events=p.events.slice(-5000);
   }
 }
-module.exports={NetworkStore,normalizeHost,diffHost,hostKey,normalizedServices,signature};
+module.exports={NetworkStore,normalizeHost,diffHost,hostKey,normalizedServices,signature,unitIdentity};
