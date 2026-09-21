@@ -8,6 +8,7 @@ const {scanTcpServices,reverseDns,profilePorts,classifyServices,fetchHttpMetadat
 const {buildHostFingerprint,duplicateFindings}=require('./deviceFingerprint');
 const {verifyModbusEndpoint}=require('./modbusVerifier');
 const {buildLogicalTopology}=require('./topology');
+const {hostKey}=require('./networkStore');
 
 const PROFILE_DEFAULTS=Object.freeze({
   quick:{hostConcurrency:128,serviceConcurrency:4,timeoutMs:250,useIcmp:true,verifyModbus:false,enrichWeb:false},
@@ -113,8 +114,9 @@ class NetworkScanManager extends EventEmitter{
       while(true){
         await this._waitIfPaused(job,signal);const ip=nextIp();if(!ip)return;
         try{
-          const host=await this._scanIp(job,ip,neighborMap,signal);
-          if(host){
+          const discovered=await this._scanIp(job,ip,neighborMap,signal);
+          if(discovered){
+            const host={...discovered,id:discovered.id||hostKey(discovered)};
             if(job.hosts.length<job.settings.maxResults){job.hosts.push(host);this.emit('host',{jobId:job.jobId,host:{...host}});}
             else job.progress.truncated=true;
           }
