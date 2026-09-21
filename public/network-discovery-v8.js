@@ -270,7 +270,7 @@
   async function loadTopology(){
     const [top,u]=await Promise.all([api('/api/network/topology'),api('/api/network/utilization')]);topologyState={...topologyState,nodes:top.nodes||[],edges:top.edges||[]};renderTopologyGraph();
     q('ndTopologyEdges').innerHTML=topologyState.edges.length?topologyState.edges.map(e=>`<tr><td>${esc(e.from)}</td><td>${esc(e.to)}</td><td>${esc(e.kind)}</td><td>${esc(e.source)}</td><td>${esc(e.confidence)}%</td><td>${e.physical?'Yes':'No'}</td></tr>`).join(''):'<tr><td colspan="6" class="muted">No topology edges.</td></tr>';
-    q('ndUtilization').innerHTML=(u.subnets||[]).map(s=>`<button class="nd-util-card" data-subnet="${esc(s.subnet)}"><strong>${esc(s.subnet)}</strong><span>${s.used} used · ${s.free} free</span><small>${s.modbus} Modbus · ${s.industrial} industrial · ${s.conflicts} conflict</small></button>`).join('')||'<div class="empty-state">No subnet utilization data.</div>';
+    q('ndUtilization').innerHTML=(u.subnets||[]).map(s=>`<button class="nd-util-card" data-subnet="${esc(s.subnet)}"><strong>${esc(s.subnet)}</strong><span>${s.used} used · ${s.family===4?esc(s.free+' free'):'IPv6 /64'}</span><small>${s.modbus} Modbus · ${s.industrial} industrial · ${s.conflicts} conflict</small></button>`).join('')||'<div class="empty-state">No subnet utilization data.</div>';
   }
   q('ndRefreshTopology').addEventListener('click',()=>loadTopology().catch(e=>notify(e.message,true)));
   q('ndTopologyCanvas').addEventListener('click',e=>{const b=e.target.closest('[data-top-host]');if(b)openDevice(b.dataset.topHost);});
@@ -283,7 +283,10 @@
   q('ndTopologyCanvas').addEventListener('pointermove',e=>{if(!topoDrag)return;topologyState.panX=topoDrag.panX+(e.clientX-topoDrag.x);topologyState.panY=topoDrag.panY+(e.clientY-topoDrag.y);const g=q('ndTopologyTransform');if(g)g.setAttribute('transform',`translate(${topologyState.panX} ${topologyState.panY}) scale(${topologyState.zoom})`);});
   q('ndTopologyCanvas').addEventListener('pointerup',()=>{topoDrag=null;});
   q('ndTopologyCanvas').addEventListener('wheel',e=>{e.preventDefault();topologyState.zoom=Math.max(.45,Math.min(2.5,topologyState.zoom+(e.deltaY<0?.08:-.08)));renderTopologyGraph();},{passive:false});
-  q('ndUtilization').addEventListener('click',async e=>{const b=e.target.closest('[data-subnet]');if(!b)return;const out=await api('/api/network/utilization'),row=(out.subnets||[]).find(x=>x.subnet===b.dataset.subnet);if(!row)return;const base=row.subnet.replace('.0/24','.'),used=new Set(row.usedHosts||[]);q('ndUtilization').innerHTML=`<button class="secondary" id="ndUtilBack">← Subnets</button><div class="nd-address-grid">${Array.from({length:254},(_,i)=>i+1).map(n=>`<span class="${used.has(n)?'used':'free'}" title="${base+n}">${n}</span>`).join('')}</div>`;q('ndUtilBack').onclick=()=>loadTopology().catch(()=>{});});
+  q('ndUtilization').addEventListener('click',async e=>{const b=e.target.closest('[data-subnet]');if(!b)return;const out=await api('/api/network/utilization'),row=(out.subnets||[]).find(x=>x.subnet===b.dataset.subnet);if(!row)return;
+    if(row.family===6){q('ndUtilization').innerHTML=`<button class="secondary" id="ndUtilBack">← Subnets</button><div class="nd-ipv6-used"><strong>${esc(row.subnet)}</strong><span>${row.used} observed address(es)</span>${(row.usedAddresses||[]).map(ip=>`<code>${esc(ip)}</code>`).join('')}</div>`;}
+    else{const base=row.subnet.replace('.0/24','.'),used=new Set(row.usedHosts||[]);q('ndUtilization').innerHTML=`<button class="secondary" id="ndUtilBack">← Subnets</button><div class="nd-address-grid">${Array.from({length:254},(_,i)=>i+1).map(n=>`<span class="${used.has(n)?'used':'free'}" title="${base+n}">${n}</span>`).join('')}</div>`;}
+    q('ndUtilBack').onclick=()=>loadTopology().catch(()=>{});});
 
   async function loadHistory(){
     const [scans,baselines,events]=await Promise.all([api('/api/network/scans'),api('/api/network/baselines'),api('/api/network/events?limit=300')]);
