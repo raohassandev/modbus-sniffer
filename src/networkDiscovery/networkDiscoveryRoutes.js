@@ -8,6 +8,7 @@ const {scanTcpDeviceIds}=require('../activeDiscovery');
 const {addressUtilization}=require('./topology');
 const {detectNmap,fingerprintWithNmap}=require('./nmapAdapter');
 const {SERVICE_CATALOG}=require('./serviceScanner');
+const {readSnmpSystem,readLldpNeighbors}=require('./snmpClient');
 
 function bodyBool(v){return v===true;}
 function activeProjectId(workspaces,getActiveProjectId){return typeof getActiveProjectId==='function'?(getActiveProjectId()||'default'):(workspaces?.getActiveProject?.()?.id||'default');}
@@ -29,7 +30,7 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   app.get('/api/network/interfaces',(_q,r)=>r.json({interfaces:listNetworkInterfaces()}));
   app.get('/api/network/capabilities',async(_q,r)=>{
     const nmap=await detectNmap().catch(()=>({available:false,command:null,version:null}));
-    r.json({nmap,ipv4:true,ipv6Model:'planned',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:false,multicastDiscovery:false});
+    r.json({nmap,ipv4:true,ipv6Model:'planned',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:true,lldp:true,multicastDiscovery:false});
   });
   app.post('/api/network/targets/preview',(q,r)=>{
     try{r.json(previewTargets({targets:q.body?.targets??q.body?.target,exclude:q.body?.exclude,maxTargets:q.body?.maxTargets??262144}));}
@@ -76,6 +77,24 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
       const n=result.host||{},services=(n.ports||[]).filter(x=>x.state==='open').map(x=>({port:x.port,protocol:x.protocol||'tcp',open:true,name:x.product?[`${x.name||''}`,x.product,x.version].filter(Boolean).join(' '):(x.name||SERVICE_CATALOG[x.port]?.name||'Unknown TCP'),category:SERVICE_CATALOG[x.port]?.category||'unknown',source:'external:nmap',confidence:Math.max(60,Math.min(100,Number(x.confidence)||80)),status:'verified',nmap:x}));
       const updated=store.mergeHost(project(),{...host,mac:n.mac||host.mac,macVendor:n.macVendor||host.macVendor||null,hostname:n.hostnames?.[0]||host.hostname,hostnames:[...new Set([...(host.hostnames||[]),...(n.hostnames||[])])],services:services.length?services:host.services,nmap:{version:result.nmap?.version||null,os:n.os||null,osMatches:n.osMatches||[],scannedAt:new Date().toISOString()},lastSeen:new Date().toISOString()},'external:nmap');
       broadcast('network-host-updated',{host:updated});r.json({host:updated,nmap:result.nmap,os:n.os||null,ports:n.ports||[]});
+    }catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}
+  });
+
+  app.post('/api/network/hosts/:id/snmp',async(q,r)=>{
+    try{
+      const host=store.getHost(project(),q.params.id);if(!host){const e=new Error('Network host not found.');e.code='NETWORK_HOST_NOT_FOUND';throw e;}
+      const community=String(q.body?.community||'').trim();if(!community){const e=new Error('Enter the SNMP community explicitly for this read-only query.');e.code='SNMP_COMMUNITY_REQUIRED';throw e;}
+      const port=Number(q.body?.port||161),timeoutMs=Number(q.body?.timeoutMs||900);
+      const [systemResult,neighbors]=await Promise.all([
+        readSnmpSystem({host:host.ip,port,community,timeoutMs}),
+        bodyBool(q.body?.readLldp)?readLldpNeighbors({host:host.ip,port,community,timeoutMs,maxRows:Number(q.body?.maxNeighbors||64)}):Promise.resolve([])
+      ]);
+      const sys=systemResult.system||{},updated=store.mergeHost(project(),{...host,hostname:host.hostname||sys.sysName||null,snmp:{system:sys,queriedAt:new Date().toISOString(),port},topologyNeighbors:neighbors,lastSeen:new Date().toISOString()},'snmp-read');
+      if(neighbors.length){
+        const topology=store.getTopology(project()),existing=topology.edges||[],extra=neighbors.map((n,i)=>({id:`edge:snmp:${updated.id}:${n.index||i}`,from:updated.id,to:String(n.name||n.chassisId||`lldp:${n.index||i}`),kind:'neighbor',source:'LLDP/SNMP',confidence:Number(n.confidence||95),physical:true,localPort:n.localPort||null,remotePort:n.remotePort||null,remoteName:n.name||null,chassisId:n.chassisId||null}));
+        store.setTopology(project(),{nodes:topology.nodes||[],edges:[...existing,...extra]});
+      }
+      broadcast('network-host-updated',{host:updated});r.json({host:updated,system:sys,neighbors});
     }catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}
   });
 
