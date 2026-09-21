@@ -26,6 +26,7 @@ const { installCompareRoutes } = require('./compare/compareRoutes');
 const { installTransportLabRoutes } = require('./transportLab/transportLabRoutes');
 const { installRawLabRoutes } = require('./rawLab/rawLabRoutes');
 const { installDiscoveryEngineeringRoutes } = require('./discoveryEngineeringRoutes');
+const { installNetworkDiscoveryRoutes } = require('./networkDiscovery/networkDiscoveryRoutes');
 
 function csvEscape(v) {
   if (v == null) return '';
@@ -191,6 +192,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
     dataDir:options.dataDir
   });
   const activeDiscovery=installActiveDiscoveryRoutes({app,state,demo,broadcast,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null,masterRuntime});
+  const networkDiscovery=installNetworkDiscoveryRoutes({app,options,workspaces,getActiveProjectId:()=>workspaces.getActiveProject()?.id||null,broadcast,demo});
   slaveRuntime=installSlaveRoutes({
     app,state,demo,disconnectSerial,masterRuntime,activeDiscovery,broadcast,
     getRawLabStatus:()=>rawLab?.status?.()||null,
@@ -202,6 +204,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   installCompareRoutes({app});
   installTransportLabRoutes({app});
   rawLab=installRawLabRoutes({app,state,demo,disconnectSerial,masterRuntime,slaveRuntime,activeDiscovery,broadcast});
+  const discoveryEngineering=installDiscoveryEngineeringRoutes({app,masterRuntime,slaveRuntime,broadcast});
 
   const publishEvidenceRow = row => { if(row){ loggerTrend.ingestEvidence(row); broadcast('transaction',row); } };
   const onMasterEvent = event => publishEvidenceRow(evidence.ingest(event,{sourceType:'Master'}));
@@ -402,7 +405,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
   for (const [ev,fn] of Object.entries(handlers)) state.on(ev,fn);
   tcpProxy.on('status', p=>broadcast('tcp-status',p));
   wss.on('connection', ws => {
-    ws.send(JSON.stringify({type:'hello',payload:{status:state.getStatus(),analysis:state.getAnalysis(),devices:state.getDevices(),replay:replay.status(),project:syncRuntimeChannels(),tcp:tcpProxy.status(),discoveryActive:activeDiscovery.status(),slave:slaveRuntime.status()}}));
+    ws.send(JSON.stringify({type:'hello',payload:{status:state.getStatus(),analysis:state.getAnalysis(),devices:state.getDevices(),replay:replay.status(),project:syncRuntimeChannels(),tcp:tcpProxy.status(),discoveryActive:activeDiscovery.status(),networkScan:networkDiscovery.manager.status(),slave:slaveRuntime.status()}}));
     ws.on('error',()=>{});
   });
 
@@ -426,6 +429,7 @@ async function startPlatformWebServer({ state, options, configureSerial, disconn
         Promise.resolve().then(()=>masterRuntime.disconnect()),
         Promise.resolve().then(()=>slaveRuntime.shutdown()),
         Promise.resolve().then(()=>activeDiscovery.close()),
+        Promise.resolve().then(()=>networkDiscovery.close()),
         Promise.resolve().then(()=>tcpProxy.stop())
       ]);
 
