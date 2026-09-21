@@ -46,6 +46,9 @@ Supporting engineering workspaces include Traffic and Protocol Diagnostics, Regi
 
 ## Reliability and evidence
 
+- Master TCP reads perform one bounded transport reopen/retry after a dropped connection even when user-configured read retries are zero.
+- Master read API distinguishes request errors, Modbus exceptions, timeouts and transport failures with actionable guidance; device exceptions/timeouts are no longer mislabeled as gateway 502/504 failures.
+- Master polling UI rechecks backend connection state after failures, stops stale polling when disconnected, and exposes the full TCP Unit-ID range through 255 while preserving the serial 247 limit.
 - Shared active/passive Traffic evidence.
 - Request/response, CRC/LRC/MBAP, exception, timing and transaction-order diagnostics.
 - Bounded Logger/Trend persistence with restart hydration.
