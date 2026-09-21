@@ -34,14 +34,14 @@ function publicStatus(job){
     settings:{hostConcurrency:job.settings.hostConcurrency,serviceConcurrency:job.settings.serviceConcurrency,timeoutMs:job.settings.timeoutMs,useIcmp:job.settings.useIcmp,verifyModbus:job.settings.verifyModbus}
   };
 }
-async function enrichAliveHost(host,{profile,customPorts,timeoutMs,serviceConcurrency,verifyModbus,enrichWeb,signal,neighborMap}={}){
+async function enrichAliveHost(host,{profile,customPorts,timeoutMs,serviceConcurrency,verifyModbus,enrichWeb,signal,neighborMap,verifyEndpoint=verifyModbusEndpoint}={}){
   if(profile==='quick')return host;
   const services=await scanTcpServices(host.ip,{ports:profilePorts(profile,customPorts),timeoutMs,concurrency:serviceConcurrency,signal});
   const hostnames=host.hostnames?.length?host.hostnames:await reverseDns(host.ip,{timeoutMs:Math.max(500,timeoutMs*2)});
   const classes=classifyServices(services);let modbus=null;
   if(verifyModbus&&classes.modbusCandidates.length){
     for(const candidate of classes.modbusCandidates){
-      const result=await verifyModbusEndpoint({host:host.ip,port:candidate.port,unitIds:[1,255],timeoutMs:Math.max(350,timeoutMs*2),signal});
+      const result=await verifyEndpoint({host:host.ip,port:candidate.port,unitIds:[1,255],timeoutMs:Math.max(350,timeoutMs*2),signal});
       if(result.verified){modbus={...result,port:candidate.port};break;}
       if(!modbus)modbus={...result,port:candidate.port};
     }
@@ -103,7 +103,7 @@ class NetworkScanManager extends EventEmitter{
     job.progress.scanned++;
     if(!base.alive)return null;
     await this._waitIfPaused(job,signal);job.progress.stage='enrichment';
-    return this.enrich(base,{profile:job.profile,customPorts:job.settings.customPorts,timeoutMs:job.settings.timeoutMs,serviceConcurrency:job.settings.serviceConcurrency,verifyModbus:job.settings.verifyModbus,enrichWeb:job.settings.enrichWeb,signal,neighborMap});
+    return this.enrich(base,{profile:job.profile,customPorts:job.settings.customPorts,timeoutMs:job.settings.timeoutMs,serviceConcurrency:job.settings.serviceConcurrency,verifyModbus:job.settings.verifyModbus,enrichWeb:job.settings.enrichWeb,signal,neighborMap,verifyEndpoint:this.verifyModbus});
   }
   async _run(job,controller){
     const signal=controller.signal,neighborMap=await this.neighbors(),iterator=iterateTargets(job.parsed);let exhausted=false;
