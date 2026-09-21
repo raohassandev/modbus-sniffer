@@ -8,7 +8,7 @@ const {prefixFromNetmask,networkAddress,listNetworkInterfaces}=require('../src/n
 const {parseNeighborText}=require('../src/networkDiscovery/hostDiscovery');
 const {buildHostFingerprint,duplicateFindings,normalizeMac}=require('../src/networkDiscovery/deviceFingerprint');
 const {buildReadHoldingRequest}=require('../src/networkDiscovery/modbusVerifier');
-const {NetworkStore}=require('../src/networkDiscovery/networkStore');
+const {NetworkStore,diffHost}=require('../src/networkDiscovery/networkStore');
 const {NetworkScanManager}=require('../src/networkDiscovery/scanManager');
 
 test('network interface helpers derive prefix and suggested target',()=>{
@@ -51,6 +51,16 @@ test('Modbus verifier request uses valid MBAP and read-only FC03',()=>{
   assert.equal(b.readUInt16BE(4),6);
   assert.equal(b[6],7);
   assert.equal(b[7],3);
+});
+
+test('host differences identify service and Modbus Unit identity changes',()=>{
+  const before={ip:'192.168.1.10',mac:'00:11:22:33:44:55',hostname:'PLC-1',services:[{port:80,protocol:'tcp',name:'HTTP'}],modbus:{verified:true},modbusUnits:[{unitId:1,identificationSupported:true,identification:{vendorName:'ACME',modelName:'M1',revision:'1.0'}}]};
+  const after={...before,services:[{port:502,protocol:'tcp',name:'Modbus TCP'}],modbusUnits:[{unitId:1,identificationSupported:true,identification:{vendorName:'ACME',modelName:'M1',revision:'2.0'}},{unitId:2,identificationSupported:false,identification:{}}]};
+  const changes=diffHost(before,after);
+  assert.equal(changes.some(x=>x.field==='service-closed'&&x.before==='tcp:80'),true);
+  assert.equal(changes.some(x=>x.field==='service-opened'&&x.after==='tcp:502'),true);
+  assert.equal(changes.some(x=>x.field==='modbus-identity-changed'&&x.unitId===1),true);
+  assert.equal(changes.some(x=>x.field==='modbus-unit-added'&&x.after===2),true);
 });
 
 test('network store persists hosts scans baseline compare and events',()=>{
