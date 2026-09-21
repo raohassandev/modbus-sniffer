@@ -50,14 +50,34 @@ class NetworkStore{
   _load(){
     const tryRead=file=>{const raw=fs.readFileSync(file,'utf8');if(Buffer.byteLength(raw)>20*1024*1024)throw new Error('Network discovery store exceeds 20 MB safety limit.');const x=JSON.parse(raw);if(Number(x?.version)!==1||!x.projects||typeof x.projects!=='object')throw new Error('Unsupported network discovery store schema.');return x;};
     if(!fs.existsSync(this.file)){if(fs.existsSync(this.backup)){const x=tryRead(this.backup);fs.copyFileSync(this.backup,this.file);return x;}return this._empty();}
-    try{return tryRead(this.file);}catch(error){if(fs.existsSync(this.backup))return tryRead(this.backup);throw error;}
+    try{return tryRead(this.file);}catch(error){
+      if(fs.existsSync(this.backup)){
+        const recovered=tryRead(this.backup);
+        try{fs.copyFileSync(this.file,`${this.file}.corrupt-${Date.now()}`);}catch{}
+        fs.copyFileSync(this.backup,this.file);
+        return recovered;
+      }
+      throw error;
+    }
   }
   _atomic(){
     const tmp=`${this.file}.tmp-${process.pid}-${crypto.randomUUID()}`,json=JSON.stringify(this.db);
     if(Buffer.byteLength(json)>20*1024*1024)throw new Error('Network discovery store exceeds 20 MB safety limit.');
     fs.writeFileSync(tmp,json,{encoding:'utf8',mode:0o600});try{const fd=fs.openSync(tmp,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}catch{}
-    if(fs.existsSync(this.file))fs.copyFileSync(this.file,this.backup);
-    fs.renameSync(tmp,this.file);
+    const existed=fs.existsSync(this.file);
+    if(existed)fs.copyFileSync(this.file,this.backup);
+    try{fs.renameSync(tmp,this.file);}
+    catch(error){
+      if(!existed||!['EPERM','EEXIST','ENOTEMPTY','EACCES'].includes(error?.code)){try{fs.unlinkSync(tmp);}catch{}throw error;}
+      try{
+        fs.unlinkSync(this.file);
+        fs.renameSync(tmp,this.file);
+      }catch(second){
+        try{if(!fs.existsSync(this.file)&&fs.existsSync(this.backup))fs.copyFileSync(this.backup,this.file);}catch{}
+        try{if(fs.existsSync(tmp))fs.unlinkSync(tmp);}catch{}
+        throw second;
+      }
+    }
   }
   _project(projectId){
     const key=projectKey(projectId);if(!this.db.projects[key])this.db.projects[key]={hosts:{},scans:[],baselines:[],events:[],topology:{nodes:[],edges:[]}};return this.db.projects[key];
@@ -68,7 +88,7 @@ class NetworkStore{
     const before=existing?clone(existing):null,merged=normalizeHost(input,existing);
     const changes=diffHost(before,merged);if(changes.length)merged.lastChanged=now();
     if(existing&&existing.id!==merged.id)delete p.hosts[existing.id];p.hosts[merged.id]=merged;
-    if(changes.length)this.addEvent(projectId,{type:before?'host-changed':'host-discovered',hostId:merged.id,ip:merged.ip,source,changes});
+    if(changes.length)this.addEvent(projectId,{type:before?'host-changed':'host-discovered',hostId:merged.id,ip:merged.ip,source,changes},{persist:false});
     this._trimProject(p);this._atomic();return clone(merged);
   }
   replaceScanHosts(projectId,hosts=[],source='scan'){
@@ -104,9 +124,9 @@ class NetworkStore{
     for(const [k,h] of a)if(!b.has(k))removed.push(h);
     return{left:{id:left.id,name:left.name||left.id},right:{id:right.id},summary:{added:added.length,removed:removed.length,changed:changed.length,unchanged:unchanged.length},added,removed,changed,unchanged};
   }
-  addEvent(projectId,input={}){
+  addEvent(projectId,input={},options={}){
     const p=this._project(projectId),event={id:safeId('event'),at:input.at||now(),type:cleanText(input.type||'network-event',80),hostId:input.hostId?cleanText(input.hostId,180):null,ip:input.ip?cleanText(input.ip,80):null,source:cleanText(input.source||'network-discovery',80),...clone(input)};
-    p.events.push(event);this._trimProject(p);return clone(event);
+    p.events.push(event);this._trimProject(p);if(options.persist!==false)this._atomic();return clone(event);
   }
   listEvents(projectId,{limit=500}={}){const p=this._project(projectId);return p.events.slice(-Math.max(1,Math.min(5000,Number(limit)||500))).reverse().map(clone);}
   setTopology(projectId,topology={}){const p=this._project(projectId);p.topology={nodes:clone((topology.nodes||[]).slice(0,4096)),edges:clone((topology.edges||[]).slice(0,8192)),updatedAt:now()};this._atomic();return clone(p.topology);}
