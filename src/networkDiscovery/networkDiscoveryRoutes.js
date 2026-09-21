@@ -11,6 +11,8 @@ const {SERVICE_CATALOG}=require('./serviceScanner');
 const {readSnmpSystem,readLldpNeighbors}=require('./snmpClient');
 const {auxiliaryDiscovery}=require('./multicastDiscovery');
 const {NetworkMonitorManager}=require('./monitorManager');
+const {OuiResolver}=require('./ouiResolver');
+const {normalizeHost}=require('../transportIdentity');
 
 function bodyBool(v){return v===true;}
 function activeProjectId(workspaces,getActiveProjectId){return typeof getActiveProjectId==='function'?(getActiveProjectId()||'default'):(workspaces?.getActiveProject?.()?.id||'default');}
@@ -22,8 +24,9 @@ function statusCode(error){
 function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActiveProjectId=null,broadcast=()=>{},store:providedStore=null,manager:providedManager=null,demo=false}={}){
   if(!app)throw new Error('Express app is required for network discovery routes.');
   const store=providedStore||new NetworkStore({dataDir:options.dataDir});
+  const oui=new OuiResolver({dataDir:options.dataDir});
   const project=()=>activeProjectId(workspaces,getActiveProjectId);
-  const manager=providedManager||new NetworkScanManager({store,getProjectId:project});
+  const manager=providedManager||new NetworkScanManager({store,getProjectId:project,lookupVendor:mac=>oui.lookup(mac)});
   const monitor=new NetworkMonitorManager({store,getProjectId:project});
   manager.on('status',s=>broadcast('network-scan',s));
   manager.on('host',x=>broadcast('network-host',x));
@@ -42,8 +45,9 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   app.get('/api/network/interfaces',(_q,r)=>r.json({interfaces:listNetworkInterfaces()}));
   app.get('/api/network/capabilities',async(_q,r)=>{
     const nmap=await detectNmap().catch(()=>({available:false,command:null,version:null}));
-    r.json({nmap,ipv4:true,ipv6:true,ipv6Model:'bounded-cidr',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:true,lldp:true,multicastDiscovery:true,ssdp:true,mdns:true,wsd:true,dhcpContext:true,monitoring:true});
+    r.json({nmap,oui:oui.status(),ipv4:true,ipv6:true,ipv6Model:'bounded-cidr',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:true,lldp:true,multicastDiscovery:true,ssdp:true,mdns:true,wsd:true,dhcpContext:true,monitoring:true});
   });
+  app.get('/api/network/oui/status',(_q,r)=>r.json(oui.status()));
   app.post('/api/network/aux-discovery',async(q,r)=>{
     try{
       const out=await auxiliaryDiscovery({ssdp:q.body?.ssdp!==false,mdns:q.body?.mdns!==false,wsd:q.body?.wsd!==false,dhcp:q.body?.dhcp!==false,timeoutMs:Number(q.body?.timeoutMs||1200)});
@@ -153,6 +157,6 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   app.get('/api/network/utilization',(_q,r)=>r.json({subnets:addressUtilization(store.listHosts(project(),{limit:4096}))}));
   app.put('/api/network/topology',(q,r)=>{try{r.json(store.setTopology(project(),q.body||{}));}catch(e){r.status(400).json({error:e.message,code:e.code||null});}});
 
-  return{manager,store,monitor,close:async()=>{await Promise.allSettled([manager.close(),monitor.close()]);}};
+  return{manager,store,monitor,oui,close:async()=>{await Promise.allSettled([manager.close(),monitor.close()]);}};
 }
 module.exports={installNetworkDiscoveryRoutes};
