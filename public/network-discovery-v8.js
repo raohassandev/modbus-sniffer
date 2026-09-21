@@ -97,7 +97,7 @@
   const modbusHost=q('ndModbusHost');
   for(const child of oldChildren)modbusHost.appendChild(child);
 
-  let scanStatus=null,scanHosts=[],inventory=[],capabilities=null,pollTimer=null,currentDevice=null,topologyState={nodes:[],edges:[],zoom:1,panX:0,panY:0};
+  let scanStatus=null,scanHosts=[],scanJobId=null,scanHostFetch=false,inventory=[],capabilities=null,pollTimer=null,currentDevice=null,topologyState={nodes:[],edges:[],zoom:1,panX:0,panY:0};
 
   function tab(name){
     root.querySelectorAll('[data-nd-tab]').forEach(b=>b.classList.toggle('active',b.dataset.ndTab===name));
@@ -129,14 +129,25 @@
   q('ndScanRows').addEventListener('click',e=>{const tr=e.target.closest('[data-nd-host]');if(tr)openDevice(tr.dataset.ndHost);});
 
   function renderStatus(s){
-    scanStatus=s;const p=s?.progress||{},sum=s?.summary||{},running=Boolean(s?.running),paused=Boolean(s?.paused),pct=p.total?Math.max(0,Math.min(100,Number(p.scanned||0)/Number(p.total)*100)):0;
+    scanStatus=s;if(s?.jobId&&s.jobId!==scanJobId){scanJobId=s.jobId;scanHosts=[];}const p=s?.progress||{},sum=s?.summary||{},running=Boolean(s?.running),paused=Boolean(s?.paused),pct=p.total?Math.max(0,Math.min(100,Number(p.scanned||0)/Number(p.total)*100)):0;
     q('ndProgressBar').style.width=`${pct}%`;q('ndProgressTitle').textContent=s?.state==='completed'?'Completed':s?.state==='cancelled'?'Cancelled':s?.state==='error'?'Failed':paused?'Paused':running?'Scanning':'Idle';q('ndProgressStage').textContent=running?`${p.stage||'scan'} · ${Number(p.scanned||0).toLocaleString()} / ${Number(p.total||0).toLocaleString()}`:(s?.error?.message||'No scan running');
     for(const [id,key] of [['ndKpiTargets','targets'],['ndKpiScanned','scanned'],['ndKpiOnline','online'],['ndKpiIndustrial','industrial'],['ndKpiModbus','modbus'],['ndKpiUnknown','unknown'],['ndKpiWarnings','warnings']])q(id).textContent=Number(sum[key]??(key==='scanned'?p.scanned:0)).toLocaleString();
     q('ndPause').disabled=!running||paused;q('ndResume').disabled=!running||!paused;q('ndCancel').disabled=!running;
     const findings=Array.isArray(s?.findings)?s.findings:[];q('ndFindings').innerHTML=findings.slice(0,12).map(f=>`<div class="${f.severity==='critical'?'critical':'warning'}"><strong>${esc(String(f.severity||'warning').toUpperCase())}</strong><span>${esc(f.message||f.type||'Network finding')}</span></div>`).join('');
     if(Array.isArray(s?.hosts)){scanHosts=s.hosts;renderScanRows();}
   }
-  async function refreshStatus(){try{renderStatus(await api('/api/network/scan/status'));}catch{}}
+  async function fetchScanHosts(jobId){
+    if(scanHostFetch||!jobId)return;scanHostFetch=true;
+    try{
+      for(let pageNo=0;pageNo<3;pageNo++){
+        const out=await api('/api/network/scan/hosts?offset='+scanHosts.length+'&limit=1000');
+        if(out.jobId!==jobId){scanHosts=[];scanJobId=out.jobId||jobId;break;}
+        if(Array.isArray(out.hosts)&&out.hosts.length){scanHosts.push(...out.hosts);renderScanRows();}
+        if(scanHosts.length>=Number(out.total||0)||!out.hosts?.length)break;
+      }
+    }finally{scanHostFetch=false;}
+  }
+  async function refreshStatus(){try{const s=await api('/api/network/scan/status');renderStatus(s);if(s?.jobId)await fetchScanHosts(s.jobId);}catch{}}
   function ensurePolling(){if(pollTimer)return;pollTimer=setInterval(()=>{if(location.hash==='#discovery'||q('page-discovery')?.classList.contains('active'))refreshStatus();},1000);}
 
   async function loadInterfaces(){
