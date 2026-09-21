@@ -6,7 +6,7 @@ const {
   parseTargets,iterateTargets,previewTargets,ipv6ToBigInt,bigIntToIpv6,privateIpv6,targetContains
 }=require('../src/networkDiscovery/targetParser');
 const {buildLogicalTopology,addressUtilization}=require('../src/networkDiscovery/topology');
-const {parseNmapXml}=require('../src/networkDiscovery/nmapAdapter');
+const {parseNmapXml,discoverWithNmap}=require('../src/networkDiscovery/nmapAdapter');
 const {tlv,encInt,encOctet,encOid,requestPacket,parseResponse,SYSTEM_OIDS}=require('../src/networkDiscovery/snmpClient');
 const {encodeDnsName,decodeDnsName,parseHttpLike}=require('../src/networkDiscovery/multicastDiscovery');
 const {parseNmapPrefixes,parseIeeeCsv,prefix}=require('../src/networkDiscovery/ouiResolver');
@@ -51,6 +51,11 @@ test('Nmap XML parser preserves host, MAC vendor, service and OS provenance',()=
   assert.equal(hosts[0].ports[0].port,502);
   assert.equal(hosts[0].ports[0].product,'Example PLC');
   assert.equal(hosts[0].os.name,'Embedded Linux');
+});
+
+test('Nmap adapter rejects option-like or oversized targets before execution',async()=>{
+  await assert.rejects(()=>discoverWithNmap({targets:'--script=vuln'}),/Unsupported IP target format|Invalid/);
+  await assert.rejects(()=>discoverWithNmap({targets:'10.0.0.0/8'}),e=>e?.code==='TARGET_HARD_LIMIT'||e?.code==='TARGET_LIMIT');
 });
 
 test('SNMP BER parser decodes a bounded v2c GetResponse',()=>{
