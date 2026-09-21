@@ -27,7 +27,10 @@ Supporting engineering workspaces include Traffic and Protocol Diagnostics, Regi
 - Optional safe Nmap service/OS enrichment and explicit read-only SNMP/LLDP enrichment.
 - SSDP, mDNS and WSD context discovery.
 - Evidence-driven topology, subnet utilization, reference baselines, scan comparisons and per-device history.
-- Selected-device monitoring plus Ping/Traceroute diagnostics.
+- Selected-device monitoring plus Ping/Traceroute diagnostics, rolling packet-loss/RTT/jitter metrics.
+- Native per-device Deep Scan works without Nmap; Nmap remains optional enrichment.
+- Large live scans use paged result delivery so status polling does not repeatedly transfer the complete host inventory.
+- IPv6 hosts participate in evidence topology using /64 grouping; read-only SNMP selects UDP4 or UDP6 from the target family.
 - Safe **Open in Master** handoff prepares host/port/unit only and does not auto-connect or transmit.
 - Network inventory is included in unified CSV/JSON/XLSX/PDF/ZIP evidence and desktop data migration.
 
