@@ -27,7 +27,7 @@
       <div><strong>Traffic</strong><p>Shared evidence from Sniffer, Master, Slave, Discovery, Test Sequences and Raw Lab. Filter, inspect, bookmark, annotate and export selected packets.</p></div>
       <div><strong>Protocol Diagnostics</strong><p>Validates RTU CRC, ASCII LRC, TCP MBAP, request/response matching, exceptions, duplicates, TID order, RTT and bus gaps.</p></div>
       <div><strong>Decoder / Data Lab</strong><p>Interpret words as integer/float, ASCII/UTF-8, BCD, timestamp, enum and bitfield values with byte/word order and engineering scaling.</p></div>
-      <div><strong>Discovery</strong><p>FC43 identity discovery plus connected-Master Unit scans, address/range scans, function probes and safe quantity probes.</p></div>
+      <div><strong>Discovery</strong><p>Industrial network discovery accepts host/CIDR/range targets, inventories IP/MAC/vendor/hostname/services, verifies Modbus TCP before labeling it Modbus, supports optional Nmap and read-only SNMP/LLDP enrichment, saves baselines/history, and can hand a selected endpoint into Master. The Modbus Discovery tab retains FC43 Unit scans, address/range scans, function probes and safe quantity probes.</p></div>
       <div><strong>Device Clone</strong><p>Converts observed register evidence into a built-in Slave simulator map. Review before running it.</p></div>
       <div><strong>Test Sequences</strong><p>Bounded Modbus read/write/delay/set/assert/repeat recipes. Normal write safety still applies.</p></div>
       <div><strong>Transport Lab</strong><p>One-shot tests for TCP, TLS/Security, UDP and RTU/ASCII network tunnels with exact wire evidence. Non-standard encapsulations are labeled.</p></div>
