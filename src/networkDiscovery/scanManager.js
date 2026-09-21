@@ -32,7 +32,7 @@ function publicStatus(job,{includeHosts=true,hostOffset=0,hostLimit=10000}={}){
   return{
     state:job.state,running:job.running,paused:job.paused,jobId:job.jobId,scannerId:job.scannerId||'local',profile:job.profile,target:job.target,
     startedAt:job.startedAt,completedAt:job.completedAt||null,progress:{...job.progress},summary:summary(job.hosts,job.progress),
-    hosts:includeHosts?job.hosts.slice(Math.max(0,Number(hostOffset)||0),Math.max(0,Number(hostOffset)||0)+Math.max(1,Math.min(10000,Number(hostLimit)||10000))).map(x=>({...x})):[],hostCount:job.hosts.length,findings:job.findings.map(x=>({...x})),savedScanId:job.savedScanId||null,error:job.error?{...job.error}:null,
+    hosts:includeHosts?job.hosts.slice(Math.max(0,Number(hostOffset)||0),Math.max(0,Number(hostOffset)||0)+Math.max(1,Math.min(10000,Number(hostLimit)||10000))).map(x=>({...x})):undefined,hostCount:job.hosts.length,findings:job.findings.map(x=>({...x})),savedScanId:job.savedScanId||null,error:job.error?{...job.error}:null,
     settings:{hostConcurrency:job.settings.hostConcurrency,serviceConcurrency:job.settings.serviceConcurrency,timeoutMs:job.settings.timeoutMs,useIcmp:job.settings.useIcmp,verifyModbus:job.settings.verifyModbus}
   };
 }
