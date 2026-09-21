@@ -6,6 +6,8 @@ const {NetworkStore}=require('./networkStore');
 const {NetworkScanManager}=require('./scanManager');
 const {scanTcpDeviceIds}=require('../activeDiscovery');
 const {addressUtilization}=require('./topology');
+const {detectNmap,fingerprintWithNmap}=require('./nmapAdapter');
+const {SERVICE_CATALOG}=require('./serviceScanner');
 
 function bodyBool(v){return v===true;}
 function activeProjectId(workspaces,getActiveProjectId){return typeof getActiveProjectId==='function'?(getActiveProjectId()||'default'):(workspaces?.getActiveProject?.()?.id||'default');}
@@ -25,6 +27,10 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   manager.on('scan-error',x=>broadcast('network-scan-error',{jobId:x.jobId,ip:x.ip,error:x.error?.message||String(x.error||'error')}));
 
   app.get('/api/network/interfaces',(_q,r)=>r.json({interfaces:listNetworkInterfaces()}));
+  app.get('/api/network/capabilities',async(_q,r)=>{
+    const nmap=await detectNmap().catch(()=>({available:false,command:null,version:null}));
+    r.json({nmap,ipv4:true,ipv6Model:'planned',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:false,multicastDiscovery:false});
+  });
   app.post('/api/network/targets/preview',(q,r)=>{
     try{r.json(previewTargets({targets:q.body?.targets??q.body?.target,exclude:q.body?.exclude,maxTargets:q.body?.maxTargets??262144}));}
     catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null,theoretical:e.theoretical,publicCount:e.publicCount});}
@@ -62,6 +68,15 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
     const unitId=Number(q.body?.unitId??host.modbus?.unitId??host.modbusUnits?.find(x=>x.responded)?.unitId??1),port=Number(q.body?.port||host.modbus?.port||502);
     const prepared={type:'tcp',host:host.ip,port,unitId:Number.isInteger(unitId)&&unitId>=0&&unitId<=255?unitId:1,connect:false,transmit:false,source:'network-discovery'};
     broadcast('network-master-handoff',{hostId:host.id,prepared});r.json({prepared,message:'Master connection prepared only; no network request has been transmitted.'});
+  });
+  app.post('/api/network/hosts/:id/nmap',async(q,r)=>{
+    try{
+      const host=store.getHost(project(),q.params.id);if(!host){const e=new Error('Network host not found.');e.code='NETWORK_HOST_NOT_FOUND';throw e;}
+      const result=await fingerprintWithNmap({host:host.ip,ports:q.body?.ports||[],allowOsDetect:bodyBool(q.body?.allowOsDetect),timeoutMs:Number(q.body?.timeoutMs||60000)});
+      const n=result.host||{},services=(n.ports||[]).filter(x=>x.state==='open').map(x=>({port:x.port,protocol:x.protocol||'tcp',open:true,name:x.product?[`${x.name||''}`,x.product,x.version].filter(Boolean).join(' '):(x.name||SERVICE_CATALOG[x.port]?.name||'Unknown TCP'),category:SERVICE_CATALOG[x.port]?.category||'unknown',source:'external:nmap',confidence:Math.max(60,Math.min(100,Number(x.confidence)||80)),status:'verified',nmap:x}));
+      const updated=store.mergeHost(project(),{...host,mac:n.mac||host.mac,macVendor:n.macVendor||host.macVendor||null,hostname:n.hostnames?.[0]||host.hostname,hostnames:[...new Set([...(host.hostnames||[]),...(n.hostnames||[])])],services:services.length?services:host.services,nmap:{version:result.nmap?.version||null,os:n.os||null,osMatches:n.osMatches||[],scannedAt:new Date().toISOString()},lastSeen:new Date().toISOString()},'external:nmap');
+      broadcast('network-host-updated',{host:updated});r.json({host:updated,nmap:result.nmap,os:n.os||null,ports:n.ports||[]});
+    }catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}
   });
 
   app.get('/api/network/scans',(_q,r)=>r.json(store.listScans(project())));
