@@ -31,7 +31,7 @@ function inferDeviceType({hostname='',services=[],modbus=null}={}){
   if(/\b(plc|cpu|s7)\b/.test(h))add('PLC / Automation Controller',62,'Hostname pattern');
   if(/\b(meter|pm|analyzer|power)\b/.test(h))add('Meter / Analyzer',58,'Hostname pattern');
   if(/\b(logger|gateway|gw)\b/.test(h))add('Gateway / Logger',58,'Hostname pattern');
-  if(!candidates.length&&ports.has(80)||ports.has(443))add('Network Device',35,'Web management service');
+  if(!candidates.length&&(ports.has(80)||ports.has(443)))add('Network Device',35,'Web management service');
   candidates.sort((a,b)=>b.confidence-a.confidence);
   return candidates[0]||{type:'Unknown',confidence:0,reason:null};
 }
@@ -46,7 +46,7 @@ function buildHostFingerprint(input={}){
   if(modbus?.verified)evidence.push({field:'modbus',value:`${input.ip}:${modbus.port}`,source:'modbus-protocol-verification',confidence:100,status:'verified'});
   if(type.confidence)evidence.push({field:'deviceType',value:type.type,source:'fingerprint-rules',confidence:type.confidence,status:'inferred'});
   return{
-    ip:String(input.ip||''),hostname:hostname||null,hostnames:(input.hostnames||[]).slice(0,8),mac:mac.mac,
+    ip:String(input.ip||''),hostname:hostname||null,hostnames:(input.hostnames||[]).slice(0,8),mac:mac.mac,macObservations:(input.macObservations||[]).map(normalizeMac).filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).slice(0,16),
     macLocallyAdministered:mac.locallyAdministered,macMulticast:mac.multicast,
     services,industrial,modbus,type:type.type,typeConfidence:type.confidence,typeReason:type.reason,
     evidence,confidence:Math.min(100,Math.max(modbus?.verified?95:0,mac.mac?75:0,services.length?70:0,hostname?55:0)),
@@ -55,9 +55,9 @@ function buildHostFingerprint(input={}){
 function duplicateFindings(hosts=[]){
   const ipMac=new Map(),macIp=new Map();
   for(const h of hosts){
-    const ip=String(h.ip||''),mac=normalizeMac(h.mac);if(!ip||!mac)continue;
-    if(!ipMac.has(ip))ipMac.set(ip,new Set());ipMac.get(ip).add(mac);
-    if(!macIp.has(mac))macIp.set(mac,new Set());macIp.get(mac).add(ip);
+    const ip=String(h.ip||''),macs=[normalizeMac(h.mac),...(h.macObservations||[]).map(normalizeMac)].filter(Boolean);if(!ip||!macs.length)continue;
+    if(!ipMac.has(ip))ipMac.set(ip,new Set());
+    for(const mac of macs){ipMac.get(ip).add(mac);if(!macIp.has(mac))macIp.set(mac,new Set());macIp.get(mac).add(ip);}
   }
   const findings=[];
   for(const [ip,set] of ipMac)if(set.size>1)findings.push({type:'duplicate-ip',severity:'critical',ip,macs:[...set],message:`${ip} was observed with multiple MAC addresses.`});
