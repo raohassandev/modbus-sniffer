@@ -87,7 +87,7 @@ class NetworkScanManager extends EventEmitter{
     if(this.job?.running){const e=new Error('A network scan is already running.');e.code='NETWORK_SCAN_BUSY';throw e;}
     const profile=normalizeProfile(input.profile),parsed=parseTargets({targets:input.targets??input.target,exclude:input.exclude,maxTargets:input.maxTargets??262144});
     if(parsed.hasPublicTargets&&input.confirmPublicTargets!==true){const e=new Error('Target includes public/non-local IPv4 addresses. Explicitly confirm public target scanning before starting.');e.code='PUBLIC_TARGET_CONFIRMATION_REQUIRED';e.publicCount=parsed.publicCount;throw e;}
-    const jobId=crypto.randomUUID(),settings=this._settings(input,profile,parsed.count),controller=new AbortController(),target=Array.isArray(input.targets)?input.targets.join(', '):String(input.targets??input.target||'');
+    const jobId=crypto.randomUUID(),settings=this._settings(input,profile,parsed.count),controller=new AbortController(),target=Array.isArray(input.targets)?input.targets.join(', '):String((input.targets??input.target)||'');
     const projectId=this.getProjectId?.()||'default';
     this.controller=controller;this.job={jobId,projectId,profile,target,parsed,settings,state:'running',running:true,paused:false,startedAt:Date.now(),completedAt:null,hosts:[],findings:[],error:null,progress:{total:parsed.count,scanned:0,current:null,stage:'host-discovery',warnings:0,errors:0,truncated:false}};
     this._run(this.job,controller).catch(()=>{});return this._emit();
