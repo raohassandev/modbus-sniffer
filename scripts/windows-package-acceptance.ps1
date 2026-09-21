@@ -51,7 +51,13 @@ $installer = Get-ChildItem $dist -Filter "Modbus-Engineering-Tool-Setup-*.exe" -
   Select-Object -First 1
 if (-not $installer) { throw "NSIS setup executable was not found in $dist." }
 
-if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
+try { & taskkill /IM "Modbus Engineering Tool.exe" /T /F | Out-Null } catch {}
+if (Test-Path $installDir) {
+  for ($i = 0; $i -lt 8 -and (Test-Path $installDir); $i++) {
+    try { Remove-Item $installDir -Recurse -Force -ErrorAction Stop } catch { Start-Sleep -Milliseconds (250 * ($i + 1)) }
+  }
+  if (Test-Path $installDir) { throw "Acceptance install directory is still locked: $installDir" }
+}
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 
 Write-Host "Installing $($installer.Name) to $installDir"
@@ -83,7 +89,7 @@ try {
   if ($rootResponse.StatusCode -ne 200 -or $rootResponse.Content -notmatch "Modbus Engineering Tool" -or $rootResponse.Content -notmatch "platform-v6.js") {
     throw "Installed unified UI root is invalid."
   }
-  foreach ($asset in @("platform-v6.js","master-v7.js","slave-v7.js","help-v7.js")) {
+  foreach ($asset in @("platform-v6.js","master-v7.js","slave-v7.js","network-discovery-v8.js","network-discovery-v8.css","help-v7.js")) {
     $assetResponse = Invoke-WebRequest -Uri "$base/$asset" -UseBasicParsing -TimeoutSec 3
     if ($assetResponse.StatusCode -ne 200 -or [string]::IsNullOrWhiteSpace($assetResponse.Content)) {
       throw "Installed asset failed: $asset"
