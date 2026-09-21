@@ -72,7 +72,7 @@
 
     <section class="nd-view" data-nd-view="topology">
       <div class="nd-topology-grid">
-        <article class="panel"><div class="panel-head"><div><h3>Logical / Evidence Topology</h3><p>Subnet membership is logical. Physical links appear only when evidence such as LLDP/SNMP exists.</p></div><button class="secondary" id="ndRefreshTopology">Refresh</button></div><div id="ndTopologyCanvas" class="nd-topology-canvas"></div></article>
+        <article class="panel"><div class="panel-head nd-topology-head"><div><h3>Logical / Evidence Topology</h3><p>Subnet membership is logical. Physical links appear only when evidence such as LLDP/SNMP exists.</p></div><div class="nd-topology-tools"><input id="ndTopologySearch" placeholder="Search node"><select id="ndTopologyStatus"><option value="">All status</option><option value="online">Online</option><option value="offline">Offline</option></select><select id="ndTopologyProtocol"><option value="">All devices</option><option value="modbus">Verified Modbus</option><option value="industrial">Industrial</option></select><button class="secondary" id="ndZoomOut">−</button><button class="secondary" id="ndZoomReset">100%</button><button class="secondary" id="ndZoomIn">+</button><button class="secondary" id="ndRefreshTopology">Refresh</button></div></div><div id="ndTopologyCanvas" class="nd-topology-canvas"><div id="ndTopologyViewport" class="nd-topology-viewport"></div></div></article>
         <article class="panel"><div class="panel-head"><div><h3>Address Utilization</h3><p>Click a /24 subnet to inspect its usable host addresses.</p></div></div><div id="ndUtilization" class="nd-utilization"></div></article>
       </div>
       <article class="panel" style="margin-top:14px"><div class="panel-head"><div><h3>Topology Evidence</h3><p>Every relationship exposes source and confidence.</p></div></div><div class="table-wrap"><table class="nd-table"><thead><tr><th>From</th><th>To</th><th>Kind</th><th>Source</th><th>Confidence</th><th>Physical</th></tr></thead><tbody id="ndTopologyEdges"></tbody></table></div></article>
@@ -95,7 +95,7 @@
   const modbusHost=q('ndModbusHost');
   for(const child of oldChildren)modbusHost.appendChild(child);
 
-  let scanStatus=null,scanHosts=[],inventory=[],capabilities=null,pollTimer=null,currentDevice=null;
+  let scanStatus=null,scanHosts=[],inventory=[],capabilities=null,pollTimer=null,currentDevice=null,topologyState={nodes:[],edges:[],zoom:1,panX:0,panY:0};
 
   function tab(name){
     root.querySelectorAll('[data-nd-tab]').forEach(b=>b.classList.toggle('active',b.dataset.ndTab===name));
@@ -201,15 +201,56 @@
     }catch(err){notify(err.message,true);}finally{if(document.body.contains(b))b.disabled=false;}
   });
 
+  function topologyVisibleHosts(){
+    const query=q('ndTopologySearch').value.trim().toLowerCase(),status=q('ndTopologyStatus').value,protocol=q('ndTopologyProtocol').value;
+    return topologyState.nodes.filter(n=>n.kind==='host').filter(n=>{
+      if(query&&![n.label,n.ip,n.mac,n.type].some(v=>String(v||'').toLowerCase().includes(query)))return false;
+      if(status&&n.state!==status)return false;
+      if(protocol==='modbus'&&!n.modbus)return false;
+      if(protocol==='industrial'&&!n.industrial)return false;
+      return true;
+    });
+  }
+  function renderTopologyGraph(){
+    const viewport=q('ndTopologyViewport'),hosts=topologyVisibleHosts(),hostIds=new Set(hosts.map(h=>h.id)),memberships=topologyState.edges.filter(e=>e.kind==='logical-membership'&&hostIds.has(e.to)),subnetIds=[...new Set(memberships.map(e=>e.from))],subnets=subnetIds.map(id=>topologyState.nodes.find(n=>n.id===id)).filter(Boolean);
+    if(!hosts.length){viewport.innerHTML='<div class="empty-state">No topology nodes match the current filters.</div>';return;}
+    const positions=new Map(),subnetWidth=300,width=Math.max(900,subnets.length*subnetWidth+120);let maxY=300;
+    subnets.forEach((s,si)=>{
+      const x=100+si*subnetWidth+subnetWidth/2;positions.set(s.id,{x,y:65});
+      const children=memberships.filter(e=>e.from===s.id).map(e=>topologyState.nodes.find(n=>n.id===e.to)).filter(Boolean);
+      children.forEach((h,hi)=>{const col=hi%3,row=Math.floor(hi/3),hx=100+si*subnetWidth+55+col*80,hy=155+row*78;positions.set(h.id,{x:hx,y:hy});maxY=Math.max(maxY,hy+70);});
+    });
+    for(const h of hosts)if(!positions.has(h.id)){positions.set(h.id,{x:100+(positions.size%8)*105,y:maxY});maxY+=Math.floor(positions.size/8)?0:0;}
+    const resolveId=value=>{
+      if(positions.has(value))return value;
+      const target=hosts.find(n=>[n.id,n.label,n.ip,n.mac].some(v=>String(v||'')===String(value||'')));
+      return target?.id||null;
+    };
+    const visibleEdges=topologyState.edges.filter(e=>{
+      const a=resolveId(e.from),b=resolveId(e.to);return a&&b&&positions.has(a)&&positions.has(b);
+    });
+    const edgeSvg=visibleEdges.map(e=>{const a=positions.get(resolveId(e.from)),b=positions.get(resolveId(e.to)),physical=Boolean(e.physical);return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="${physical?'nd-edge-physical':'nd-edge-logical'}"><title>${esc(e.kind+' · '+e.source+' · '+e.confidence+'%')}</title></line>`;}).join('');
+    const subnetSvg=subnets.map(s=>{const p=positions.get(s.id);return `<g class="nd-node nd-subnet-node"><rect x="${p.x-80}" y="${p.y-22}" width="160" height="44" rx="9"></rect><text x="${p.x}" y="${p.y-2}" text-anchor="middle">${esc(s.label||s.subnet||s.id)}</text><text class="small" x="${p.x}" y="${p.y+13}" text-anchor="middle">logical subnet</text></g>`;}).join('');
+    const hostSvg=hosts.map(h=>{const p=positions.get(h.id),label=String(h.label||h.ip||h.id).slice(0,22),state=h.state==='online'?'online':'offline',kind=h.modbus?'modbus':h.industrial?'industrial':'normal';return `<g class="nd-node nd-host-node ${state} ${kind}" data-top-host="${esc(h.id)}" tabindex="0"><rect x="${p.x-43}" y="${p.y-25}" width="86" height="50" rx="8"></rect><circle cx="${p.x-32}" cy="${p.y-13}" r="4"></circle><text x="${p.x}" y="${p.y-2}" text-anchor="middle">${esc(label)}</text><text class="small" x="${p.x}" y="${p.y+13}" text-anchor="middle">${esc(h.ip||'')}</text></g>`;}).join('');
+    viewport.innerHTML=`<svg class="nd-topology-svg" viewBox="0 0 ${width} ${Math.max(360,maxY)}" aria-label="Network topology"><g id="ndTopologyTransform" transform="translate(${topologyState.panX} ${topologyState.panY}) scale(${topologyState.zoom})">${edgeSvg}${subnetSvg}${hostSvg}</g></svg><div class="nd-topology-legend"><span><i class="logical"></i>Logical</span><span><i class="physical"></i>Physical evidence</span><span><b class="dot modbus"></b>Verified Modbus</span><span><b class="dot online"></b>Online</span></div>`;
+    q('ndZoomReset').textContent=Math.round(topologyState.zoom*100)+'%';
+  }
   async function loadTopology(){
-    const [top,u]=await Promise.all([api('/api/network/topology'),api('/api/network/utilization')]),nodes=top.nodes||[],edges=top.edges||[],bySubnet=new Map();
-    for(const n of nodes.filter(x=>x.kind==='subnet'))bySubnet.set(n.id,{node:n,hosts:[]});
-    for(const e of edges.filter(x=>x.kind==='logical-membership')){const box=bySubnet.get(e.from),host=nodes.find(n=>n.id===e.to);if(box&&host)box.hosts.push(host);}
-    q('ndTopologyCanvas').innerHTML=bySubnet.size?[...bySubnet.values()].map(x=>`<div class="nd-subnet-card"><div><strong>${esc(x.node.label)}</strong><span>${x.hosts.length} host(s)</span></div><div class="nd-host-cloud">${x.hosts.map(h=>`<button data-top-host="${esc(h.id)}" class="${h.modbus?'modbus':''}"><i class="${h.state==='online'?'on':''}"></i>${esc(h.label||h.ip)}<small>${esc(h.ip)}</small></button>`).join('')}</div></div>`).join(''):'<div class="empty-state">No topology yet. Complete a network scan first.</div>';
-    q('ndTopologyEdges').innerHTML=edges.length?edges.map(e=>`<tr><td>${esc(e.from)}</td><td>${esc(e.to)}</td><td>${esc(e.kind)}</td><td>${esc(e.source)}</td><td>${esc(e.confidence)}%</td><td>${e.physical?'Yes':'No'}</td></tr>`).join(''):'<tr><td colspan="6" class="muted">No topology edges.</td></tr>';
+    const [top,u]=await Promise.all([api('/api/network/topology'),api('/api/network/utilization')]);topologyState={...topologyState,nodes:top.nodes||[],edges:top.edges||[]};renderTopologyGraph();
+    q('ndTopologyEdges').innerHTML=topologyState.edges.length?topologyState.edges.map(e=>`<tr><td>${esc(e.from)}</td><td>${esc(e.to)}</td><td>${esc(e.kind)}</td><td>${esc(e.source)}</td><td>${esc(e.confidence)}%</td><td>${e.physical?'Yes':'No'}</td></tr>`).join(''):'<tr><td colspan="6" class="muted">No topology edges.</td></tr>';
     q('ndUtilization').innerHTML=(u.subnets||[]).map(s=>`<button class="nd-util-card" data-subnet="${esc(s.subnet)}"><strong>${esc(s.subnet)}</strong><span>${s.used} used · ${s.free} free</span><small>${s.modbus} Modbus · ${s.industrial} industrial · ${s.conflicts} conflict</small></button>`).join('')||'<div class="empty-state">No subnet utilization data.</div>';
   }
-  q('ndRefreshTopology').addEventListener('click',()=>loadTopology().catch(e=>notify(e.message,true)));q('ndTopologyCanvas').addEventListener('click',e=>{const b=e.target.closest('[data-top-host]');if(b)openDevice(b.dataset.topHost);});
+  q('ndRefreshTopology').addEventListener('click',()=>loadTopology().catch(e=>notify(e.message,true)));
+  q('ndTopologyCanvas').addEventListener('click',e=>{const b=e.target.closest('[data-top-host]');if(b)openDevice(b.dataset.topHost);});
+  for(const id of ['ndTopologySearch','ndTopologyStatus','ndTopologyProtocol'])q(id).addEventListener(id==='ndTopologySearch'?'input':'change',renderTopologyGraph);
+  q('ndZoomIn').addEventListener('click',()=>{topologyState.zoom=Math.min(2.5,Math.round((topologyState.zoom+.15)*100)/100);renderTopologyGraph();});
+  q('ndZoomOut').addEventListener('click',()=>{topologyState.zoom=Math.max(.45,Math.round((topologyState.zoom-.15)*100)/100);renderTopologyGraph();});
+  q('ndZoomReset').addEventListener('click',()=>{topologyState.zoom=1;topologyState.panX=0;topologyState.panY=0;renderTopologyGraph();});
+  let topoDrag=null;
+  q('ndTopologyCanvas').addEventListener('pointerdown',e=>{if(e.target.closest('[data-top-host]'))return;topoDrag={x:e.clientX,y:e.clientY,panX:topologyState.panX,panY:topologyState.panY};q('ndTopologyCanvas').setPointerCapture?.(e.pointerId);});
+  q('ndTopologyCanvas').addEventListener('pointermove',e=>{if(!topoDrag)return;topologyState.panX=topoDrag.panX+(e.clientX-topoDrag.x);topologyState.panY=topoDrag.panY+(e.clientY-topoDrag.y);const g=q('ndTopologyTransform');if(g)g.setAttribute('transform',`translate(${topologyState.panX} ${topologyState.panY}) scale(${topologyState.zoom})`);});
+  q('ndTopologyCanvas').addEventListener('pointerup',()=>{topoDrag=null;});
+  q('ndTopologyCanvas').addEventListener('wheel',e=>{e.preventDefault();topologyState.zoom=Math.max(.45,Math.min(2.5,topologyState.zoom+(e.deltaY<0?.08:-.08)));renderTopologyGraph();},{passive:false});
   q('ndUtilization').addEventListener('click',async e=>{const b=e.target.closest('[data-subnet]');if(!b)return;const out=await api('/api/network/utilization'),row=(out.subnets||[]).find(x=>x.subnet===b.dataset.subnet);if(!row)return;const base=row.subnet.replace('.0/24','.'),used=new Set(row.usedHosts||[]);q('ndUtilization').innerHTML=`<button class="secondary" id="ndUtilBack">← Subnets</button><div class="nd-address-grid">${Array.from({length:254},(_,i)=>i+1).map(n=>`<span class="${used.has(n)?'used':'free'}" title="${base+n}">${n}</span>`).join('')}</div>`;q('ndUtilBack').onclick=()=>loadTopology().catch(()=>{});});
 
   async function loadHistory(){
