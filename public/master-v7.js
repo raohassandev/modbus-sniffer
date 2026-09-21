@@ -108,11 +108,25 @@
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       const error = new Error(body.error || `HTTP ${response.status}`);
-      error.code = body.code;
-      error.details = body.details;
+      error.code = body.code || null;
+      error.details = body.details || null;
+      error.category = body.category || null;
+      error.retryable = Boolean(body.retryable);
+      error.hint = body.hint || null;
+      error.httpStatus = response.status;
       throw error;
     }
     return body;
+  }
+
+  function describeMasterError(error) {
+    const code = String(error?.code || '');
+    if (error?.hint) return error.hint;
+    if (code === 'TIMEOUT') return 'No matching Modbus response was received. Verify Unit ID, function, address, target port and timeout.';
+    if (code === 'MODBUS_EXCEPTION') return 'The device rejected this Modbus request. Check its register map and requested function/address/quantity.';
+    if (['CONNECTION_LOST','CONNECTION_NOT_OPEN','NOT_OPEN','CLOSED','RECONNECTING','CONNECT_FAILED','CONNECT_TIMEOUT','WRITE_FAILED'].includes(code)) return 'The transport is unavailable. Verify the device/network path and reconnect.';
+    if (code.startsWith('INVALID_')) return 'Check the connection and read definition fields before retrying.';
+    return '';
   }
 
   function setNote(message, kind = '') {
@@ -298,8 +312,16 @@
       if (!silent) setNote(`<strong>Read successful.</strong> ${result.rows.length} values in ${Number(result.rttMs || 0).toFixed(1)} ms.`);
       return result;
     } catch (error) {
-      try { renderStats((await request('/api/master/status')).stats); } catch { /* ignore */ }
-      setNote(`<strong>Read failed${error.code ? ` (${esc(error.code)})` : ''}.</strong> ${esc(error.message)}`, 'master-error');
+      let status = null;
+      try {
+        status = await request('/api/master/status');
+        renderStats(status.stats);
+        setConnected(Boolean(status.connected), status);
+      } catch { /* keep the current local state if status is unavailable */ }
+      if (status && !status.connected) stopPolling();
+      const guidance = describeMasterError(error);
+      const retryText = error.retryable ? ' Retry is safe for this read.' : '';
+      setNote(`<strong>Read failed${error.code ? ` (${esc(error.code)})` : ''}.</strong> ${esc(error.message)}${guidance ? `<br><span>${esc(guidance + retryText)}</span>` : ''}`, 'master-error');
       return null;
     } finally {
       app.busy = false;
@@ -361,6 +383,7 @@
     q('masterSerialFields').hidden = type === 'tcp';
     q('masterTcpFields').hidden = type !== 'tcp';
     q('masterRefreshPorts').hidden = type === 'tcp';
+    q('masterUnitId').max = type === 'tcp' ? '255' : '247';
   }
 
   masterNav.addEventListener('click', () => { try { go('master'); } catch {} refreshStatus(); loadPorts(); });
