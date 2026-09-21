@@ -1,6 +1,6 @@
 # Modbus Engineering Tool — Parallel Lane Registry
 
-**Status date:** 2026-09-20  
+**Status date:** 2026-09-21  
 **Branch:** `v8-release-completion`
 
 This registry tracks **software/release-engineering completion**. Physical hardware, clean-machine Windows execution, Defender/firewall/driver behavior and production signing are external acceptance evidence and are listed separately rather than being counted as unfinished software.
@@ -21,6 +21,13 @@ This registry tracks **software/release-engineering completion**. Physical hardw
 | L8-D | Security / ownership / transport hardening | COMPLETE | 100% |
 | L8-E | Release docs / evidence contract | COMPLETE | 100% |
 | L8-F | Field/Windows acceptance harness + evidence convergence | COMPLETE | 100% |
+| N1 | Network Discovery architecture / persistence | COMPLETE | 100% |
+| N2 | Large-range scanner / target engine | COMPLETE | 100% |
+| N3 | Device enrichment / industrial intelligence | COMPLETE | 100% |
+| N4 | Verified Modbus integration / Master handoff | COMPLETE | 100% |
+| N5 | Network Discovery UI / UX | COMPLETE | 100% |
+| N6 | Inventory / history / baseline / topology | COMPLETE | 100% |
+| N7 | Network Discovery QA / security / release integration | COMPLETE | 100% |
 
 **Software and release-engineering completion: 100%.**
 
@@ -48,6 +55,7 @@ This registry tracks **software/release-engineering completion**. Physical hardw
 - Windows workflow is manual-only and includes preflight, soak, unified browser acceptance, NSIS build, packaged health/UI smoke, install/uninstall acceptance, environment capture, provenance and SHA-256 checksums;
 - final L8-F evidence convergence tooling is present;
 - release notes and site-acceptance documentation are complete.
+- Industrial Network Discovery is integrated into the unified Discovery workspace with bounded large-range target parsing, persistent inventory/history, verified Modbus detection, safe Master handoff, topology, monitoring, exports and deterministic QA contracts.
 
 ## External release evidence still to execute
 
