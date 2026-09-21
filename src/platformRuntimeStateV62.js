@@ -18,7 +18,7 @@ class PlatformRuntimeStateV62 extends PlatformRuntimeState {
 
   _recordSlave(event){if(this._isRtuBroadcast(event))return;return super._recordSlave(event);}
   _recordPollRequest(event){if(this._isRtuBroadcast(event))return;return super._recordPollRequest(event);}
-  _recordRegisters(tx,timestamp){if(this._isRtuBroadcast(tx))return;if(tx?.direction==='RSP'&&tx?.matched!==true)return;return super._recordRegisters(tx,timestamp);}
+  _recordRegisters(tx,timestamp){if(this._isRtuBroadcast(tx))return;if(tx?.direction==='RSP'&&!tx?.request)return;return super._recordRegisters(tx,timestamp);}
 
   recordNoise(count,timestamp=Date.now(),channelId=null){super.recordNoise(count,timestamp);if(channelId){const key=String(channelId);this.rtuNoiseByChannel.set(key,(this.rtuNoiseByChannel.get(key)||0)+Number(count||0));}}
 
