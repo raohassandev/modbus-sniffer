@@ -4,20 +4,74 @@ const { MasterRuntime, normalizeConnectionConfig } = require('./masterRuntime');
 const { MasterMonitorSessionStore } = require('./masterMonitorSessionStore');
 
 function errorStatus(error) {
-  if (['MASTER_NOT_CONNECTED'].includes(error?.code)) return 409;
-  if (['PASSIVE_CAPTURE_ACTIVE', 'SLAVE_ACTIVE', 'RAW_LAB_ACTIVE'].includes(error?.code)) return 409;
-  if (['TIMEOUT'].includes(error?.code)) return 504;
-  if (['MODBUS_EXCEPTION'].includes(error?.code)) return 502;
-  if (['STORE_READ_FAILED','STORE_WRITE_FAILED','STORE_INVALID'].includes(error?.code)) return 500;
-  if (String(error?.code || '').startsWith('INVALID_')) return 400;
+  const code = String(error?.code || '');
+  if (code === 'MASTER_NOT_CONNECTED') return 409;
+  if (['PASSIVE_CAPTURE_ACTIVE', 'SLAVE_ACTIVE', 'RAW_LAB_ACTIVE'].includes(code)) return 409;
+  if (code === 'TIMEOUT') return 408;
+  if (code === 'MODBUS_EXCEPTION') return 422;
+  if (['CONNECTION_LOST','CONNECTION_NOT_OPEN','NOT_OPEN','CLOSED','RECONNECTING','CONNECT_FAILED','CONNECT_TIMEOUT','WRITE_FAILED'].includes(code)) return 503;
+  if (['INVALID_RESPONSE','UNIT_MISMATCH','TID_MISMATCH','FUNCTION_MISMATCH'].includes(code)) return 422;
+  if (['STORE_READ_FAILED','STORE_WRITE_FAILED','STORE_INVALID'].includes(code)) return 500;
+  if (code.startsWith('INVALID_')) return 400;
   return 400;
 }
 
+function errorGuidance(error) {
+  const code = String(error?.code || 'MASTER_ERROR');
+  const details = error?.details || {};
+  if (code === 'TIMEOUT') return {
+    category:'timeout',
+    retryable:true,
+    hint:'No matching Modbus response arrived before the timeout. Verify Unit ID, function code, register address, device TCP port and network path; then increase timeout only if the device is known to respond slowly.',
+  };
+  if (code === 'MODBUS_EXCEPTION') {
+    const names = { 1:'Illegal Function', 2:'Illegal Data Address', 3:'Illegal Data Value', 4:'Server Device Failure', 5:'Acknowledge', 6:'Server Device Busy', 8:'Memory Parity Error', 10:'Gateway Path Unavailable', 11:'Gateway Target Device Failed to Respond' };
+    const n = Number(details.exceptionCode);
+    return {
+      category:'modbus-exception',
+      retryable:[5,6,10,11].includes(n),
+      hint:`The device returned Modbus exception ${Number.isFinite(n)?n:'?'}${names[n] ? ` (${names[n]})` : ''}. Check the requested function/address/quantity against the device register map.`,
+    };
+  }
+  if (['CONNECTION_LOST','CONNECTION_NOT_OPEN','NOT_OPEN','CLOSED','RECONNECTING','CONNECT_FAILED','CONNECT_TIMEOUT','WRITE_FAILED'].includes(code)) return {
+    category:'transport',
+    retryable:true,
+    hint:'The TCP/serial transport is not currently usable. Reconnect the target and verify IP/port, cabling, firewall/VPN and device availability.',
+  };
+  if (['INVALID_RESPONSE','UNIT_MISMATCH','TID_MISMATCH','FUNCTION_MISMATCH'].includes(code)) return {
+    category:'protocol',
+    retryable:false,
+    hint:'A response arrived but did not match the active Modbus request. Check for the correct target, gateway routing and duplicate/competing clients.',
+  };
+  if (code.startsWith('INVALID_')) return {
+    category:'request',
+    retryable:false,
+    hint:'The read definition is invalid. Check Unit ID, function code, address, quantity and connection parameters.',
+  };
+  return { category:'master', retryable:false, hint:null };
+}
+
+function jsonSafeDetails(value) {
+  if (Buffer.isBuffer(value)) return value.toString('hex').toUpperCase();
+  if (Array.isArray(value)) return value.map(jsonSafeDetails);
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (Buffer.isBuffer(item)) out[`${key}Hex`] = item.toString('hex').toUpperCase();
+    else out[key] = jsonSafeDetails(item);
+  }
+  return out;
+}
+
 function sendError(res, error) {
+  const guidance = errorGuidance(error);
   return res.status(errorStatus(error)).json({
     error: String(error?.message || error),
     code: error?.code || 'MASTER_ERROR',
-    details: error?.details || undefined,
+    category: guidance.category,
+    retryable: guidance.retryable,
+    hint: guidance.hint,
+    details: error?.details ? jsonSafeDetails(error.details) : undefined,
   });
 }
 
@@ -176,4 +230,4 @@ function installMasterRoutes({
   return runtime;
 }
 
-module.exports = { installMasterRoutes, sendError, errorStatus };
+module.exports = { installMasterRoutes, sendError, errorStatus, errorGuidance, jsonSafeDetails };
