@@ -2,19 +2,19 @@
 
 const $ = id => document.getElementById(id);
 const state = {
-  status: null, analysis: null, devices: [], transactions: [], registers: [], ports: [], config: {}, replay: {},
+  status: null, analysis: null, devices: [], transactions: [], registers: [], ports: [], config: {}, replay: {}, tcpStatus: {},
   paused: false, selectedPacket: null, selectedDevice: null, deviceDetail: null, ws: null, refreshTimer: null
 };
 
 const pageMeta = {
-  dashboard: ['Dashboard', 'Live RS485 / Modbus RTU visibility'],
-  devices: ['Devices', 'Automatically formed Slave-ID devices, polling groups and registers'],
+  dashboard: ['Dashboard', 'Live Modbus RTU / TCP engineering visibility'],
+  devices: ['Devices', 'Transport-aware RTU Slave / TCP Unit devices, polling groups and registers'],
   traffic: ['Live Traffic', 'Decoded requests, responses, exceptions and missing replies'],
   analysis: ['Analysis', 'Timing, polling cadence, timeouts, line quality and device health'],
   registers: ['Registers', 'Automatically discovered register values grouped by slave'],
   decoder: ['Decoder', '16/32/64-bit register type and byte-order analysis'],
   sessions: ['Sessions', 'Save, load and replay complete Modbus captures'],
-  settings: ['Settings', 'Serial port, passive format detection and capture controls']
+  settings: ['Settings', 'Serial RTU source, passive format detection and capture controls']
 };
 
 function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
@@ -32,14 +32,42 @@ function requestRange(d){if(Number.isInteger(d.startAddress))return `addr ${d.st
 function dirBadge(t){const cls=t.direction==='TIMEOUT'?'timeout':t.exception?'err':t.direction==='REQ'?'req':t.direction==='RSP'?'rsp':'';return `<span class="badge ${cls}">${esc(t.direction)}</span>`;}
 function statusChip(d){return `<span class="device-status ${esc(d.status)}">${esc(d.status)}</span>`;}
 function healthClass(score){return score>=90?'good':score>=70?'warn':'bad';}
+function deviceLabel(d={}){const unit=d.unitId??d.slaveId??'—';return `${d.transport==='TCP'?'TCP Unit':'RTU Slave'} ${unit}`;}
+function channelLabel(d={}){return d.endpoint||d.channelName||d.channelId||d.transport||'Unknown source';}
+function transactionSource(t={}){return t.transport==='TCP'?`TCP · ${t.endpoint||t.channelId||''}`:`RTU · ${t.channel?.endpoint||t.channelName||t.channelId||state.status?.config?.port||''}`;}
+function sourceQuality(){
+  const s=state.status||{},a=state.analysis||{},rtu=s.transports?.RTU||{},tcp=s.transports?.TCP||{},noise=Number(a.rates?.noiseRatio||0),unmatched=Number(a.rates?.unmatchedResponseRate||0);
+  return{rtuFrames:Number(rtu.frames||0),tcpFrames:Number(tcp.frames||0),noise,unmatched,noisyRtu:Number(tcp.frames||0)===0&&Number(rtu.frames||0)>0&&noise>5&&unmatched>50};
+}
+function renderSourceBanner(){
+  const box=$('sourceBanner');if(!box)return;
+  const s=state.status||{},cfg=s.config||{},tcp=state.tcpStatus||{},q=sourceQuality(),connection=s.connection||{};
+  box.className='source-banner';
+  let kicker='CAPTURE SOURCE',title='No live Modbus source yet',body='Use Serial Settings for RTU, the TCP Analyzer Proxy for an existing PLC↔device TCP conversation, or Master for a direct active read.';
+  if(q.tcpFrames>0){
+    box.classList.add('good');kicker='TCP CAPTURE ACTIVE';title=`Captured ${q.tcpFrames.toLocaleString()} Modbus TCP frame(s)`;body=tcp.running?`PLC/client traffic is passing through ${tcp.listenHost}:${tcp.listenPort} → ${tcp.targetHost}:${tcp.targetPort}.`:'TCP evidence is present in this capture.';
+  }else if(tcp.running){
+    box.classList.add('info');kicker='TCP PROXY LISTENING';title='Waiting for the PLC/client to pass through this analyzer';body=`The proxy is listening on ${tcp.listenHost}:${tcp.listenPort} and forwarding to ${tcp.targetHost}:${tcp.targetPort}. Direct PLC traffic sent straight to the target bypasses this app.`;
+  }else if(cfg.port){
+    box.classList.add(q.noisyRtu?'bad':'warn');kicker=q.noisyRtu?'WRONG / NOISY SOURCE':'RTU SOURCE ACTIVE';title=q.noisyRtu?`${cfg.port} is producing mostly unrelated/noisy RTU bytes`:`Current source is serial RTU on ${cfg.port}`;body=q.noisyRtu?`This dashboard cannot see a PLC's direct Modbus TCP read through ${cfg.port}. RTU noise is ${q.noise.toFixed(1)}% and unmatched responses are ${q.unmatched.toFixed(1)}%; use TCP Analyzer Proxy for the Ethernet conversation or Master for an independent TCP read.`:`Serial ${cfg.baudRate||''} ${cfg.dataBits||8}${String(cfg.parity||'none')[0].toUpperCase()}${cfg.stopBits||1}. Direct Ethernet/TCP traffic is not visible unless it is routed through the TCP Analyzer Proxy.`;
+  }
+  if(connection.status==='reconnecting'&&cfg.port){box.classList.add('bad');kicker='SERIAL RECONNECTING';title=`${cfg.port} is not currently a stable capture source`;body=`${connection.message||'The serial adapter is reconnecting.'} This does not capture Modbus TCP traffic.`;}
+  $('sourceBannerKicker').textContent=kicker;$('sourceBannerTitle').textContent=title;$('sourceBannerBody').textContent=body;
+}
 
 function go(page){if(!pageMeta[page])page='dashboard';document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===page));$(`page-${page}`).classList.add('active');$('pageTitle').textContent=pageMeta[page][0];$('pageSubtitle').textContent=pageMeta[page][1];if(location.hash!==`#${page}`)history.replaceState(null,'',`#${page}`);if(page==='devices')renderDevices();if(page==='traffic')renderTraffic();if(page==='analysis')renderAnalysis();if(page==='registers')refreshRegisters();if(page==='decoder')populateDecoderSlaves();if(page==='sessions')refreshReplay();if(page==='settings'){loadPorts();loadConfigIntoForm();}}
 
 document.querySelectorAll('.nav-item').forEach(x=>x.addEventListener('click',()=>go(x.dataset.page)));document.querySelectorAll('[data-go]').forEach(x=>x.addEventListener('click',()=>go(x.dataset.go)));window.addEventListener('hashchange',()=>go(location.hash.slice(1)||'dashboard'));
 
-function renderStatus(){if(!state.status)return;const s=state.status,t=s.totals||{},c=s.connection||{},a=state.analysis||{};$('kpiFrames').textContent=Number(t.frames||0).toLocaleString();$('kpiFps').textContent=`${num(t.framesPerSecond,0)} fps`;$('kpiDevices').textContent=t.devices||t.slaves||0;$('kpiPolls').textContent=`${t.pollGroups||0} poll groups`;$('kpiRegisters').textContent=Number(t.registers||0).toLocaleString();$('kpiTimeouts').textContent=Number(t.timeouts||0).toLocaleString();$('kpiTimeoutRate').textContent=pct(a.rates?.timeoutRate,2);$('kpiRtt').textContent=ms(t.avgRttMs);$('kpiP95').textContent=`P95 ${ms(t.p95RttMs)}`;$('kpiExceptions').textContent=Number(t.exceptions||0).toLocaleString();$('kpiNoise').textContent=`${Number(t.noiseBytes||0).toLocaleString()} noise bytes`;const pill=$('connectionPill');pill.className=`connection-pill ${c.status||'idle'}`;$('connectionText').textContent=(c.status||'idle').replace(/^./,x=>x.toUpperCase());const cfg=s.config||{};$('serialSummary').textContent=c.status==='demo'?'SIMULATOR':c.status==='replay'?'CAPTURE REPLAY':c.status==='capture'?'OFFLINE CAPTURE':cfg.port?`${cfg.port} · ${cfg.baudRate} · ${cfg.dataBits}${String(cfg.parity||'none')[0].toUpperCase()}${cfg.stopBits}`:'No port selected';drawLine($('trafficChart'),s.timeline||[]);}
-function renderDashboard(){renderStatus();const a=state.analysis||{},score=a.healthScore??100;$('dashHealthScore').textContent=score;setRing('dashHealthRing',score);$('dashTimeoutRate').textContent=pct(a.rates?.timeoutRate,2);$('dashExceptionRate').textContent=pct(a.rates?.exceptionRate,2);$('dashUnmatchedRate').textContent=pct(a.rates?.unmatchedResponseRate,2);$('dashNoiseRate').textContent=pct(a.rates?.noiseRatio,3);$('dashboardDevices').innerHTML=state.devices.slice(0,12).map(d=>`<tr class="analysis-click-row" data-dash-device="${d.slaveId}"><td><strong>${d.slaveId}</strong></td><td>${statusChip(d)}</td><td>${d.registerCount}</td><td>${d.pollGroupCount}</td><td>${ms(d.expectedPollIntervalMs)}</td><td>${d.timeouts}</td><td>${ms(d.p95RttMs)}</td></tr>`).join('')||'<tr><td colspan="7" class="muted">No slave devices observed yet.</td></tr>';const recent=state.transactions.slice(-12).reverse();$('dashboardTraffic').innerHTML=recent.map(t=>`<tr class="${t.direction==='TIMEOUT'?'timeout-row':''}"><td class="mono">${time(t.timestamp,true)}</td><td>${dirBadge(t)}</td><td>${esc(t.slaveId)}</td><td>${esc(t.functionCode)}</td><td>${esc(detail(t))}</td><td>${ms(t.rttMs)}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">Waiting for traffic…</td></tr>';}
-$('dashboardDevices').addEventListener('click',e=>{const r=e.target.closest('[data-dash-device]');if(r)openDevice(Number(r.dataset.dashDevice));});
+function renderStatus(){if(!state.status)return;const s=state.status,t=s.totals||{},c=s.connection||{},a=state.analysis||{};$('kpiFrames').textContent=Number(t.frames||0).toLocaleString();$('kpiFps').textContent=`${num(t.framesPerSecond,0)} fps`;$('kpiDevices').textContent=t.devices||t.slaves||0;$('kpiPolls').textContent=`${t.pollGroups||0} poll groups`;$('kpiRegisters').textContent=Number(t.registers||0).toLocaleString();$('kpiTimeouts').textContent=Number(t.timeouts||0).toLocaleString();$('kpiTimeoutRate').textContent=pct(a.rates?.timeoutRate,2);$('kpiRtt').textContent=ms(t.avgRttMs);$('kpiP95').textContent=`P95 ${ms(t.p95RttMs)}`;$('kpiExceptions').textContent=Number(t.exceptions||0).toLocaleString();$('kpiNoise').textContent=`${Number(t.noiseBytes||0).toLocaleString()} RTU noise bytes`;const pill=$('connectionPill');pill.className=`connection-pill ${c.status||'idle'}`;$('connectionText').textContent=(c.status||'idle').replace(/^./,x=>x.toUpperCase());const cfg=s.config||{},q=sourceQuality(),tcp=state.tcpStatus||{};$('serialSummary').textContent=c.status==='demo'?'SIMULATOR':c.status==='replay'?'CAPTURE REPLAY':c.status==='capture'?'OFFLINE CAPTURE':q.tcpFrames>0?`TCP · ${q.tcpFrames} frames`:tcp.running?`TCP ${tcp.listenHost}:${tcp.listenPort} → ${tcp.targetHost}:${tcp.targetPort}`:cfg.port?`${cfg.port} · ${cfg.baudRate} · ${cfg.dataBits}${String(cfg.parity||'none')[0].toUpperCase()}${cfg.stopBits}`:'No source selected';renderSourceBanner();drawLine($('trafficChart'),s.timeline||[]);}
+function renderDashboard(){
+  renderStatus();const a=state.analysis||{},score=a.healthScore??100,q=sourceQuality();$('dashHealthScore').textContent=score;setRing('dashHealthRing',score);$('dashTimeoutRate').textContent=pct(a.rates?.timeoutRate,2);$('dashExceptionRate').textContent=pct(a.rates?.exceptionRate,2);$('dashUnmatchedRate').textContent=pct(a.rates?.unmatchedResponseRate,2);$('dashNoiseRate').textContent=pct(a.rates?.noiseRatio,3);
+  const confirmed=state.devices.filter(d=>d.confirmed!==false);
+  $('dashboardDevices').innerHTML=confirmed.slice(0,12).map(d=>`<tr class="analysis-click-row" data-dash-device="${esc(d.deviceKey)}"><td><strong>${esc(deviceLabel(d))}</strong><small>${esc(channelLabel(d))}</small></td><td>${statusChip(d)}</td><td>${d.registerCount}</td><td>${d.pollGroupCount}</td><td>${ms(d.expectedPollIntervalMs)}</td><td>${d.timeouts}</td><td>${ms(d.p95RttMs)}</td></tr>`).join('')||`<tr><td colspan="7" class="muted">${q.noisyRtu?'No confirmed devices. Current serial bytes are mostly noise/unmatched traffic; they are intentionally not promoted to devices.':'No confirmed Modbus devices observed yet.'}</td></tr>`;
+  const recent=q.noisyRtu?[]:state.transactions.slice(-12).reverse();
+  $('dashboardTraffic').innerHTML=recent.map(t=>`<tr class="${t.direction==='TIMEOUT'?'timeout-row':''}"><td class="mono">${time(t.timestamp,true)}</td><td><strong>${esc(t.transport||'RTU')}</strong><small>${esc(t.endpoint||t.channelId||'')}</small></td><td>${dirBadge(t)}</td><td>${esc(t.unitId??t.slaveId)}</td><td>${esc(t.functionCode)}</td><td>${esc(detail(t))}</td><td>${ms(t.rttMs)}</td></tr>`).join('')||`<tr><td colspan="7" class="muted">${q.noisyRtu?'Overview suppressed because the current RTU source is mostly noise/unmatched responses. Open Live Traffic for raw diagnostics, or switch to the correct TCP source.':'Waiting for traffic…'}</td></tr>`;
+}
+$('dashboardDevices').addEventListener('click',e=>{const r=e.target.closest('[data-dash-device]');if(r)openDevice(r.dataset.dashDevice);});
 
 function renderDevices(){const list=$('deviceList');$('deviceCount').textContent=state.devices.length;list.innerHTML=state.devices.map(d=>`<div class="device-list-item ${state.selectedDevice===d.slaveId?'active':''}" data-device="${d.slaveId}" tabindex="0"><div><strong>Slave ${d.slaveId}</strong><small>${d.registerCount} regs · ${d.pollGroupCount} polls · ${ms(d.expectedPollIntervalMs)}</small></div>${statusChip(d)}</div>`).join('')||'<div class="empty-state">No slave devices detected.</div>';if(state.selectedDevice==null&&state.devices.length)openDevice(state.devices[0].slaveId,false);}
 async function openDevice(id,navigate=true){state.selectedDevice=Number(id);if(navigate)go('devices');renderDevices();$('deviceDetail').innerHTML='<article class="panel empty-state">Loading device analysis…</article>';try{state.deviceDetail=await api(`/api/devices/${id}`);renderDeviceDetail();}catch(err){$('deviceDetail').innerHTML=`<article class="panel empty-state">${esc(err.message)}</article>`;}}
