@@ -88,7 +88,8 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
     try{r.json(previewTargets({targets:q.body?.targets??q.body?.target,exclude:q.body?.exclude,maxTargets:q.body?.maxTargets??262144}));}
     catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null,theoretical:e.theoretical,publicCount:e.publicCount});}
   });
-  app.get('/api/network/scan/status',(_q,r)=>r.json(manager.status()));
+  app.get('/api/network/scan/status',(q,r)=>r.json(manager.status({includeHosts:String(q.query.includeHosts||'').toLowerCase()==='true'})));
+  app.get('/api/network/scan/hosts',(q,r)=>r.json(manager.hosts({offset:q.query.offset,limit:q.query.limit})));
   app.post('/api/network/scan/start',(q,r)=>{
     if(demo&&q.body?.allowDemoNetworkScan!==true)return r.status(409).json({error:'Network scanning is disabled in demo mode unless explicitly enabled.',code:'NETWORK_SCAN_DEMO_DISABLED'});
     try{r.status(202).json(manager.start(q.body||{}));}catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null,publicCount:e.publicCount||null});}
