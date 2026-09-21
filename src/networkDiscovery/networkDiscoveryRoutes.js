@@ -42,6 +42,19 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
     const live=liveHost(id);return live?store.mergeHost(project(),live,'live-network-scan'):null;
   };
 
+  const correlationsFor=host=>{
+    if(!host||!workspaces?.getProject)return{channels:[],devices:[],discoveryRuns:[]};
+    const p=workspaces.getProject(project());if(!p)return{channels:[],devices:[],discoveryRuns:[]};
+    const target=normalizeHost(host.ip||host.hostname),channels=Object.values(p.channels||{}).filter(ch=>{
+      if(String(ch.transport||'').toUpperCase()!=='TCP')return false;
+      const candidate=normalizeHost(ch.tcp?.host||String(ch.endpoint||'').replace(/^\[([^\]]+)\](?::\d+)?$/,'$1').replace(/:\d+$/,''));
+      return candidate&&candidate===target;
+    }).map(ch=>({channelId:ch.channelId,name:ch.name||ch.channelId,endpoint:ch.endpoint||null,mode:ch.mode||null}));
+    const ids=new Set(channels.map(x=>x.channelId)),devices=Object.values(p.devices||{}).filter(d=>ids.has(d.channelId||String(d.deviceKey||'').split('|')[0])).map(d=>({deviceKey:d.deviceKey,channelId:d.channelId||String(d.deviceKey||'').split('|')[0],unitId:d.unitId??Number(String(d.deviceKey||'').split('|').at(-1)),manufacturer:d.manufacturer||null,model:d.model||null}));
+    const discoveryRuns=(p.discoveryRuns||[]).filter(run=>String(run.transport||'').toUpperCase()==='TCP'&&normalizeHost(run.target?.host)===target).map(run=>({id:run.id,completedAt:run.completedAt||null,summary:run.summary||{},target:run.target||null}));
+    return{channels,devices,discoveryRuns};
+  };
+
   app.get('/api/network/interfaces',(_q,r)=>r.json({interfaces:listNetworkInterfaces()}));
   app.get('/api/network/capabilities',async(_q,r)=>{
     const nmap=await detectNmap().catch(()=>({available:false,command:null,version:null}));
@@ -79,7 +92,7 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
     try{r.json(store.listHosts(project(),{state:q.query.state||null,search:q.query.search||null,modbus:q.query.modbus==null?null:String(q.query.modbus)==='true',classification:q.query.classification||null,limit:q.query.limit}));}
     catch(e){r.status(400).json({error:e.message,code:e.code||null});}
   });
-  app.get('/api/network/hosts/:id',(q,r)=>{const host=findHost(q.params.id);if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});r.json(host);});
+  app.get('/api/network/hosts/:id',(q,r)=>{const host=findHost(q.params.id);if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});r.json({...host,correlations:correlationsFor(host)});});
   app.patch('/api/network/hosts/:id',(q,r)=>{
     try{const host=store.updateHost(project(),q.params.id,{classification:q.body?.classification,notes:q.body?.notes,tags:q.body?.tags});if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});broadcast('network-host-updated',{host});r.json(host);}
     catch(e){r.status(400).json({error:e.message,code:e.code||null});}
@@ -98,7 +111,7 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
     const host=persistedHost(q.params.id);if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});
     const unitId=Number(q.body?.unitId??host.modbus?.unitId??host.modbusUnits?.find(x=>x.responded)?.unitId??1),port=Number(q.body?.port||host.modbus?.port||502);
     const prepared={type:'tcp',host:host.ip,port,unitId:Number.isInteger(unitId)&&unitId>=0&&unitId<=255?unitId:1,connect:false,transmit:false,source:'network-discovery'};
-    broadcast('network-master-handoff',{hostId:host.id,prepared});r.json({prepared,message:'Master connection prepared only; no network request has been transmitted.'});
+    broadcast('network-master-handoff',{hostId:host.id,prepared});r.json({prepared,correlations:correlationsFor(host),message:'Master connection prepared only; no network request has been transmitted.'});
   });
   app.post('/api/network/hosts/:id/nmap',async(q,r)=>{
     try{
