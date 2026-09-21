@@ -12,7 +12,24 @@ Version 8.0.0 consolidates the product into one Modbus-only engineering applicat
 - **Master / Client** — active RTU/ASCII/TCP polling, diagnostics and guarded writes.
 - **Slave / Server Simulator** — multi-Unit simulation with standard and advanced Modbus transports.
 
-Supporting engineering workspaces include Traffic and Protocol Diagnostics, Register/Data Lab, Discovery, Raw Frame/Conformance Lab, Device Clone, Test Sequences, Logger/Trend, Replay/Compare, Transport Lab, and Modbus TCP Security/TLS diagnostics.
+Supporting engineering workspaces include Traffic and Protocol Diagnostics, Register/Data Lab, **Industrial Network Discovery & Device Intelligence**, Modbus Discovery, Raw Frame/Conformance Lab, Device Clone, Test Sequences, Logger/Trend, Replay/Compare, Transport Lab, and Modbus TCP Security/TLS diagnostics.
+
+## Industrial Network Discovery
+
+- Large IPv4 host/range/CIDR scans, including compact ranges such as `192.168.1-254.1-254`, plus bounded IPv6 host/CIDR support.
+- Interface/subnet suggestions, exclusions, target previews and public-target confirmation.
+- Multi-signal host discovery using neighbor evidence, TCP probes, reverse DNS and bounded ICMP fallback.
+- Persistent device inventory with IP, MAC/OUI vendor, hostname, services, inferred type, provenance and confidence.
+- Duplicate-IP / multi-IP-MAC findings and DHCP-context diagnostics.
+- Industrial service-candidate detection with explicit distinction between candidates and verified protocols.
+- Semantic Modbus TCP verification; an open port or echoed request cannot falsely prove Modbus.
+- Unit-ID and FC43 continuation through the existing Modbus Discovery engine.
+- Optional safe Nmap service/OS enrichment and explicit read-only SNMP/LLDP enrichment.
+- SSDP, mDNS and WSD context discovery.
+- Evidence-driven topology, subnet utilization, reference baselines, scan comparisons and per-device history.
+- Selected-device monitoring plus Ping/Traceroute diagnostics.
+- Safe **Open in Master** handoff prepares host/port/unit only and does not auto-connect or transmit.
+- Network inventory is included in unified CSV/JSON/XLSX/PDF/ZIP evidence and desktop data migration.
 
 ## Safety model
 
