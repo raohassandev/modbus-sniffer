@@ -172,6 +172,10 @@ See `docs/MODBUS_FUNCTION_MATRIX.md`.
 - [x] persistent scan history, reference baselines, Added/Missing/Changed/Unchanged comparison and per-device history
 - [x] evidence-driven topology, subnet utilization and physical-vs-logical relationship provenance
 - [x] bounded selected-device monitoring plus Ping/Traceroute diagnostics
+- [x] rolling monitor packet-loss / RTT / jitter quality metrics
+- [x] native per-device Deep Scan works without requiring Nmap
+- [x] paged live scan-result delivery keeps large-range UI polling bounded
+- [x] IPv6 hosts participate in /64 evidence topology and SNMP selects UDP4/UDP6 correctly
 - [x] Network Scan / Devices / Topology / Modbus Discovery / History UI integrated into the existing Discovery workspace
 - [x] configurable result columns, filtering/search, device detail tabs, findings, topology filters and pan/zoom
 - [x] network inventory included in CSV/JSON/XLSX/PDF/ZIP evidence workflows
