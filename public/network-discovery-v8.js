@@ -2,7 +2,7 @@
 
 (()=>{
   const q=id=>document.getElementById(id);
-  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]||c));
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
   const api=async(url,opt={})=>{const r=await fetch(url,{cache:'no-store',...opt});const ct=r.headers.get('content-type')||'',body=ct.includes('json')?await r.json():await r.text();if(!r.ok){const e=new Error(body?.error||body||`HTTP ${r.status}`);e.code=body?.code||null;e.payload=body;throw e;}return body;};
   const notify=(m,bad=false)=>{try{toast(m,bad);}catch{console[bad?'error':'log'](m);}};
   const page=q('page-discovery');if(!page||q('networkDiscoveryRoot'))return;
@@ -134,7 +134,7 @@
   }
   q('ndInterface').addEventListener('change',()=>{if(q('ndInterface').value)q('ndTarget').value=q('ndInterface').value;});
   async function loadCapabilities(){
-    capabilities=await api('/api/network/capabilities');const chips=[capabilities.ipv4?'IPv4':'',capabilities.ipv6Model?'IPv6 model':'',capabilities.snmp?'SNMP/LLDP':'',capabilities.multicastDiscovery?'SSDP/mDNS/WSD':'',capabilities.nmap?.available?`Nmap ${capabilities.nmap.version||''}`:'Nmap optional'].filter(Boolean);q('ndCapabilities').innerHTML=chips.map(x=>`<span>${esc(x)}</span>`).join('');
+    capabilities=await api('/api/network/capabilities');const chips=[capabilities.ipv4?'IPv4':'',capabilities.ipv6?`IPv6 ${capabilities.ipv6Model||''}`:'',capabilities.snmp?'SNMP/LLDP':'',capabilities.multicastDiscovery?'SSDP/mDNS/WSD':'',capabilities.nmap?.available?`Nmap ${capabilities.nmap.version||''}`:'Nmap optional'].filter(Boolean);q('ndCapabilities').innerHTML=chips.map(x=>`<span>${esc(x)}</span>`).join('');
   }
   async function preview(){
     try{const out=await api('/api/network/targets/preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({targets:q('ndTarget').value,exclude:q('ndExclude').value,maxTargets:262144})});q('ndPreviewBox').className='nd-preview'+(out.hasPublicTargets?' warning':'');q('ndPreviewBox').innerHTML=`<strong>${Number(out.count).toLocaleString()} unique target(s)</strong> · ${Number(out.privateCount).toLocaleString()} local/private · ${Number(out.publicCount).toLocaleString()} public · samples: <span class="mono">${out.samples.map(esc).join(', ')}</span>`;return out;}catch(e){q('ndPreviewBox').className='nd-preview error';q('ndPreviewBox').textContent=e.message;throw e;}
@@ -160,7 +160,6 @@
   }
   q('ndInventorySearch').addEventListener('input',()=>loadInventory().catch(()=>{}));q('ndInventoryClass').addEventListener('change',()=>loadInventory().catch(()=>{}));q('ndRefreshInventory').addEventListener('click',()=>loadInventory().catch(e=>notify(e.message,true)));q('ndInventoryRows').addEventListener('click',e=>{const tr=e.target.closest('[data-nd-host]');if(tr)openDevice(tr.dataset.ndHost);});
 
-  function hostById(id){return inventory.find(x=>x.id===id)||scanHosts.find(x=>x.id===id)||null;}
   async function openDevice(id){
     try{currentDevice=await api('/api/network/hosts/'+encodeURIComponent(id));renderDrawer(currentDevice);q('ndDrawer').classList.add('open');q('ndDrawerBackdrop').classList.add('open');q('ndDrawer').setAttribute('aria-hidden','false');}catch(e){notify(e.message,true);}
   }
