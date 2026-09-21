@@ -7,6 +7,11 @@ const {verifyModbusEndpoint}=require('./modbusVerifier');
 
 function bounded(v,min,max,fallback){const n=Number(v);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):fallback;}
 function uniqPorts(values=[]){return[...new Set(values.map(Number).filter(x=>Number.isInteger(x)&&x>=1&&x<=65535))].slice(0,32);}
+function computeMonitorMetrics(samples=[]){
+  const rows=(samples||[]).slice(-120),pingSamples=rows.filter(x=>x.pingResponded&&Number.isFinite(x.pingRttMs)),sent=rows.length,received=rows.filter(x=>x.pingResponded).length,diffs=[];
+  for(let i=1;i<pingSamples.length;i++)diffs.push(Math.abs(pingSamples[i].pingRttMs-pingSamples[i-1].pingRttMs));
+  return{sampleCount:sent,icmpSent:sent,icmpReceived:received,packetLossPct:sent?Math.round((1-received/sent)*10000)/100:0,avgPingRttMs:pingSamples.length?Math.round(pingSamples.reduce((n,x)=>n+x.pingRttMs,0)/pingSamples.length*100)/100:null,jitterMs:diffs.length?Math.round(diffs.reduce((a,b)=>a+b,0)/diffs.length*100)/100:null};
+}
 class NetworkMonitorManager extends EventEmitter{
   constructor({store=null,getProjectId=()=>null,verifyModbus=verifyModbusEndpoint}={}){
     super();this.store=store;this.getProjectId=getProjectId;this.verifyModbus=verifyModbus;this.entries=new Map();this.closed=false;
@@ -35,9 +40,7 @@ class NetworkMonitorManager extends EventEmitter{
     const online=Boolean(serviceRows.some(x=>x.open)||ping.responded||modbus?.verified),prev=entry.state||'unknown',state=online?'online':'offline',rtts=[ping.rttMs,...serviceRows.map(x=>x.rttMs)].filter(Number.isFinite);
     const result={checkedAt:new Date().toISOString(),state,online,ping,services:serviceRows,modbus,avgRttMs:rtts.length?Math.round(rtts.reduce((a,b)=>a+b,0)/rtts.length*100)/100:null,durationMs:Date.now()-started};
     entry.samples.push({at:result.checkedAt,online,pingResponded:Boolean(ping.responded),pingRttMs:Number.isFinite(ping.rttMs)?ping.rttMs:null});if(entry.samples.length>120)entry.samples.splice(0,entry.samples.length-120);
-    const pingSamples=entry.samples.filter(x=>x.pingResponded&&Number.isFinite(x.pingRttMs)),sent=entry.samples.length,received=entry.samples.filter(x=>x.pingResponded).length;
-    const diffs=[];for(let i=1;i<pingSamples.length;i++)diffs.push(Math.abs(pingSamples[i].pingRttMs-pingSamples[i-1].pingRttMs));
-    entry.metrics={sampleCount:sent,icmpSent:sent,icmpReceived:received,packetLossPct:sent?Math.round((1-received/sent)*10000)/100:0,avgPingRttMs:pingSamples.length?Math.round(pingSamples.reduce((n,x)=>n+x.pingRttMs,0)/pingSamples.length*100)/100:null,jitterMs:diffs.length?Math.round(diffs.reduce((a,b)=>a+b,0)/diffs.length*100)/100:null};
+    entry.metrics=computeMonitorMetrics(entry.samples);
     result.metrics={...entry.metrics};
     entry.lastCheck=result.checkedAt;entry.lastResult=result;entry.state=state;entry.failures=online?0:(entry.failures||0)+1;
     const projectId=entry.projectId||'default';
@@ -49,4 +52,4 @@ class NetworkMonitorManager extends EventEmitter{
   }
   async close(){this.closed=true;for(const e of this.entries.values()){e.running=false;clearTimeout(e.timer);}this.entries.clear();}
 }
-module.exports={NetworkMonitorManager,uniqPorts};
+module.exports={NetworkMonitorManager,uniqPorts,computeMonitorMetrics};
