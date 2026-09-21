@@ -59,7 +59,7 @@ jobs:
                   if ($root.StatusCode -ne 200 -or $root.Content -notmatch "Modbus Engineering Tool" -or $root.Content -notmatch "platform-v6.js") {
                     throw "Packaged unified UI root is missing expected product/assets."
                   }
-                  foreach ($asset in @("platform-v6.js","master-v7.js","slave-v7.js","help-v7.js")) {
+                  foreach ($asset in @("platform-v6.js","master-v7.js","slave-v7.js","network-discovery-v8.js","network-discovery-v8.css","help-v7.js")) {
                     $assetResponse = Invoke-WebRequest -Uri "http://127.0.0.1:18787/$asset" -UseBasicParsing -TimeoutSec 2
                     if ($assetResponse.StatusCode -ne 200 -or [string]::IsNullOrWhiteSpace($assetResponse.Content)) {
                       throw "Packaged UI asset failed smoke check: $asset"
