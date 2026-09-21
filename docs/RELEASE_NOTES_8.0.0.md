@@ -62,11 +62,11 @@ Supporting engineering workspaces include Traffic and Protocol Diagnostics, Regi
 - Desktop startup validates a per-process readiness token so a port race cannot attach the UI to an unrelated local backend.
 - Raw-Lab conformance suites with semantic response validation.
 - Capture, CSV/JSON/XLSX/PDF/ZIP evidence workflows.
-- Deterministic source preflight and Mac release gate.
-- Manual-only Windows NSIS packaging workflow with packaged-app identity smoke, provenance and SHA-256 checksums.
-- Packaged Windows smoke also verifies the stable UI root and critical Master/Slave/Help assets.
+- Deterministic source preflight and Mac release gate; Windows preflight invokes npm through the current Node/npm entrypoint to avoid `spawnSync npm.cmd EINVAL` failures.
+- Manual-only Windows NSIS packaging workflow with packaged-app identity smoke, provenance and SHA-256 checksums. Packaging pre-cleans stale packaged processes and locked `desktop/dist` output with bounded retries before Electron Builder runs.
+- Packaged Windows smoke also verifies the stable UI root and critical Master/Slave/Network Discovery/Help assets.
 - Fail-closed source audit protects product identity, manual-only workflows and core security invariants.
-- Stable Playwright coverage checks asset loading, duplicate DOM IDs and document-level overflow.
+- Stable Playwright coverage checks asset loading, duplicate DOM IDs and document-level overflow. Unified E2E runs use an isolated per-process port/data directory and a bounded 60-second Windows startup gate so stale local servers cannot mask or block the exact runtime.
 - Unified browser acceptance runs before compatibility-shell browser coverage so product regressions fail fast.
 - Legacy v8 planning/status documents are retained only as historical records and are explicitly marked superseded by the unified product documentation.
 
