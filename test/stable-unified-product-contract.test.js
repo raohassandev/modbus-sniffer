@@ -48,11 +48,36 @@ test('stable shell loads the final Modbus-only workspaces and grouped navigation
   for(const asset of [
     'master-v7.js','slave-v7.js','traffic-evidence-v7.js','protocol-diagnostics-v7.js',
     'data-lab-v7.js','logger-trend-v7.js','compare-v7.js','transport-lab-v7.js',
-    'raw-lab-v7.js','discovery-engineering-v7.js','slave-lab-v7.js','help-v7.js','navigation-v7.js'
+    'raw-lab-v7.js','discovery-engineering-v7.js','network-discovery-v8.js','slave-lab-v7.js','help-v7.js','navigation-v7.js'
   ])assert.equal(loader.includes(asset),true,asset+' must be loaded');
   const nav=read('public/navigation-v7.js');
   new vm.Script(nav,{filename:'navigation-v7.js'});
   for(const heading of ['CORE','ANALYZE','LAB','EVIDENCE','SYSTEM'])assert.match(nav,new RegExp(heading));
+});
+
+
+test('industrial network discovery is integrated as an enabling Modbus workflow',()=>{
+  const ui=read('public/network-discovery-v8.js');
+  const routes=read('src/networkDiscovery/networkDiscoveryRoutes.js');
+  const parser=read('src/networkDiscovery/targetParser.js');
+  const server=read('src/platformWebServerV61.js');
+  new vm.Script(ui,{filename:'network-discovery-v8.js'});
+  new vm.Script(routes,{filename:'networkDiscoveryRoutes.js'});
+  new vm.Script(parser,{filename:'targetParser.js'});
+  assert.match(ui,/Network Scan/);
+  assert.match(ui,/Devices/);
+  assert.match(ui,/Topology/);
+  assert.match(ui,/Modbus Discovery/);
+  assert.match(ui,/History/);
+  assert.match(ui,/VERIFIED/);
+  assert.match(ui,/CANDIDATE/);
+  assert.match(routes,/\/api\/network\/hosts\/:id\/open-master/);
+  assert.match(routes,/transmit:false/);
+  assert.match(routes,/connect:false/);
+  assert.match(routes,/SNMP_COMMUNITY_REQUIRED/);
+  assert.match(parser,/TARGET_HARD_LIMIT/);
+  assert.match(parser,/cidr6/);
+  assert.match(server,/installNetworkDiscoveryRoutes/);
 });
 
 test('Master owns a single Traffic/counter control set and Logger shortcut tolerates load ordering',()=>{
@@ -75,6 +100,7 @@ test('stable server cleanup releases active resources and export manifest follow
   assert.match(server,/masterRuntime\.disconnect\(\)/);
   assert.match(server,/slaveRuntime\.shutdown\(\)/);
   assert.match(server,/activeDiscovery\.close\(\)/);
+  assert.match(server,/networkDiscovery\.close\(\)/);
   assert.match(server,/tcpProxy\.stop\(\)/);
   assert.match(server,/if\(failed\)throw failed\.reason/);
   assert.match(server,/ws\.terminate\(\)/);
