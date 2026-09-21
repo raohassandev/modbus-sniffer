@@ -128,6 +128,10 @@ check(desktopStorage.includes("'master-monitor-sessions.json'"),'desktop migrati
 check(desktopStorage.includes("'master-monitor-sessions.json.bak'"),'desktop migration must preserve Monitor Session recovery backups');
 check(desktopStorage.includes('hasPersistedData'),'desktop migration must refuse to mix legacy data into any populated user-data store');
 check(loggerTrend.includes('eventsLoaded'),'Logger/Trend must hydrate protocol-event evidence');
+check(masterRuntime.includes('transportRecoveries: 0')&&masterRuntime.includes('recoveryRetriesUsed < 1')&&masterRuntime.includes('await this.engine.open()'),'Master TCP reads must recover one dropped transport before surfacing failure');
+check(masterRoutes.includes("code === 'TIMEOUT') return 408")&&masterRoutes.includes("code === 'MODBUS_EXCEPTION') return 422"),'Master API must not mislabel Modbus timeout/exception outcomes as gateway 504/502');
+check(masterRoutes.includes('function errorGuidance')&&masterRoutes.includes('retryable: guidance.retryable')&&masterRoutes.includes('hint: guidance.hint'),'Master API must return actionable read-failure guidance');
+check(master.includes('function describeMasterError')&&master.includes('setConnected(Boolean(status.connected), status)')&&master.includes("type === 'tcp' ? '255' : '247'"),'Master UI must explain read errors, reconcile dropped sessions, and expose the TCP Unit-ID range');
 check(discoveryEngineering.includes("framing==='tcp'?255:247"),'Discovery Unit-ID limits must be framing-aware');
 check(server.includes('installNetworkDiscoveryRoutes'),'unified server must install industrial network discovery routes');
 check(server.includes('networkSnapshot: networkDiscovery.store.exportProject'),'project exports must include network discovery evidence');
