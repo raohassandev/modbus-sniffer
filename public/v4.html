@@ -27,12 +27,16 @@
 
   <div class="workspace">
     <header class="topbar">
-      <div><h1 id="pageTitle">Dashboard</h1><p id="pageSubtitle">Live RS485 / Modbus RTU visibility</p></div>
+      <div><h1 id="pageTitle">Dashboard</h1><p id="pageSubtitle">Live Modbus RTU / TCP engineering visibility</p></div>
       <div class="top-actions"><span class="version-badge">UI v4.0</span><div class="connection-pill" id="connectionPill"><i></i><span id="connectionText">Idle</span></div><div class="serial-summary" id="serialSummary">No port selected</div></div>
     </header>
 
     <main>
       <section class="page active" id="page-dashboard">
+        <article class="source-banner" id="sourceBanner">
+          <div><span class="source-banner-kicker" id="sourceBannerKicker">CAPTURE SOURCE</span><strong id="sourceBannerTitle">Checking active Modbus source…</strong><p id="sourceBannerBody">The analyzer keeps RTU and TCP evidence separate.</p></div>
+          <div class="source-banner-actions"><button class="secondary" data-go="tcp">Open TCP Analyzer</button><button class="secondary" data-go="settings">Serial Settings</button></div>
+        </article>
         <div class="kpi-grid six">
           <article class="kpi"><span>Frames</span><strong id="kpiFrames">0</strong><small id="kpiFps">0 fps</small></article>
           <article class="kpi"><span>Devices</span><strong id="kpiDevices">0</strong><small id="kpiPolls">0 poll groups</small></article>
@@ -42,19 +46,19 @@
           <article class="kpi"><span>Exceptions</span><strong id="kpiExceptions">0</strong><small id="kpiNoise">0 noise bytes</small></article>
         </div>
         <div class="grid-2 wide-left">
-          <article class="panel"><div class="panel-head"><div><h2>Bus activity</h2><p>Valid frames per second · last 60 seconds</p></div><span class="live-dot">LIVE</span></div><canvas id="trafficChart" height="220"></canvas></article>
-          <article class="panel"><div class="panel-head"><div><h2>Bus health</h2><p>Timeouts, exceptions, line quality and matching</p></div></div><div class="health-layout"><div class="health-ring" id="dashHealthRing"><span id="dashHealthScore">100</span><small>/100</small></div><div class="health-list"><div><span>Timeout rate</span><strong id="dashTimeoutRate">0%</strong></div><div><span>Exception rate</span><strong id="dashExceptionRate">0%</strong></div><div><span>Unmatched responses</span><strong id="dashUnmatchedRate">0%</strong></div><div><span>Noise ratio</span><strong id="dashNoiseRate">0%</strong></div></div></div></article>
+          <article class="panel"><div class="panel-head"><div><h2>Modbus activity</h2><p>Valid RTU/TCP frames per second · last 60 seconds</p></div><span class="live-dot">LIVE</span></div><canvas id="trafficChart" height="220"></canvas></article>
+          <article class="panel"><div class="panel-head"><div><h2>Capture health</h2><p>Transport-aware matching, exceptions, timing and RTU line quality</p></div></div><div class="health-layout"><div class="health-ring" id="dashHealthRing"><span id="dashHealthScore">100</span><small>/100</small></div><div class="health-list"><div><span>Timeout rate</span><strong id="dashTimeoutRate">0%</strong></div><div><span>Exception rate</span><strong id="dashExceptionRate">0%</strong></div><div><span>Unmatched responses</span><strong id="dashUnmatchedRate">0%</strong></div><div><span>Noise ratio</span><strong id="dashNoiseRate">0%</strong></div></div></div></article>
         </div>
         <div class="grid-2">
-          <article class="panel"><div class="panel-head"><div><h2>Automatically formed devices</h2><p>Every observed Slave ID becomes a device automatically</p></div><button class="ghost" data-go="devices">Open Devices</button></div><div class="table-wrap compact"><table><thead><tr><th>Slave</th><th>Status</th><th>Regs</th><th>Poll groups</th><th>Poll interval</th><th>Timeouts</th><th>P95 RTT</th></tr></thead><tbody id="dashboardDevices"></tbody></table></div></article>
-          <article class="panel"><div class="panel-head"><div><h2>Recent transactions</h2><p>Requests, replies and missing responses</p></div><button class="ghost" data-go="traffic">Open Traffic</button></div><div class="table-wrap compact"><table><thead><tr><th>Time</th><th>Dir</th><th>Slave</th><th>FC</th><th>Details</th><th>RTT</th></tr></thead><tbody id="dashboardTraffic"></tbody></table></div></article>
+          <article class="panel"><div class="panel-head"><div><h2>Confirmed devices</h2><p>Devices require a matched Modbus request ↔ response pair; noise-only IDs stay unconfirmed</p></div><button class="ghost" data-go="devices">Open Devices</button></div><div class="table-wrap compact"><table><thead><tr><th>Device</th><th>Status</th><th>Regs</th><th>Poll groups</th><th>Poll interval</th><th>Timeouts</th><th>P95 RTT</th></tr></thead><tbody id="dashboardDevices"></tbody></table></div></article>
+          <article class="panel"><div class="panel-head"><div><h2>Recent transactions</h2><p>Requests, replies and missing responses</p></div><button class="ghost" data-go="traffic">Open Traffic</button></div><div class="table-wrap compact"><table><thead><tr><th>Time</th><th>Source</th><th>Dir</th><th>Unit</th><th>FC</th><th>Details</th><th>RTT</th></tr></thead><tbody id="dashboardTraffic"></tbody></table></div></article>
         </div>
       </section>
 
       <section class="page" id="page-devices">
-        <article class="panel toolbar-panel"><div><h2>Automatic Slave Device Model</h2><p class="muted">No configuration required. Devices are created from observed request/response Slave IDs.</p></div><div class="toolbar-actions"><a class="button secondary" href="/api/export/devices.csv">Export Devices</a><a class="button secondary" href="/api/export/polls.csv">Export Polling</a></div></article>
+        <article class="panel toolbar-panel"><div><h2>Automatic Modbus Device Model</h2><p class="muted">RTU Slaves and TCP Unit IDs remain separate by transport/channel. Confirmed devices require matched request/response evidence.</p></div><div class="toolbar-actions"><a class="button secondary" href="/api/export/devices.csv">Export Devices</a><a class="button secondary" href="/api/export/polls.csv">Export Polling</a></div></article>
         <div class="device-workspace">
-          <aside class="panel device-list-panel"><div class="panel-head"><div><h2>Detected devices</h2><p><span id="deviceCount">0</span> slave IDs</p></div></div><div id="deviceList" class="device-list"></div></aside>
+          <aside class="panel device-list-panel"><div class="panel-head"><div><h2>Detected devices</h2><p><span id="deviceCount">0</span> device observations</p></div></div><div id="deviceList" class="device-list"></div></aside>
           <div class="device-detail" id="deviceDetail"><article class="panel empty-state">Select a detected slave to inspect its polling groups, registers, values, timing and errors.</article></div>
         </div>
       </section>
