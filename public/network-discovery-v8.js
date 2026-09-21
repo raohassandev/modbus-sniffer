@@ -57,7 +57,7 @@
       </article>
 
       <article class="panel nd-results-card">
-        <div class="panel-head nd-results-head"><div><h3>Live Results</h3><p>Observed and verified facts are kept separate from inferred identity.</p></div><div class="nd-inline"><input id="ndScanSearch" placeholder="IP / MAC / host / vendor / service"><select id="ndScanFilter"><option value="">All</option><option value="modbus">Modbus</option><option value="industrial">Industrial</option><option value="unknown">Unknown</option></select><a class="button secondary" href="/api/network/hosts.csv">Export CSV</a></div></div>
+        <div class="panel-head nd-results-head"><div><h3>Live Results</h3><p>Observed and verified facts are kept separate from inferred identity.</p></div><div class="nd-inline"><input id="ndScanSearch" placeholder="IP / MAC / host / vendor / service"><select id="ndScanFilter"><option value="">All</option><option value="modbus">Modbus</option><option value="industrial">Industrial</option><option value="unknown">Unknown</option></select><details class="nd-column-menu"><summary>Columns</summary><div><label><input type="checkbox" data-nd-column="1" checked> State</label><label><input type="checkbox" data-nd-column="2" checked> IP</label><label><input type="checkbox" data-nd-column="3" checked> Name</label><label><input type="checkbox" data-nd-column="4" checked> MAC/Vendor</label><label><input type="checkbox" data-nd-column="5" checked> Type</label><label><input type="checkbox" data-nd-column="6" checked> Services</label><label><input type="checkbox" data-nd-column="7" checked> Modbus</label><label><input type="checkbox" data-nd-column="8" checked> RTT</label><label><input type="checkbox" data-nd-column="9" checked> Last Seen</label></div></details><a class="button secondary" href="/api/network/hosts.csv">Export CSV</a></div></div>
         <div class="table-wrap nd-table-wrap"><table class="nd-table"><thead><tr><th>State</th><th>IP</th><th>Name</th><th>MAC / Vendor</th><th>Type</th><th>Services</th><th>Modbus</th><th>RTT</th><th>Last Seen</th></tr></thead><tbody id="ndScanRows"><tr><td colspan="9" class="muted">No network scan results yet.</td></tr></tbody></table></div>
       </article>
     </section>
@@ -115,9 +115,15 @@
   }
   function renderScanRows(){
     const query=q('ndScanSearch').value.trim(),filter=q('ndScanFilter').value,rows=scanHosts.filter(h=>hostMatch(h,query,filter));
-    q('ndScanRows').innerHTML=rows.length?rows.map(h=>`<tr data-nd-host="${esc(h.id||'')}"><td><span class="nd-state ${h.state==='online'?'online':'unknown'}">${esc((h.state||'unknown').toUpperCase())}</span></td><td class="mono"><strong>${esc(h.ip)}</strong></td><td>${esc(h.hostname||'—')}</td><td><span class="mono">${esc(h.mac||'—')}</span><small>${esc(h.macVendor||'')}</small></td><td>${esc(h.type||'Unknown')}<small>${h.typeConfidence?esc(h.typeConfidence+'% inferred'):''}</small></td><td>${esc(svcText(h))}</td><td>${h.modbus?.verified?'<span class="nd-badge good">VERIFIED</span>':(h.services||[]).some(s=>s.port===502)?'<span class="nd-badge warn">CANDIDATE</span>':'—'}</td><td>${h.avgRttMs==null?'—':esc(h.avgRttMs+' ms')}</td><td>${esc(fmtTime(h.lastSeen))}</td></tr>`).join(''):'<tr><td colspan="9" class="muted">No matching devices.</td></tr>';
+    q('ndScanRows').innerHTML=rows.length?rows.map(h=>`<tr data-nd-host="${esc(h.id||'')}"><td><span class="nd-state ${h.state==='online'?'online':'unknown'}">${esc((h.state||'unknown').toUpperCase())}</span></td><td class="mono"><strong>${esc(h.ip)}</strong></td><td>${esc(h.hostname||'—')}</td><td><span class="mono">${esc(h.mac||'—')}</span><small>${esc(h.macVendor||'')}</small></td><td>${esc(h.type||'Unknown')}<small>${h.typeConfidence?esc(h.typeConfidence+'% inferred'):''}</small></td><td>${esc(svcText(h))}</td><td>${h.modbus?.verified?'<span class="nd-badge good">VERIFIED</span>':(h.services||[]).some(s=>s.port===502)?'<span class="nd-badge warn">CANDIDATE</span>':'—'}</td><td>${h.avgRttMs==null?'—':esc(h.avgRttMs+' ms')}</td><td>${esc(fmtTime(h.lastSeen))}</td></tr>`).join(''):'<tr><td colspan="9" class="muted">No matching devices.</td></tr>';applyScanColumns();
   }
   q('ndScanSearch').addEventListener('input',renderScanRows);q('ndScanFilter').addEventListener('change',renderScanRows);
+  const columnKey='modbus.network.discovery.columns.v1';
+  function applyScanColumns(){
+    let saved={};try{saved=JSON.parse(localStorage.getItem(columnKey)||'{}')||{};}catch{}
+    root.querySelectorAll('[data-nd-column]').forEach(input=>{const index=Number(input.dataset.ndColumn);if(saved[index]===false)input.checked=false;const show=input.checked;root.querySelectorAll(`.nd-results-card .nd-table tr > *:nth-child(${index})`).forEach(cell=>cell.style.display=show?'':'none');});
+  }
+  root.querySelector('.nd-column-menu').addEventListener('change',e=>{const input=e.target.closest('[data-nd-column]');if(!input)return;let saved={};try{saved=JSON.parse(localStorage.getItem(columnKey)||'{}')||{};}catch{}saved[input.dataset.ndColumn]=input.checked;localStorage.setItem(columnKey,JSON.stringify(saved));applyScanColumns();});
   q('ndScanRows').addEventListener('click',e=>{const tr=e.target.closest('[data-nd-host]');if(tr)openDevice(tr.dataset.ndHost);});
 
   function renderStatus(s){
@@ -272,5 +278,5 @@
 
   q('ndProfile').addEventListener('change',()=>{const p=q('ndProfile').value,defaults={quick:[250,128,4,false,false],standard:[350,72,8,true,true],modbus:[400,64,4,true,false],deep:[500,32,10,true,true],custom:[350,64,8,false,false]}[p];if(defaults){q('ndTimeout').value=defaults[0];q('ndHostConcurrency').value=defaults[1];q('ndServiceConcurrency').value=defaults[2];q('ndVerifyModbus').checked=defaults[3];q('ndEnrichWeb').checked=defaults[4];}});
 
-  Promise.all([loadInterfaces(),loadCapabilities(),refreshStatus()]).then(()=>{ensurePolling();preview().catch(()=>{});}).catch(()=>{});
+  Promise.all([loadInterfaces(),loadCapabilities(),refreshStatus()]).then(()=>{applyScanColumns();ensurePolling();preview().catch(()=>{});}).catch(()=>{});
 })();
