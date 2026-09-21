@@ -43,6 +43,11 @@ test('a valid response promotes an addressed ID to a confirmed device',()=>{
   assert.equal(status.totals.onlineDevices,1);
   assert.equal(device.confirmed,true);
   assert.equal(device.status,'online');
+  assert.equal(device.matchedResponses,1);
+  const regs=state.getRegisters({deviceKey:device.deviceKey,limit:20});
+  assert.equal(regs.length,1);
+  assert.equal(regs[0].address,100);
+  assert.equal(regs[0].lastValue,123);
 });
 
 test('device liveness follows last valid response, not continuing master requests',()=>{
