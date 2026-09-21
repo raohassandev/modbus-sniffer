@@ -18,9 +18,18 @@ function verifyOne({host,port=502,unitId=1,timeoutMs=650,transactionId=0x4D45,si
     signal?.addEventListener?.('abort',onAbort,{once:true});
     parser.on('frame',(frame)=>{
       if(frame.transactionId!==(Number(transactionId)&0xFFFF)||Number(frame.unitId)!==Number(unitId))return;
-      const fc=frame.raw?.[7];
-      if(fc!==3&&fc!==0x83)return;
-      finish({verified:true,connected:true,responseHex:frame.raw.toString('hex').toUpperCase(),functionCode:3,exception:Boolean(fc&0x80),exceptionCode:fc&0x80?frame.raw?.[8]??null:null,protocol:'Modbus TCP'});
+      const pdu=frame.pdu||frame.raw?.subarray?.(7),fc=pdu?.[0];
+      if(fc===3){
+        const byteCount=pdu?.[1];
+        if(byteCount!==2||pdu.length!==4)return;
+        finish({verified:true,connected:true,responseHex:frame.raw.toString('hex').toUpperCase(),functionCode:3,exception:false,exceptionCode:null,protocol:'Modbus TCP'});
+        return;
+      }
+      if(fc===0x83){
+        const exceptionCode=pdu?.[1];
+        if(pdu.length!==2||!Number.isInteger(exceptionCode)||exceptionCode<1||exceptionCode>11)return;
+        finish({verified:true,connected:true,responseHex:frame.raw.toString('hex').toUpperCase(),functionCode:3,exception:true,exceptionCode,protocol:'Modbus TCP'});
+      }
     });
     parser.on('error-frame',()=>{});
     socket.on('data',chunk=>parser.push(chunk,Date.now()));
