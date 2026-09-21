@@ -71,6 +71,19 @@ test('desktop storage migrates durable Master Monitor Sessions and can discover 
   assert.ok(fs.existsSync(path.join(legacy,'master-monitor-sessions.json')));
 });
 
+test('desktop storage migrates network discovery inventory and its recovery backup',()=>{
+  const root=temp('mbdesk-network-discovery-'),legacy=path.join(root,'legacy'),user=path.join(root,'user');
+  fs.mkdirSync(legacy,{recursive:true});
+  fs.writeFileSync(path.join(legacy,'network-discovery.json'),'{"version":1,"projects":{}}');
+  fs.writeFileSync(path.join(legacy,'network-discovery.json.bak'),'{"version":1,"projects":{"backup":{}}}');
+  const out=prepareDesktopDataDir({userDataRoot:user,legacyCandidates:[legacy]});
+  assert.equal(out.migrated,true);
+  assert.equal(out.source,path.resolve(legacy));
+  assert.equal(fs.readFileSync(path.join(user,'data','network-discovery.json'),'utf8'),'{"version":1,"projects":{}}');
+  assert.equal(fs.readFileSync(path.join(user,'data','network-discovery.json.bak'),'utf8'),'{"version":1,"projects":{"backup":{}}}');
+  assert.ok(fs.existsSync(path.join(legacy,'network-discovery.json')));
+});
+
 test('desktop storage migrates Logger/Trend evidence with the rest of legacy user data',()=>{
   const root=temp('mbdesk-logger-'),legacy=path.join(root,'legacy'),user=path.join(root,'user');
   fs.mkdirSync(path.join(legacy,'logger-trend','samples'),{recursive:true});
