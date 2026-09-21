@@ -31,6 +31,13 @@ test('Master read failure reconciles live backend connection state before contin
   assert.match(block,/describeMasterError\(error\)/);
 });
 
+test('Master UI restores the transport mode from live backend status after reload',()=>{
+  const start=ui.indexOf('async function refreshStatus');
+  const end=ui.indexOf('async function connect',start);
+  const section=ui.slice(start,end);
+  assert.match(section,/setType\(status\.config\.type \|\| app\.type\)/);
+});
+
 test('Master TCP UI permits the Modbus TCP Unit-ID range without widening serial range',()=>{
   const start=ui.indexOf('function setType');
   const end=ui.indexOf("masterNav.addEventListener",start);
