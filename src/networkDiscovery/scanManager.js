@@ -7,6 +7,7 @@ const {readNeighborTable,discoverHost}=require('./hostDiscovery');
 const {scanTcpServices,reverseDns,profilePorts,classifyServices,fetchHttpMetadata,fetchTlsCertificate}=require('./serviceScanner');
 const {buildHostFingerprint,duplicateFindings}=require('./deviceFingerprint');
 const {verifyModbusEndpoint}=require('./modbusVerifier');
+const {buildLogicalTopology}=require('./topology');
 
 const PROFILE_DEFAULTS=Object.freeze({
   quick:{hostConcurrency:128,serviceConcurrency:4,timeoutMs:250,useIcmp:true,verifyModbus:false,enrichWeb:false},
@@ -131,6 +132,7 @@ class NetworkScanManager extends EventEmitter{
       if(this.store){
         const merged=this.store.replaceScanHosts(projectId,job.hosts,'network-scan');job.hosts=merged;
         const saved=this.store.saveScan(projectId,{id:job.jobId,startedAt:new Date(job.startedAt).toISOString(),completedAt:new Date(job.completedAt).toISOString(),state:job.state,profile:job.profile,target:job.target,settings:job.settings,summary:summary(job.hosts,job.progress),findings:job.findings,hosts:job.hosts});
+        this.store.setTopology(projectId,buildLogicalTopology(job.hosts));
         job.savedScanId=saved.id;
       }
       this._emit();this.emit('complete',this.status());
