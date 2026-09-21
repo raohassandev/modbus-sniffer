@@ -32,10 +32,17 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   monitor.on('result',x=>broadcast('network-monitor-result',x));
   monitor.on('status',x=>broadcast('network-monitor-status',x));
 
+  const liveHost=id=>manager.status().hosts.find(h=>String(h.id)===String(id))||null;
+  const findHost=id=>store.getHost(project(),id)||liveHost(id);
+  const persistedHost=id=>{
+    const current=store.getHost(project(),id);if(current)return current;
+    const live=liveHost(id);return live?store.mergeHost(project(),live,'live-network-scan'):null;
+  };
+
   app.get('/api/network/interfaces',(_q,r)=>r.json({interfaces:listNetworkInterfaces()}));
   app.get('/api/network/capabilities',async(_q,r)=>{
     const nmap=await detectNmap().catch(()=>({available:false,command:null,version:null}));
-    r.json({nmap,ipv4:true,ipv6Model:'planned',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:true,lldp:true,multicastDiscovery:true,ssdp:true,mdns:true,wsd:true,dhcpContext:true,monitoring:true});
+    r.json({nmap,ipv4:true,ipv6:true,ipv6Model:'bounded-cidr',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:true,lldp:true,multicastDiscovery:true,ssdp:true,mdns:true,wsd:true,dhcpContext:true,monitoring:true});
   });
   app.post('/api/network/aux-discovery',async(q,r)=>{
     try{
@@ -68,14 +75,14 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
     try{r.json(store.listHosts(project(),{state:q.query.state||null,search:q.query.search||null,modbus:q.query.modbus==null?null:String(q.query.modbus)==='true',classification:q.query.classification||null,limit:q.query.limit}));}
     catch(e){r.status(400).json({error:e.message,code:e.code||null});}
   });
-  app.get('/api/network/hosts/:id',(q,r)=>{const host=store.getHost(project(),q.params.id);if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});r.json(host);});
+  app.get('/api/network/hosts/:id',(q,r)=>{const host=findHost(q.params.id);if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});r.json(host);});
   app.patch('/api/network/hosts/:id',(q,r)=>{
     try{const host=store.updateHost(project(),q.params.id,{classification:q.body?.classification,notes:q.body?.notes,tags:q.body?.tags});if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});broadcast('network-host-updated',{host});r.json(host);}
     catch(e){r.status(400).json({error:e.message,code:e.code||null});}
   });
   app.post('/api/network/hosts/:id/modbus',async(q,r)=>{
     try{
-      const host=store.getHost(project(),q.params.id);if(!host){const e=new Error('Network host not found.');e.code='NETWORK_HOST_NOT_FOUND';throw e;}
+      const host=persistedHost(q.params.id);if(!host){const e=new Error('Network host not found.');e.code='NETWORK_HOST_NOT_FOUND';throw e;}
       const port=Number(q.body?.port||host.modbus?.port||host.services?.find(x=>x.port===502)?.port||502),unitStart=Number(q.body?.unitStart??1),unitEnd=Number(q.body?.unitEnd??247);
       const result=await scanTcpDeviceIds({host:host.ip,port,unitStart,unitEnd,timeoutMs:Number(q.body?.timeoutMs||650),interRequestMs:Number(q.body?.interRequestMs||50),readDeviceIdCode:Number(q.body?.readDeviceIdCode||1),maxSegments:Number(q.body?.maxSegments||8)});
       const units=result.results.filter(x=>x.responded).map(x=>({unitId:x.unitId,identificationSupported:x.identificationSupported,identification:x.identification,objects:x.objects,avgRttMs:x.avgRttMs}));
@@ -84,14 +91,14 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
     }catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}
   });
   app.post('/api/network/hosts/:id/open-master',(q,r)=>{
-    const host=store.getHost(project(),q.params.id);if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});
+    const host=persistedHost(q.params.id);if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});
     const unitId=Number(q.body?.unitId??host.modbus?.unitId??host.modbusUnits?.find(x=>x.responded)?.unitId??1),port=Number(q.body?.port||host.modbus?.port||502);
     const prepared={type:'tcp',host:host.ip,port,unitId:Number.isInteger(unitId)&&unitId>=0&&unitId<=255?unitId:1,connect:false,transmit:false,source:'network-discovery'};
     broadcast('network-master-handoff',{hostId:host.id,prepared});r.json({prepared,message:'Master connection prepared only; no network request has been transmitted.'});
   });
   app.post('/api/network/hosts/:id/nmap',async(q,r)=>{
     try{
-      const host=store.getHost(project(),q.params.id);if(!host){const e=new Error('Network host not found.');e.code='NETWORK_HOST_NOT_FOUND';throw e;}
+      const host=persistedHost(q.params.id);if(!host){const e=new Error('Network host not found.');e.code='NETWORK_HOST_NOT_FOUND';throw e;}
       const result=await fingerprintWithNmap({host:host.ip,ports:q.body?.ports||[],allowOsDetect:bodyBool(q.body?.allowOsDetect),timeoutMs:Number(q.body?.timeoutMs||60000)});
       const n=result.host||{},services=(n.ports||[]).filter(x=>x.state==='open').map(x=>({port:x.port,protocol:x.protocol||'tcp',open:true,name:x.product?[`${x.name||''}`,x.product,x.version].filter(Boolean).join(' '):(x.name||SERVICE_CATALOG[x.port]?.name||'Unknown TCP'),category:SERVICE_CATALOG[x.port]?.category||'unknown',source:'external:nmap',confidence:Math.max(60,Math.min(100,Number(x.confidence)||80)),status:'verified',nmap:x}));
       const updated=store.mergeHost(project(),{...host,mac:n.mac||host.mac,macVendor:n.macVendor||host.macVendor||null,hostname:n.hostnames?.[0]||host.hostname,hostnames:[...new Set([...(host.hostnames||[]),...(n.hostnames||[])])],services:services.length?services:host.services,nmap:{version:result.nmap?.version||null,os:n.os||null,osMatches:n.osMatches||[],scannedAt:new Date().toISOString()},lastSeen:new Date().toISOString()},'external:nmap');
@@ -101,7 +108,7 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
 
   app.post('/api/network/hosts/:id/snmp',async(q,r)=>{
     try{
-      const host=store.getHost(project(),q.params.id);if(!host){const e=new Error('Network host not found.');e.code='NETWORK_HOST_NOT_FOUND';throw e;}
+      const host=persistedHost(q.params.id);if(!host){const e=new Error('Network host not found.');e.code='NETWORK_HOST_NOT_FOUND';throw e;}
       const community=String(q.body?.community||'').trim();if(!community){const e=new Error('Enter the SNMP community explicitly for this read-only query.');e.code='SNMP_COMMUNITY_REQUIRED';throw e;}
       const port=Number(q.body?.port||161),timeoutMs=Number(q.body?.timeoutMs||900);
       const [systemResult,neighbors]=await Promise.all([
@@ -120,7 +127,7 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   app.get('/api/network/monitor',(_q,r)=>r.json(monitor.list()));
   app.post('/api/network/hosts/:id/monitor',(q,r)=>{
     try{
-      const host=store.getHost(project(),q.params.id);if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});
+      const host=persistedHost(q.params.id);if(!host)return r.status(404).json({error:'Network host not found.',code:'NETWORK_HOST_NOT_FOUND'});
       const ports=Array.isArray(q.body?.ports)?q.body.ports:(host.services||[]).slice(0,8).map(s=>s.port);
       const modbusPort=Number(q.body?.modbusPort||host.modbus?.port||0)||null;
       r.status(201).json(monitor.start({hostId:host.id,ip:host.ip,ports,modbusPort,intervalMs:Number(q.body?.intervalMs||30000)}));
