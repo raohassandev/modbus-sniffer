@@ -59,6 +59,35 @@ test.describe('unified Modbus engineering product',()=>{
     await expect(page.locator('#page-help')).toContainText('WRITES LOCKED BY DEFAULT');
   });
 
+  test('industrial network discovery previews large ranges and exposes the integrated workflow without transmitting',async({page,request})=>{
+    const capabilitiesResponse=await request.get('/api/network/capabilities');
+    expect(capabilitiesResponse.ok()).toBeTruthy();
+    const capabilities=await capabilitiesResponse.json();
+    expect(capabilities.ipv4).toBe(true);
+    expect(capabilities.modbusVerification).toBe(true);
+
+    const previewResponse=await request.post('/api/network/targets/preview',{data:{targets:'192.168.1-2.1-3'}});
+    expect(previewResponse.ok()).toBeTruthy();
+    const preview=await previewResponse.json();
+    expect(preview.count).toBe(6);
+    expect(preview.hasPublicTargets).toBe(false);
+
+    await page.goto('/');
+    await page.locator('[data-page="discovery"]').click();
+    await expect(page.locator('#networkDiscoveryRoot')).toBeVisible();
+    await expect(page.locator('.nd-tabs')).toContainText('Network Scan');
+    await expect(page.locator('.nd-tabs')).toContainText('Devices');
+    await expect(page.locator('.nd-tabs')).toContainText('Topology');
+    await expect(page.locator('.nd-tabs')).toContainText('Modbus Discovery');
+    await expect(page.locator('.nd-tabs')).toContainText('History');
+    await page.locator('#ndTarget').fill('192.168.1-2.1-3');
+    await page.locator('#ndPreview').click();
+    await expect(page.locator('#ndPreviewBox')).toContainText('6 unique target(s)');
+    const status=await request.get('/api/network/scan/status');
+    expect(status.ok()).toBeTruthy();
+    expect((await status.json()).running).toBe(false);
+  });
+
   test('Master Monitor Sessions merge local fallback and durable workstation state across browser reloads',async({page,request})=>{
     const remotePayload={
       version:1,
