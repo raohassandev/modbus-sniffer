@@ -93,6 +93,26 @@ test('Master owns a single Traffic/counter control set and Logger shortcut toler
   assert.match(logger,/MutationObserver/);
 });
 
+test('stable analyzer never promotes unmatched serial noise into confirmed engineering data',()=>{
+  const html=read('public/v4.html');
+  const app=read('public/app-v4.js');
+  const tcpUi=read('public/platform-v6-main.js');
+  const runtime=read('src/platformRuntimeStateV62.js');
+  new vm.Script(app,{filename:'app-v4.js'});
+  new vm.Script(tcpUi,{filename:'platform-v6-main.js'});
+  new vm.Script(runtime,{filename:'platformRuntimeStateV62.js'});
+  assert.match(html,/id="sourceBanner"/);
+  assert.match(app,/WRONG \/ NOISY SOURCE/);
+  assert.match(app,/d\.confirmed!==false/);
+  assert.match(app,/state\.tcpStatus=m\.payload\.tcp/);
+  assert.match(app,/trafficDeviceKey/);
+  assert.match(runtime,/matchedResponses/);
+  assert.match(runtime,/matchedResponses>0/);
+  assert.match(runtime,/tx\?\.direction==='RSP'&&!tx\?\.request/);
+  assert.match(tcpUi,/direct PLC traffic sent straight to the target device bypasses this application/);
+  assert.match(tcpUi,/tcpFixed502/);
+});
+
 test('stable server cleanup releases active resources and export manifest follows product version',()=>{
   const server=read('src/platformWebServerV61.js');
   assert.match(server,/version:PRODUCT_VERSION/);
