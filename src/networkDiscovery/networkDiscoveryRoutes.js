@@ -59,7 +59,7 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   app.get('/api/network/interfaces',(_q,r)=>r.json({interfaces:listNetworkInterfaces()}));
   app.get('/api/network/capabilities',async(_q,r)=>{
     const nmap=await detectNmap().catch(()=>({available:false,command:null,version:null}));
-    r.json({nmap,oui:oui.status(),ipv4:true,ipv6:true,ipv6Model:'bounded-cidr',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:true,lldp:true,multicastDiscovery:true,ssdp:true,mdns:true,wsd:true,dhcpContext:true,monitoring:true});
+    r.json({scannerId:'local',nmap,oui:oui.status(),ipv4:true,ipv6:true,ipv6Model:'bounded-cidr',icmp:true,tcpConnect:true,neighborTable:true,reverseDns:true,httpMetadata:true,tlsMetadata:true,modbusVerification:true,snmp:true,lldp:true,multicastDiscovery:true,ssdp:true,mdns:true,wsd:true,dhcpContext:true,monitoring:true});
   });
   app.get('/api/network/oui/status',(_q,r)=>r.json(oui.status()));
   app.post('/api/network/aux-discovery',async(q,r)=>{
