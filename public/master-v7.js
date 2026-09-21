@@ -251,7 +251,7 @@
       const status = await request('/api/master/status');
       setConnected(Boolean(status.connected), status);
       if (status.connected && status.config) {
-        app.type = status.config.type || app.type;
+        setType(status.config.type || app.type);
         setNote(`<strong>Master connected.</strong> ${esc(status.config.type.toUpperCase())} active session.`, '');
       }
     } catch { /* Master backend may not be installed on an older local checkout */ }
