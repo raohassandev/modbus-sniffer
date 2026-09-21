@@ -190,7 +190,7 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
   app.post('/api/network/scans/:id/baseline',(q,r)=>{try{r.status(201).json(store.saveBaseline(project(),q.params.id,q.body?.name));}catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}});
   app.get('/api/network/baselines',(_q,r)=>r.json(store.listBaselines(project())));
   app.get('/api/network/compare',(q,r)=>{try{r.json(store.compare(project(),{leftScanId:q.query.left||null,rightScanId:q.query.right||null,baselineId:q.query.baseline||null}));}catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}});
-  app.get('/api/network/events',(q,r)=>r.json(store.listEvents(project(),{limit:q.query.limit})));
+  app.get('/api/network/events',(q,r)=>r.json(store.listEvents(project(),{limit:q.query.limit,hostId:q.query.hostId||null,ip:q.query.ip||null,type:q.query.type||null})));
   app.get('/api/network/topology',(_q,r)=>r.json(store.getTopology(project())));
   app.get('/api/network/utilization',(_q,r)=>r.json({subnets:addressUtilization(store.listHosts(project(),{limit:4096}))}));
   app.put('/api/network/topology',(q,r)=>{try{r.json(store.setTopology(project(),q.body||{}));}catch(e){r.status(400).json({error:e.message,code:e.code||null});}});
