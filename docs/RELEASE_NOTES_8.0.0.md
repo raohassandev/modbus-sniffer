@@ -49,6 +49,9 @@ Supporting engineering workspaces include Traffic and Protocol Diagnostics, Regi
 - Master TCP reads perform one bounded transport reopen/retry after a dropped connection even when user-configured read retries are zero.
 - Master read API distinguishes request errors, Modbus exceptions, timeouts and transport failures with actionable guidance; device exceptions/timeouts are no longer mislabeled as gateway 502/504 failures.
 - Master polling UI rechecks backend connection state after failures, stops stale polling when disconnected, and exposes the full TCP Unit-ID range through 255 while preserving the serial 247 limit.
+- Analyzer confirmation now requires matched request/response evidence; unmatched CRC-valid serial fragments remain observed-only and cannot populate confirmed device/register inventory.
+- Dashboard and Analysis distinguish the active RTU/TCP source, suppress misleading confirmed KPIs from noisy serial input, and retain RTU/TCP device identity by channel/deviceKey.
+- TCP Analyzer guidance now makes the inline-proxy boundary explicit: PLC traffic sent directly to the field device is not visible unless routed through the analyzer. A fixed-port-502 preset supports PLC clients that cannot change the Modbus TCP destination port.
 - Shared active/passive Traffic evidence.
 - Request/response, CRC/LRC/MBAP, exception, timing and transaction-order diagnostics.
 - Bounded Logger/Trend persistence with restart hydration.
