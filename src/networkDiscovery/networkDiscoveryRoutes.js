@@ -13,6 +13,7 @@ const {auxiliaryDiscovery}=require('./multicastDiscovery');
 const {NetworkMonitorManager}=require('./monitorManager');
 const {OuiResolver}=require('./ouiResolver');
 const {normalizeHost}=require('../transportIdentity');
+const {pingDiagnostic,tracerouteHost}=require('./diagnostics');
 
 function bodyBool(v){return v===true;}
 function activeProjectId(workspaces,getActiveProjectId){return typeof getActiveProjectId==='function'?(getActiveProjectId()||'default'):(workspaces?.getActiveProject?.()?.id||'default');}
@@ -119,6 +120,24 @@ function installNetworkDiscoveryRoutes({app,options={},workspaces=null,getActive
     const prepared={type:'tcp',host:host.ip,port,unitId:Number.isInteger(unitId)&&unitId>=0&&unitId<=255?unitId:1,connect:false,transmit:false,source:'network-discovery'};
     broadcast('network-master-handoff',{hostId:host.id,prepared});r.json({prepared,correlations:correlationsFor(host),message:'Master connection prepared only; no network request has been transmitted.'});
   });
+  app.post('/api/network/hosts/:id/ping',async(q,r)=>{
+    try{
+      const host=persistedHost(q.params.id);if(!host){const e=new Error('Network host not found.');e.code='NETWORK_HOST_NOT_FOUND';throw e;}
+      const result=await pingDiagnostic(host.ip,{timeoutMs:Number(q.body?.timeoutMs||1000)});
+      if(result.responded)store.mergeHost(project(),{...host,state:'online',alive:true,lastSeen:result.checkedAt,diagnostics:{...(host.diagnostics||{}),ping:result}},'ping-diagnostic');
+      store.addEvent(project(),{type:'ping-diagnostic',hostId:host.id,ip:host.ip,source:'network-diagnostics',details:result});
+      r.json(result);
+    }catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}
+  });
+  app.post('/api/network/hosts/:id/traceroute',async(q,r)=>{
+    try{
+      const host=persistedHost(q.params.id);if(!host){const e=new Error('Network host not found.');e.code='NETWORK_HOST_NOT_FOUND';throw e;}
+      const result=await tracerouteHost(host.ip,{maxHops:Number(q.body?.maxHops||24),perHopTimeoutMs:Number(q.body?.perHopTimeoutMs||1000),timeoutMs:Number(q.body?.timeoutMs||30000)});
+      store.addEvent(project(),{type:'traceroute-diagnostic',hostId:host.id,ip:host.ip,source:'network-diagnostics',details:{ok:result.ok,hops:result.hops,error:result.error||null}});
+      r.json(result);
+    }catch(e){r.status(statusCode(e)).json({error:e.message,code:e.code||null});}
+  });
+
   app.post('/api/network/hosts/:id/nmap',async(q,r)=>{
     try{
       const host=persistedHost(q.params.id);if(!host){const e=new Error('Network host not found.');e.code='NETWORK_HOST_NOT_FOUND';throw e;}
