@@ -41,12 +41,13 @@ The final source audit also closes these edge cases:
 - [x] product/runtime version surfaces use the release version source of truth
 - [x] fail-closed source release audit locks unified identity, manual-only workflows, critical assets and safety invariants
 - [x] stable browser acceptance checks missing assets, duplicate DOM IDs and document-level overflow
-- [x] packaged Windows smoke verifies health identity plus critical unified UI assets
+- [x] packaged Windows smoke verifies health identity plus critical unified UI assets, including Industrial Network Discovery JS/CSS
 - [x] root test discovery is scoped to the Modbus suite and excludes unrelated nested projects/browser assets
-- [x] fast cross-platform `npm run preflight` gate covers version/lint/syntax/runtime-audit/tests/smoke/acceptance
+- [x] fast cross-platform `npm run preflight` gate covers version/lint/syntax/runtime-audit/tests/smoke/acceptance and uses the active npm entrypoint on Windows instead of direct `npm.cmd` spawning
 - [x] unified stable Playwright coverage includes primary workspaces, durable Monitor Session reload, loopback Slave→Master read and rejected-write no-transmit audit
 - [x] release notes for 8.0.0 are finalized in `docs/RELEASE_NOTES_8.0.0.md`
 - [x] legacy v8 planning/status documents are explicitly marked historical/superseded and point to the unified runtime/canonical status
+- [x] Windows release hardening now isolates Playwright ports/data roots per run and pre-cleans stale/locked Electron `dist` output before NSIS packaging
 - [x] QA/package/security/release source lanes are complete; remaining items are execution/review/field evidence only
 
 ## Product model
