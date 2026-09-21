@@ -6,6 +6,7 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const express=require('express');
+const net=require('node:net');
 const {EventEmitter}=require('node:events');
 const {installNetworkDiscoveryRoutes}=require('../src/networkDiscovery/networkDiscoveryRoutes');
 const {NetworkStore}=require('../src/networkDiscovery/networkStore');
@@ -55,6 +56,21 @@ test('network inventory routes keep Master handoff prepared-only and never auto-
   r=await fetch(`${base}/api/network/hosts/${encodeURIComponent(host.id)}/open-master`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({unitId:7})});
   assert.equal(r.status,200);const body=await r.json();assert.deepEqual(body.prepared,{type:'tcp',host:'192.168.10.20',port:502,unitId:7,connect:false,transmit:false,source:'network-discovery'});
 }));
+
+test('native deep scan works without Nmap and preserves discovered open ports',async()=>{
+  const probe=net.createServer(socket=>socket.end());
+  await new Promise((resolve,reject)=>{probe.once('error',reject);probe.listen(0,'127.0.0.1',resolve);});
+  const port=probe.address().port;
+  try{
+    await withServer({},async({base,store,projectId})=>{
+      const host=store.mergeHost(projectId,{ip:'127.0.0.1',state:'online',alive:true},'test');
+      const r=await fetch(`${base}/api/network/hosts/${encodeURIComponent(host.id)}/deep-scan`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ports:[port],timeoutMs:120,concurrency:24})});
+      assert.equal(r.status,200);const body=await r.json();
+      assert.equal(body.summary.openPorts>=1,true);
+      assert.equal(body.host.services.some(s=>s.port===port),true);
+    });
+  }finally{await new Promise(resolve=>probe.close(resolve));}
+});
 
 test('SNMP enrichment route requires explicit community before any query is attempted',async()=>withServer({},async({base,store,projectId})=>{
   const host=store.mergeHost(projectId,{ip:'192.168.1.50',state:'online',alive:true},'test');
