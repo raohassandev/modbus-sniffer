@@ -2,7 +2,7 @@
 
 const {EventEmitter}=require('node:events');
 const crypto=require('node:crypto');
-const {parseTargets,iterateTargets}=require('./targetParser');
+const {parseTargets,iterateTargets,targetContains}=require('./targetParser');
 const {readNeighborTable,discoverHost}=require('./hostDiscovery');
 const {scanTcpServices,reverseDns,profilePorts,classifyServices,fetchHttpMetadata,fetchTlsCertificate}=require('./serviceScanner');
 const {buildHostFingerprint,duplicateFindings}=require('./deviceFingerprint');
@@ -129,6 +129,15 @@ class NetworkScanManager extends EventEmitter{
     };
     try{
       const count=Math.min(job.settings.hostConcurrency,job.parsed.count||1);await Promise.all(Array.from({length:count},worker));
+      job.progress.stage='neighbor-refresh';
+      const refreshedNeighbors=await this.neighbors().catch(()=>new Map());
+      const knownIps=new Set(job.hosts.map(h=>h.ip));
+      for(const neighbor of refreshedNeighbors.values()){
+        if(job.hosts.length>=job.settings.maxResults){job.progress.truncated=true;break;}
+        if(!neighbor?.ip||knownIps.has(neighbor.ip)||!targetContains(job.parsed,neighbor.ip))continue;
+        const base={id:null,ip:neighbor.ip,alive:true,state:'online',mac:neighbor.mac||null,macObservations:neighbor.macs||[neighbor.mac].filter(Boolean),hostname:null,hostnames:[],services:[],rawServices:[],industrial:false,modbus:null,type:'Unknown',typeConfidence:0,confidence:75,avgRttMs:null,firstSeen:new Date().toISOString(),lastSeen:new Date().toISOString(),discoveryMethods:['neighbor-table'],evidence:[{field:'ip',value:neighbor.ip,source:'neighbor-refresh',confidence:100,status:'observed'},{field:'mac',value:neighbor.mac,source:'neighbor-table',confidence:95,status:'observed'}]};
+        const host={...base,id:hostKey(base)};job.hosts.push(host);knownIps.add(host.ip);this.emit('host',{jobId:job.jobId,host:{...host}});
+      }
       job.findings=duplicateFindings(job.hosts);job.progress.warnings=job.findings.length;job.progress.stage='complete';job.state='completed';job.running=false;job.completedAt=Date.now();
       const projectId=job.projectId;
       if(this.store){
