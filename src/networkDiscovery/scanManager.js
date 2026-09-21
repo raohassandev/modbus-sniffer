@@ -30,7 +30,7 @@ function summary(hosts=[],progress={}){
 function publicStatus(job){
   if(!job)return{state:'idle',running:false,paused:false,jobId:null,profile:null,target:null,startedAt:null,completedAt:null,progress:{total:0,scanned:0,current:null},summary:summary([],{}),hosts:[],findings:[],error:null};
   return{
-    state:job.state,running:job.running,paused:job.paused,jobId:job.jobId,profile:job.profile,target:job.target,
+    state:job.state,running:job.running,paused:job.paused,jobId:job.jobId,scannerId:job.scannerId||'local',profile:job.profile,target:job.target,
     startedAt:job.startedAt,completedAt:job.completedAt||null,progress:{...job.progress},summary:summary(job.hosts,job.progress),
     hosts:job.hosts.map(x=>({...x})),findings:job.findings.map(x=>({...x})),savedScanId:job.savedScanId||null,error:job.error?{...job.error}:null,
     settings:{hostConcurrency:job.settings.hostConcurrency,serviceConcurrency:job.settings.serviceConcurrency,timeoutMs:job.settings.timeoutMs,useIcmp:job.settings.useIcmp,verifyModbus:job.settings.verifyModbus}
@@ -87,9 +87,9 @@ class NetworkScanManager extends EventEmitter{
     if(this.job?.running){const e=new Error('A network scan is already running.');e.code='NETWORK_SCAN_BUSY';throw e;}
     const profile=normalizeProfile(input.profile),parsed=parseTargets({targets:input.targets??input.target,exclude:input.exclude,maxTargets:input.maxTargets??262144});
     if(parsed.hasPublicTargets&&input.confirmPublicTargets!==true){const e=new Error('Target includes public/non-local IPv4 addresses. Explicitly confirm public target scanning before starting.');e.code='PUBLIC_TARGET_CONFIRMATION_REQUIRED';e.publicCount=parsed.publicCount;throw e;}
-    const jobId=crypto.randomUUID(),settings=this._settings(input,profile,parsed.count),controller=new AbortController(),target=Array.isArray(input.targets)?input.targets.join(', '):String((input.targets??input.target)||'');
+    const jobId=crypto.randomUUID(),scannerId=String(input.scannerId||'local').trim().slice(0,120)||'local',settings=this._settings(input,profile,parsed.count),controller=new AbortController(),target=Array.isArray(input.targets)?input.targets.join(', '):String((input.targets??input.target)||'');
     const projectId=this.getProjectId?.()||'default';
-    this.controller=controller;this.job={jobId,projectId,profile,target,parsed,settings,state:'running',running:true,paused:false,startedAt:Date.now(),completedAt:null,hosts:[],findings:[],error:null,progress:{total:parsed.count,scanned:0,current:null,stage:'host-discovery',warnings:0,errors:0,truncated:false}};
+    this.controller=controller;this.job={jobId,projectId,scannerId,profile,target,parsed,settings,state:'running',running:true,paused:false,startedAt:Date.now(),completedAt:null,hosts:[],findings:[],error:null,progress:{total:parsed.count,scanned:0,current:null,stage:'host-discovery',warnings:0,errors:0,truncated:false}};
     this._run(this.job,controller).catch(()=>{});return this._emit();
   }
   pause(){if(!this.job?.running||this.job.paused)return this.status();this.job.paused=true;this.job.state='paused';return this._emit();}
@@ -116,7 +116,7 @@ class NetworkScanManager extends EventEmitter{
         try{
           const discovered=await this._scanIp(job,ip,neighborMap,signal);
           if(discovered){
-            const host={...discovered,macVendor:discovered.macVendor||this.lookupVendor(discovered.mac)||null,id:discovered.id||hostKey(discovered)};
+            const host={...discovered,scannerId:job.scannerId,macVendor:discovered.macVendor||this.lookupVendor(discovered.mac)||null,id:discovered.id||hostKey(discovered)};
             if(job.hosts.length<job.settings.maxResults){job.hosts.push(host);this.emit('host',{jobId:job.jobId,host:{...host}});}
             else job.progress.truncated=true;
           }
@@ -135,7 +135,7 @@ class NetworkScanManager extends EventEmitter{
       for(const neighbor of refreshedNeighbors.values()){
         if(job.hosts.length>=job.settings.maxResults){job.progress.truncated=true;break;}
         if(!neighbor?.ip||knownIps.has(neighbor.ip)||!targetContains(job.parsed,neighbor.ip))continue;
-        const base={id:null,ip:neighbor.ip,alive:true,state:'online',mac:neighbor.mac||null,macObservations:neighbor.macs||[neighbor.mac].filter(Boolean),hostname:null,hostnames:[],services:[],rawServices:[],industrial:false,modbus:null,type:'Unknown',typeConfidence:0,confidence:75,avgRttMs:null,firstSeen:new Date().toISOString(),lastSeen:new Date().toISOString(),discoveryMethods:['neighbor-table'],evidence:[{field:'ip',value:neighbor.ip,source:'neighbor-refresh',confidence:100,status:'observed'},{field:'mac',value:neighbor.mac,source:'neighbor-table',confidence:95,status:'observed'}]};
+        const base={id:null,scannerId:job.scannerId,ip:neighbor.ip,alive:true,state:'online',mac:neighbor.mac||null,macObservations:neighbor.macs||[neighbor.mac].filter(Boolean),hostname:null,hostnames:[],services:[],rawServices:[],industrial:false,modbus:null,type:'Unknown',typeConfidence:0,confidence:75,avgRttMs:null,firstSeen:new Date().toISOString(),lastSeen:new Date().toISOString(),discoveryMethods:['neighbor-table'],evidence:[{field:'ip',value:neighbor.ip,source:'neighbor-refresh',confidence:100,status:'observed'},{field:'mac',value:neighbor.mac,source:'neighbor-table',confidence:95,status:'observed'}]};
         const host={...base,macVendor:this.lookupVendor(base.mac)||null,id:hostKey(base)};job.hosts.push(host);knownIps.add(host.ip);this.emit('host',{jobId:job.jobId,host:{...host}});
       }
       job.findings=duplicateFindings(job.hosts);job.progress.warnings=job.findings.length;job.progress.stage='complete';job.state='completed';job.running=false;job.completedAt=Date.now();
