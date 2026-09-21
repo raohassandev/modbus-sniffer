@@ -133,7 +133,7 @@ check(networkTargetParser.includes("kind:'compact'")&&networkTargetParser.includ
 check(networkTargetParser.includes('TARGET_HARD_LIMIT')&&networkTargetParser.includes('TARGET_LIMIT'),'network target parser must fail closed on oversized scans');
 check(networkScanManager.includes('PUBLIC_TARGET_CONFIRMATION_REQUIRED'),'network scans must require explicit confirmation for public targets');
 check(networkScanManager.includes('targetContains(job.parsed,neighbor.ip)'),'neighbor reconciliation must remain constrained to the requested target set');
-check(networkModbusVerifier.includes('buildReadHoldingRequest')&&networkModbusVerifier.includes('fc!==3&&fc!==0x83'),'network Modbus verification must validate a real read-only Modbus response');
+check(networkModbusVerifier.includes('buildReadHoldingRequest')&&networkModbusVerifier.includes('byteCount!==2')&&networkModbusVerifier.includes('pdu.length!==4')&&networkModbusVerifier.includes('fc===0x83'),'network Modbus verification must validate semantically valid read-only FC03 responses');
 check(networkRoutes.includes("transmit:false")&&networkRoutes.includes("connect:false"),'network-to-Master handoff must prepare only and never auto-connect/transmit');
 check(networkRoutes.includes('SNMP_COMMUNITY_REQUIRED')&&networkRoutes.includes('readLldpNeighbors'),'SNMP/LLDP enrichment must be explicit and read-only');
 check(networkStore.includes('network-discovery.json')&&networkStore.includes('fs.fsyncSync'),'network inventory store must use durable bounded persistence');
@@ -177,7 +177,7 @@ for(const lane of ['L8-A','L8-B','L8-C','L8-D','L8-E','L8-F']){
   check(new RegExp('\\| '+lane.replace('-','\\-')+' \\|[^\\n]*\\| 100% \\|').test(laneRegistry),lane+' must be source-complete at 100%');
 }
 check(localGateDoc.startsWith(`# Local Mac Release Gate — Modbus Engineering Tool ${pkg.version}`),'local release gate heading must match product/version');
-for(const marker of ['primary Modbus workspaces','Master Monitor Sessions merge local fallback and durable workstation state','loopback read','unsafe bulk write'])check(unifiedE2e.includes(marker),`unified E2E missing coverage marker: ${marker}`);
+for(const marker of ['primary Modbus workspaces','industrial network discovery previews large ranges','Master Monitor Sessions merge local fallback and durable workstation state','loopback read','unsafe bulk write'])check(unifiedE2e.includes(marker),`unified E2E missing coverage marker: ${marker}`);
 check(defaultPlaywright.includes("require('./playwright.unified.config')"),'default Playwright gate must target the shipped unified product');
 check(!defaultPlaywright.includes('src/index-v8.js'),'default Playwright gate must not launch the internal compatibility runtime');
 check(unifiedPlaywright.includes('src/index-v7.js'),'unified Playwright gate must launch the unified runtime');
