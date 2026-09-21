@@ -27,6 +27,20 @@ The approved Industrial Network Discovery & Device Intelligence source scope is 
 
 Source completion is separate from representative field-network and clean-machine release evidence, which remains governed by the existing exact-head release gates.
 
+### Lane closure
+
+| Lane | Scope | Completion |
+|---|---|---:|
+| N1 | Architecture / persistence | 100% |
+| N2 | Core scanner / target engine | 100% |
+| N3 | Enrichment / industrial intelligence | 100% |
+| N4 | Modbus integration / Master handoff | 100% |
+| N5 | UI / UX / topology / device detail | 100% |
+| N6 | History / baseline / monitoring / evidence | 100% |
+| N7 | QA / hardening / release contracts | 100% |
+
+Final hardening includes paged live scan results for large networks, native deep per-device scanning without an Nmap dependency, IPv6 /64 topology grouping, IPv4/IPv6 SNMP transport selection, rolling monitor packet-loss/RTT/jitter metrics, and spreadsheet-safe network inventory export.
+
 ## Goal
 
 Extend the existing Modbus Discovery workspace into an industrial network discovery system that can start from an unknown IPv4 network, find hosts, enrich their identity, verify industrial services, correlate Modbus TCP endpoints with Unit IDs and existing project devices, preserve evidence/history, compare scans, and hand selected endpoints directly into the existing Master workflow.
