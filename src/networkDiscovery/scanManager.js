@@ -27,12 +27,12 @@ function summary(hosts=[],progress={}){
     warnings:Number(progress.warnings||0),errors:Number(progress.errors||0),truncated:Boolean(progress.truncated)
   };
 }
-function publicStatus(job){
+function publicStatus(job,{includeHosts=true,hostOffset=0,hostLimit=10000}={}){
   if(!job)return{state:'idle',running:false,paused:false,jobId:null,profile:null,target:null,startedAt:null,completedAt:null,progress:{total:0,scanned:0,current:null},summary:summary([],{}),hosts:[],findings:[],error:null};
   return{
     state:job.state,running:job.running,paused:job.paused,jobId:job.jobId,scannerId:job.scannerId||'local',profile:job.profile,target:job.target,
     startedAt:job.startedAt,completedAt:job.completedAt||null,progress:{...job.progress},summary:summary(job.hosts,job.progress),
-    hosts:job.hosts.map(x=>({...x})),findings:job.findings.map(x=>({...x})),savedScanId:job.savedScanId||null,error:job.error?{...job.error}:null,
+    hosts:includeHosts?job.hosts.slice(Math.max(0,Number(hostOffset)||0),Math.max(0,Number(hostOffset)||0)+Math.max(1,Math.min(10000,Number(hostLimit)||10000))).map(x=>({...x})):[],hostCount:job.hosts.length,findings:job.findings.map(x=>({...x})),savedScanId:job.savedScanId||null,error:job.error?{...job.error}:null,
     settings:{hostConcurrency:job.settings.hostConcurrency,serviceConcurrency:job.settings.serviceConcurrency,timeoutMs:job.settings.timeoutMs,useIcmp:job.settings.useIcmp,verifyModbus:job.settings.verifyModbus}
   };
 }
@@ -66,8 +66,9 @@ class NetworkScanManager extends EventEmitter{
   constructor({store=null,getProjectId=()=>null,verifyModbus=verifyModbusEndpoint,discover=discoverHost,enrich=enrichAliveHost,neighbors=readNeighborTable,lookupVendor=()=>null}={}){
     super();this.store=store;this.getProjectId=getProjectId;this.verifyModbus=verifyModbus;this.discover=discover;this.enrich=enrich;this.neighbors=neighbors;this.lookupVendor=lookupVendor;this.job=null;this.controller=null;this._pauseWaiters=[];
   }
-  status(){return publicStatus(this.job);}
-  _emit(){const s=this.status();this.emit('status',s);return s;}
+  status(options={}){return publicStatus(this.job,options);}
+  hosts({offset=0,limit=1000}={}){const rows=this.job?.hosts||[],start=Math.max(0,Number(offset)||0),size=Math.max(1,Math.min(2000,Number(limit)||1000));return{jobId:this.job?.jobId||null,total:rows.length,offset:start,limit:size,hosts:rows.slice(start,start+size).map(x=>({...x}))};}
+  _emit(){const s=this.status({includeHosts:false});this.emit('status',s);return s;}
   _settings(input,profile,targetCount){
     const defaults=PROFILE_DEFAULTS[profile];
     const useIcmp=input.useIcmp===undefined?defaults.useIcmp:Boolean(input.useIcmp);
