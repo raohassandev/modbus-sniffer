@@ -59,6 +59,20 @@ test.describe('unified Modbus engineering product',()=>{
     await expect(page.locator('#page-help')).toContainText('WRITES LOCKED BY DEFAULT');
   });
 
+  test('dashboard makes RTU versus inline TCP capture source explicit',async({page,request})=>{
+    await page.goto('/');
+    await expect(page.locator('#sourceBanner')).toBeVisible();
+    await expect(page.locator('#sourceBannerBody')).toContainText(/RTU|TCP|source/i);
+
+    const tcpStatus=await request.get('/api/tcp/status');
+    expect(tcpStatus.ok()).toBeTruthy();
+
+    await page.locator('[data-page="tcp"]').click();
+    await expect(page.locator('#page-tcp')).toBeVisible();
+    await expect(page.locator('#page-tcp')).toContainText('direct PLC traffic sent straight to the target device bypasses this application');
+    await expect(page.locator('#tcpFixed502')).toBeVisible();
+  });
+
   test('industrial network discovery previews large ranges and exposes the integrated workflow without transmitting',async({page,request})=>{
     const capabilitiesResponse=await request.get('/api/network/capabilities');
     expect(capabilitiesResponse.ok()).toBeTruthy();
