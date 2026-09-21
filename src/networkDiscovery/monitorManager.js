@@ -12,13 +12,13 @@ class NetworkMonitorManager extends EventEmitter{
     super();this.store=store;this.getProjectId=getProjectId;this.verifyModbus=verifyModbus;this.entries=new Map();this.closed=false;
   }
   list(){return[...this.entries.values()].map(x=>this._public(x));}
-  _public(e){return{hostId:e.hostId,ip:e.ip,intervalMs:e.intervalMs,ports:[...e.ports],modbusPort:e.modbusPort,running:e.running,lastCheck:e.lastCheck||null,nextCheck:e.nextCheck||null,state:e.state||'unknown',lastResult:e.lastResult?{...e.lastResult}:null,failures:e.failures||0};}
-  start({hostId,ip,ports=[],modbusPort=null,intervalMs=30000}={}){
+  _public(e){return{hostId:e.hostId,projectId:e.projectId||null,ip:e.ip,intervalMs:e.intervalMs,ports:[...e.ports],modbusPort:e.modbusPort,running:e.running,lastCheck:e.lastCheck||null,nextCheck:e.nextCheck||null,state:e.state||'unknown',lastResult:e.lastResult?{...e.lastResult}:null,failures:e.failures||0};}
+  start({hostId,ip,ports=[],modbusPort=null,intervalMs=30000,projectId=null}={}){
     if(this.closed)throw new Error('Network monitor is closed.');
     if(!hostId||!ip)throw new Error('hostId and IP are required.');
     if(this.entries.size>=64&&!this.entries.has(String(hostId))){const e=new Error('Network monitor limit is 64 hosts.');e.code='NETWORK_MONITOR_LIMIT';throw e;}
     const id=String(hostId),entry=this.entries.get(id)||{hostId:id,ip:String(ip),failures:0,state:'unknown'};
-    entry.ip=String(ip);entry.ports=uniqPorts(ports);entry.modbusPort=modbusPort==null?null:Number(modbusPort);entry.intervalMs=Math.round(bounded(intervalMs,5000,3600000,30000));entry.running=true;
+    entry.projectId=String(projectId||entry.projectId||this.getProjectId?.()||'default');entry.ip=String(ip);entry.ports=uniqPorts(ports);entry.modbusPort=modbusPort==null?null:Number(modbusPort);entry.intervalMs=Math.round(bounded(intervalMs,5000,3600000,30000));entry.running=true;
     this.entries.set(id,entry);this._schedule(entry,0);return this._public(entry);
   }
   stop(hostId){const e=this.entries.get(String(hostId));if(!e)return false;e.running=false;clearTimeout(e.timer);e.timer=null;e.nextCheck=null;this.entries.delete(String(hostId));this.emit('status',this.list());return true;}
@@ -35,7 +35,7 @@ class NetworkMonitorManager extends EventEmitter{
     const online=Boolean(serviceRows.some(x=>x.open)||ping.responded||modbus?.verified),prev=entry.state||'unknown',state=online?'online':'offline',rtts=[ping.rttMs,...serviceRows.map(x=>x.rttMs)].filter(Number.isFinite);
     const result={checkedAt:new Date().toISOString(),state,online,ping,services:serviceRows,modbus,avgRttMs:rtts.length?Math.round(rtts.reduce((a,b)=>a+b,0)/rtts.length*100)/100:null,durationMs:Date.now()-started};
     entry.lastCheck=result.checkedAt;entry.lastResult=result;entry.state=state;entry.failures=online?0:(entry.failures||0)+1;
-    const projectId=this.getProjectId?.()||'default';
+    const projectId=entry.projectId||'default';
     if(this.store){
       const host=this.store.getHost(projectId,entry.hostId);if(host)this.store.mergeHost(projectId,{...host,state,alive:online,lastSeen:online?result.checkedAt:host.lastSeen,monitor:{state,lastCheck:result.checkedAt,avgRttMs:result.avgRttMs,failures:entry.failures}},'network-monitor');
       if(prev!=='unknown'&&prev!==state)this.store.addEvent(projectId,{type:state==='online'?'device-returned':'device-offline',hostId:entry.hostId,ip:entry.ip,source:'network-monitor',before:prev,after:state});
