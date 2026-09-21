@@ -102,10 +102,19 @@ function parseTargets({targets,exclude=[],maxTargets=262144,hardMaxTargets=10000
   for(const d of descriptors)for(const ip of iterateDescriptor(d)){if(excluded(ip)||seen.has(ip))continue;seen.add(ip);count++;if(privateIp(ip))privateCount++;else publicCount++;}
   return{version:2,descriptors,exclusions:exclusionDescriptors,count,theoreticalCount:Number(theoreticalBig),privateCount,publicCount,hasPublicTargets:publicCount>0,summary:descriptors.map(d=>({kind:d.kind,family:d.family,raw:d.raw,count:Number(descriptorCountBig(d))}))};
 }
+function targetContains(parsed,ip){
+  const family=net.isIP(String(ip));if(!family)return false;
+  const excluded=exclusionMatcher(parsed.exclusions||[]);if(excluded(ip))return false;
+  if(family===4){
+    const n=ipv4ToInt(ip),o=String(ip).split('.').map(Number);
+    return (parsed.descriptors||[]).some(d=>d.family===4&&(d.kind==='compact'?d.octets.every(([a,b],i)=>o[i]>=a&&o[i]<=b):(n>=d.start&&n<=d.end)));
+  }
+  const n=ipv6ToBigInt(ip);return (parsed.descriptors||[]).some(d=>d.family===6&&n>=BigInt(d.start)&&n<=BigInt(d.end));
+}
 function *iterateTargets(parsed){const excluded=exclusionMatcher(parsed.exclusions||[]),seen=new Set();for(const d of parsed.descriptors||[])for(const ip of iterateDescriptor(d)){if(excluded(ip)||seen.has(ip))continue;seen.add(ip);yield ip;}}
 function displayDescriptor(d){
   const out={...d,count:Number(descriptorCountBig(d))};if(d.start!=null)out.start=d.family===6?bigIntToIpv6(d.start):intToIpv4(d.start);if(d.end!=null)out.end=d.family===6?bigIntToIpv6(d.end):intToIpv4(d.end);return out;
 }
 function previewTargets(input={}){const parsed=parseTargets(input),samples=[];for(const ip of iterateTargets(parsed)){samples.push(ip);if(samples.length>=8)break;}return{...parsed,descriptors:parsed.descriptors.map(displayDescriptor),exclusions:parsed.exclusions.map(displayDescriptor),samples};}
 
-module.exports={TargetParseError,ipv4ToInt,intToIpv4,ipv6ToBigInt,bigIntToIpv6,parseSingleTarget,parseTargets,iterateTargets,previewTargets,privateIpv4,privateIpv6,privateIp};
+module.exports={TargetParseError,ipv4ToInt,intToIpv4,ipv6ToBigInt,bigIntToIpv6,parseSingleTarget,parseTargets,iterateTargets,targetContains,previewTargets,privateIpv4,privateIpv6,privateIp};
