@@ -1,6 +1,6 @@
 # Modbus Engineering Tool — Active TODO
 
-**Status date:** 2026-09-20  
+**Status date:** 2026-09-21  
 **Branch:** `v8-release-completion`  
 **PR:** #31  
 **Canonical scope:** `docs/MODBUS_ONLY_PRODUCT_AUDIT.md`
@@ -29,6 +29,7 @@ The final source audit also closes these edge cases:
 - [x] desktop readiness is authenticated with a per-process token and rejects health from a backend process that exited or was not launched by the current desktop instance
 - [x] JSON mutation limits are enforced by the parser even without a trusted Content-Length header
 - [x] Discovery Unit-ID limits follow serial vs TCP framing
+- [x] industrial Network Discovery source scope is complete with bounded large-range scanning, verified Modbus identification, persistent inventory/topology/history and safe Master handoff
 - [x] UDP Slave peers expire after bounded idle retention instead of exhausting the peer table indefinitely
 - [x] Test Sequence Compare preserves every repeated step occurrence instead of collapsing duplicate execution IDs
 - [x] product/runtime version surfaces use the release version source of truth
@@ -150,6 +151,33 @@ See `docs/MODBUS_FUNCTION_MATRIX.md`.
 - [x] enum and bitfield views
 - [x] engineering limits
 - [x] automatic interpretation/confidence workflow through Analyzer intelligence
+
+## Industrial Network Discovery & Device Intelligence
+
+- [x] large IPv4 host/range/CIDR scans, including compact octet ranges such as `192.168.1-254.1-254`
+- [x] bounded IPv6 host/CIDR target model
+- [x] interface/subnet suggestions plus include/exclude target preview and safety limits
+- [x] staged multi-signal host discovery; ping failure alone does not declare Offline
+- [x] persistent IP/MAC/vendor/hostname/service/device inventory with provenance and confidence
+- [x] duplicate-IP and multi-IP-per-MAC diagnostics
+- [x] DHCP-context findings for multiple/unexpected servers
+- [x] common network and industrial service-candidate classification
+- [x] semantic Modbus TCP verification; TCP/502 alone is never treated as verified Modbus
+- [x] Unit-ID and FC43 continuation using the existing Modbus discovery subsystem
+- [x] safe discovered-host → Master handoff with no automatic connect/transmit
+- [x] optional Nmap service/OS enrichment with bounded validated IP targets
+- [x] explicit read-only SNMP system / LLDP enrichment
+- [x] SSDP, mDNS and WSD context discovery
+- [x] offline OUI/MAC vendor enrichment
+- [x] persistent scan history, reference baselines, Added/Missing/Changed/Unchanged comparison and per-device history
+- [x] evidence-driven topology, subnet utilization and physical-vs-logical relationship provenance
+- [x] bounded selected-device monitoring plus Ping/Traceroute diagnostics
+- [x] Network Scan / Devices / Topology / Modbus Discovery / History UI integrated into the existing Discovery workspace
+- [x] configurable result columns, filtering/search, device detail tabs, findings, topology filters and pan/zoom
+- [x] network inventory included in CSV/JSON/XLSX/PDF/ZIP evidence workflows
+- [x] packaged-desktop legacy migration preserves network-discovery primary/backup data
+- [x] unit/integration/security/browser contracts lock target bounds, false-positive rejection, persistence, diagnostics and UI workflow
+- [x] canonical implementation plan and closure recorded in `docs/NETWORK_DISCOVERY_PLAN.md`
 
 ## Discovery / Reverse Engineering
 
