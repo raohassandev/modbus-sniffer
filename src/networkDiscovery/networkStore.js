@@ -144,7 +144,7 @@ class NetworkStore{
     const p=this._project(projectId),event={id:safeId('event'),at:input.at||now(),type:cleanText(input.type||'network-event',80),hostId:input.hostId?cleanText(input.hostId,180):null,ip:input.ip?cleanText(input.ip,80):null,source:cleanText(input.source||'network-discovery',80),...clone(input)};
     p.events.push(event);this._trimProject(p);if(options.persist!==false)this._atomic();return clone(event);
   }
-  listEvents(projectId,{limit=500}={}){const p=this._project(projectId);return p.events.slice(-Math.max(1,Math.min(5000,Number(limit)||500))).reverse().map(clone);}
+  listEvents(projectId,{limit=500,hostId=null,ip=null,type=null}={}){const p=this._project(projectId);let rows=p.events;if(hostId)rows=rows.filter(x=>String(x.hostId||'')===String(hostId));if(ip)rows=rows.filter(x=>String(x.ip||'')===String(ip));if(type)rows=rows.filter(x=>String(x.type||'')===String(type));return rows.slice(-Math.max(1,Math.min(5000,Number(limit)||500))).reverse().map(clone);}
   setTopology(projectId,topology={}){const p=this._project(projectId);p.topology={nodes:clone((topology.nodes||[]).slice(0,4096)),edges:clone((topology.edges||[]).slice(0,8192)),updatedAt:now()};this._atomic();return clone(p.topology);}
   getTopology(projectId){return clone(this._project(projectId).topology||{nodes:[],edges:[]});}
   exportProject(projectId){
