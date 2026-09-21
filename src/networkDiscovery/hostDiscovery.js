@@ -21,7 +21,7 @@ function parseNeighborText(text){
       m=/^(\d{1,3}(?:\.\d{1,3}){3})\s+dev\s+\S+\s+lladdr\s+([0-9a-f:]{17})/i.exec(line.trim());
       if(m){ip=m[1];mac=m[2];}
     }
-    const n=normalizeMac(mac);if(ip&&n)out.set(ip,{ip,mac:n,source:'neighbor-table'});
+    const n=normalizeMac(mac);if(ip&&n){const prev=out.get(ip)||{ip,mac:n,macs:[],source:'neighbor-table'};prev.macs=[...new Set([...(prev.macs||[]),n])];prev.mac=prev.mac||n;out.set(ip,prev);}
   }
   return out;
 }
@@ -74,10 +74,10 @@ async function discoverHost(ip,{profile='standard',customPorts=[],timeoutMs=350,
       if(!modbus)modbus=result;
     }
   }
-  const fingerprint=buildHostFingerprint({ip,hostname:hostnames[0]||null,hostnames,mac:neighbor?.mac||null,macSource:neighbor?.source,services,modbus});
+  const fingerprint=buildHostFingerprint({ip,hostname:hostnames[0]||null,hostnames,mac:neighbor?.mac||null,macObservations:neighbor?.macs||[],macSource:neighbor?.source,services,modbus});
   const rtts=[...open.map(x=>x.rttMs).filter(Number.isFinite),ping.rttMs].filter(Number.isFinite);
   return{
-    ...fingerprint,alive:true,state:'online',ping,rawServices:services,
+    ...fingerprint,alive:true,state:'online',ping,rawServices:services,macObservations:neighbor?.macs||fingerprint.macObservations||[],
     avgRttMs:rtts.length?Math.round(rtts.reduce((a,b)=>a+b,0)/rtts.length*100)/100:null,
     discoveryMethods:[...(neighbor?['neighbor-table']:[]),...(ping.responded?['icmp']:[]),...(open.length?['tcp-connect']:[]),...(hostnames.length?['reverse-dns']:[])],
     firstSeen:new Date().toISOString(),lastSeen:new Date().toISOString()
